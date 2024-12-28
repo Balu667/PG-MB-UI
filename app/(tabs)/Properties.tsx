@@ -1,7 +1,7 @@
 import React from "react";
 import { StyleSheet, View, Text } from "react-native";
 
-const Property = () => {
+const Properties = () => {
   return (
     <View style={styles.container}>
       <Text>Property</Text>
@@ -16,4 +16,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default Property;
+export default Properties;

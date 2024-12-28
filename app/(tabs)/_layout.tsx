@@ -9,8 +9,8 @@ const _layout = () => {
       tabBar={(props) => <TabBar {...props} />}
     >
       <Tabs.Screen name="index" options={{ title: "Dashboard" }} />
-      <Tabs.Screen name="Room" options={{ title: "Room" }} />
-      <Tabs.Screen name="Property" options={{ title: "Property" }} />
+      <Tabs.Screen name="Rooms" options={{ title: "Rooms" }} />
+      <Tabs.Screen name="Properties" options={{ title: "Properties" }} />
       <Tabs.Screen name="People" options={{ title: "People" }} />
       <Tabs.Screen name="Store" options={{ title: "Store" }} />
     </Tabs>

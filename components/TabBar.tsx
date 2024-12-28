@@ -21,7 +21,7 @@ const TabBar: React.FC<MyTabBarProps> = ({
             color={isFocused ? "#256D85" : "black"}
           />
         );
-      case "Room":
+      case "Rooms":
         return (
           <MaterialIcons
             name="meeting-room"
@@ -29,7 +29,7 @@ const TabBar: React.FC<MyTabBarProps> = ({
             color={isFocused ? "#256D85" : "black"}
           />
         );
-      case "Property":
+      case "Properties":
         return (
           <MaterialIcons
             name="apartment"
@@ -107,10 +107,7 @@ const TabBar: React.FC<MyTabBarProps> = ({
             <View style={[styles.icons]}>
               {isFocused ? (
                 <LinearGradient
-                  colors={[
-                    "rgba(36, 147, 175, 0.55)",
-                    "rgba(246, 253, 255, 0.2)",
-                  ]}
+                  colors={["rgba(127, 206, 225, 0.55)", "rgb(253, 253, 253)"]}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 0, y: 1 }}
                   style={[styles.selectedTabGradient]}
@@ -123,7 +120,7 @@ const TabBar: React.FC<MyTabBarProps> = ({
                   fontSize: 12,
                 }}
               >
-                {route.name === "index" ? "Home" : route.name}
+                {route.name === "index" ? "Dashboard" : route.name}
               </Text>
             </View>
           </TouchableOpacity>
@@ -157,7 +154,7 @@ const styles = StyleSheet.create({
     width: "100%",
     height: 60,
     justifyContent: "center",
-    alignItems: "center"
+    alignItems: "center",
   },
   selectedTabGradient: {
     ...StyleSheet.absoluteFillObject,
