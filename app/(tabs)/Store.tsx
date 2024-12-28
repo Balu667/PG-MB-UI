@@ -1,15 +1,15 @@
 import React from "react";
 import { StyleSheet, View } from "react-native";
 
-const Index = () => {
-  return <View style={styles.container}>Dashboard</View>;
+const Store = () => {
+  return <View style={styles.container}>Store</View>;
 };
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
     marginTop: 50,
+    flex: 1,
   },
 });
 
-export default Index;
+export default Store;

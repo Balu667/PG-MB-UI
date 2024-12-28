@@ -38,7 +38,7 @@ const Login = () => {
         <View>
           <TouchableOpacity
             style={styles.btn}
-            onPress={() => router.replace("/(tabs)")}
+            onPress={() => router.replace("/Otp")}
           >
             <Text style={styles.generateOtpText}>Generate OTP</Text>
           </TouchableOpacity>
@@ -73,11 +73,8 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     display: "flex",
-
-    backgroundColor: "#f5f5f5",
   },
   upperCurvedContainer: {
-    flex: 0.7,
     position: "relative",
     height: 300,
     backgroundColor: "#256D85",
