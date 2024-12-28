@@ -16,10 +16,12 @@ const Login = () => {
         <View style={styles.rightSideCurvedContainer}></View>
 
         <View style={styles.bottomCenterContainer}>
-          <Image
-            source={require("../assets/images/logo.png")}
-            style={styles.logoImg}
-          />
+          <View style={styles.logoWrapper}>
+            <Image
+              source={require("../assets/images/logo.png")}
+              style={styles.logoImg}
+            />
+          </View>
           <Text style={styles.logoName}>Right PG</Text>
         </View>
       </View>
@@ -78,20 +80,29 @@ const styles = StyleSheet.create({
     position: "relative",
     height: 300,
     backgroundColor: "#256D85",
-    opacity: 0.3,
+    opacity: 0.4,
     width: "100%",
     borderBottomLeftRadius: "40%",
     borderBottomRightRadius: "40%",
-    display: "flex",
-    alignItems: "flex-end",
   },
 
   rightSideCurvedContainer: {
-    height: 200,
+    height: 160,
     backgroundColor: "#256D85",
     width: "50%",
     opacity: 0.8,
-    borderBottomLeftRadius: 80,
+    top: 0,
+    left: 250,
+    borderBottomLeftRadius: "40%",
+    borderBottomRightRadius: "40%",
+  },
+
+  logoWrapper: {
+    width: 150,
+    height: 150,
+    borderRadius: 75,
+    overflow: "hidden",
+    marginBottom: 10,
   },
 
   bottomCenterContainer: {
@@ -99,33 +110,38 @@ const styles = StyleSheet.create({
     bottom: -50,
     left: "50%",
     transform: [{ translateX: "-50%" }],
-    width: 150,
-    height: 150,
     zIndex: 999,
     opacity: 1,
-    borderRadius: "50%",
+    alignItems: "center",
   },
+
   logoImg: {
     width: "100%",
     height: "100%",
+    resizeMode: "contain",
   },
+
   logoName: {
     fontSize: 30,
     textAlign: "center",
-    color: "#256d85",
+    color: "#256D85",
+    fontWeight: "bold",
   },
+
   inputContainer: {
     paddingHorizontal: 25,
     marginTop: 70,
   },
+
   title: {
     fontSize: 20,
     fontWeight: "600",
     marginBottom: 20,
-    color: "#31511E",
+    color: "#000",
     textAlign: "left",
     marginTop: 50,
   },
+
   input: {
     width: "100%",
     height: 60,
@@ -140,12 +156,14 @@ const styles = StyleSheet.create({
     backgroundColor: "#E9EAEA",
     color: "#5856d6",
   },
+
   labels: {
     fontWeight: "600",
     fontSize: 16,
     marginBottom: 5,
     color: "grey",
   },
+
   btn: {
     width: "100%",
     backgroundColor: "#256D85",
@@ -153,9 +171,11 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     marginVertical: 15,
   },
+
   inputCont: {
     width: "100%",
   },
+
   generateOtpText: {
     textAlign: "center",
     color: "#fff",
@@ -163,6 +183,7 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     letterSpacing: 1,
   },
+
   orText: {
     textAlign: "center",
     fontSize: 18,
@@ -170,6 +191,7 @@ const styles = StyleSheet.create({
     color: "grey",
     marginVertical: 10,
   },
+
   gmailContainer: {
     display: "flex",
     flexDirection: "row",
@@ -178,24 +200,29 @@ const styles = StyleSheet.create({
     padding: 20,
     gap: 10,
   },
+
   image: {
     width: 40,
     height: 30,
   },
+
   gmailText: {
     fontSize: 16,
     fontWeight: "600",
     color: "#5856d6",
   },
+
   highlightedText: {
     color: "#09BD71",
   },
+
   termServiceText: {
     color: "grey",
-    fontSize: 18,
+    fontSize: 16,
     textAlign: "center",
     padding: 3,
     lineHeight: 22,
+    letterSpacing: 1,
   },
 });
 

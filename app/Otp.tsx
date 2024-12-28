@@ -32,10 +32,12 @@ const Otp = () => {
         <View style={styles.rightSideCurvedContainer}></View>
 
         <View style={styles.bottomCenterContainer}>
-          <Image
-            source={require("../assets/images/otplogo.jpg")}
-            style={styles.logoImg}
-          />
+          <View style={styles.logoWrapper}>
+            <Image
+              source={require("../assets/images/otplogo.jpg")}
+              style={styles.logoImg}
+            />
+          </View>
         </View>
       </View>
       <View style={styles.otpTextContainer}>
@@ -52,7 +54,12 @@ const Otp = () => {
           <View>
             <Text style={styles.mobileNumberText}>+91 8779404201</Text>
           </View>
-          <MaterialIcons name="edit" size={20} color="black" />
+          <MaterialIcons
+            name="edit"
+            size={20}
+            color="black"
+            onPress={() => router.push("/")}
+          />
         </View>
         <View style={styles.otpContainer}>
           {otp.map((digit, index) => (
@@ -97,22 +104,31 @@ const styles = StyleSheet.create({
   },
   upperCurvedContainer: {
     position: "relative",
-    height: 400,
+    height: 300,
     backgroundColor: "#256D85",
-    opacity: 0.3,
+    opacity: 0.4,
     width: "100%",
     borderBottomLeftRadius: "40%",
     borderBottomRightRadius: "40%",
-    display: "flex",
-    alignItems: "flex-end",
   },
 
   rightSideCurvedContainer: {
-    height: 200,
+    height: 160,
     backgroundColor: "#256D85",
     width: "50%",
     opacity: 0.8,
-    borderBottomLeftRadius: 80,
+    top: 0,
+    left: 250,
+    borderBottomLeftRadius: "40%",
+    borderBottomRightRadius: "40%",
+  },
+
+  logoWrapper: {
+    width: 150,
+    height: 150,
+    borderRadius: 75,
+    overflow: "hidden",
+    marginBottom: 10,
   },
 
   bottomCenterContainer: {
@@ -120,16 +136,15 @@ const styles = StyleSheet.create({
     bottom: -50,
     left: "50%",
     transform: [{ translateX: "-50%" }],
-    width: 300,
-    height: 300,
     zIndex: 999,
     opacity: 1,
-    justifyContent: "center",
     alignItems: "center",
   },
+
   logoImg: {
     width: "100%",
-    height: "90%",
+    height: "100%",
+    resizeMode: "contain",
   },
   otpTextContainer: {
     marginTop: 70,
