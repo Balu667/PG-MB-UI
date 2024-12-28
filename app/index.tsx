@@ -1,20 +1,59 @@
 import { router } from "expo-router";
 import React from "react";
-import { Text, StyleSheet, View, TouchableOpacity } from "react-native";
+import {
+  Text,
+  StyleSheet,
+  View,
+  TextInput,
+  Image,
+  TouchableOpacity,
+} from "react-native";
 
-const GetStarted = () => {
+const Login = () => {
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Welcome to our app.</Text>
-      <Text style={styles.subtitle}>click on get started and explore it.</Text>
-
-      <View>
-        <TouchableOpacity
-          style={styles.btn}
-          onPress={() => router.replace("/Register")}
-        >
-          <Text style={styles.signinText}>Get Started</Text>
-        </TouchableOpacity>
+      <View style={styles.upperCurvedContainer}>
+        <View style={styles.rightSideCurvedContainer}></View>
+      </View>
+      <View style={styles.inputContainer}>
+        <Text style={styles.title}>Login with your Mobile Number</Text>
+        <View style={styles.inputCont}>
+          <Text style={styles.labels}>Enter Mobile Number</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Enter your mobile number"
+            keyboardType="phone-pad"
+          />
+        </View>
+        <View>
+          <TouchableOpacity
+            style={styles.btn}
+            onPress={() => router.replace("/(tabs)")}
+          >
+            <Text style={styles.generateOtpText}>Generate OTP</Text>
+          </TouchableOpacity>
+        </View>
+        <Text style={styles.orText}>Or</Text>
+        <View style={styles.gmailContainer}>
+          <View>
+            <Image
+              source={require("../assets/images/gmail.png")}
+              style={styles.image}
+            />
+          </View>
+          <View>
+            <Text style={styles.gmailText}>Sign in with gmail</Text>
+          </View>
+        </View>
+        <View style={styles.termServiceTextContainer}>
+          <Text style={styles.termServiceText}>
+            By continuing you accept our{" "}
+            <Text style={styles.highlightedText}>Term of Service</Text> Also
+            learn how we process your data in our{" "}
+            <Text style={styles.highlightedText}>Privacy Policy </Text> and{" "}
+            <Text style={styles.highlightedText}>Cookies Policy</Text>
+          </Text>
+        </View>
       </View>
     </View>
   );
@@ -23,39 +62,106 @@ const GetStarted = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: 20,
     backgroundColor: "#f5f5f5",
+  },
+  upperCurvedContainer: {
+    height: 300,
+    backgroundColor: "#256D85",
+    opacity: 0.3,
+    width: "100%",
+    borderBottomLeftRadius: 80,
+    borderBottomRightRadius: 80,
+    display: "flex",
+    alignItems: "flex-end",
+  },
+  rightSideCurvedContainer: {
+    height: 200,
+    backgroundColor: "#256D85",
+    width: "50%",
+    opacity: 0.8,
+    borderBottomLeftRadius: 80,
+  },
+  inputContainer: {
+    paddingHorizontal: 25,
   },
   title: {
     fontSize: 22,
     fontWeight: "600",
     marginBottom: 20,
     color: "#31511E",
-    textAlign: "center",
+    textAlign: "left",
     marginTop: 50,
   },
-  subtitle: {
-    fontSize: 16,
-    fontWeight: "400",
-    color: "darkgreen",
+  input: {
+    width: "100%",
+    height: 60,
+    borderWidth: 1,
+    borderColor: "#ccc",
+    borderRadius: 10,
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    fontSize: 20,
+    lineHeight: 20,
+    marginVertical: 10,
+    backgroundColor: "#E9EAEA",
+    color: "#5856d6",
   },
-
+  labels: {
+    fontWeight: "600",
+    fontSize: 16,
+    marginBottom: 5,
+    color: "grey",
+  },
   btn: {
     width: "100%",
-    backgroundColor: "#31511E",
-    paddingVertical: 15,
-    borderRadius: 15,
-    marginVertical: 20,
+    backgroundColor: "#256D85",
+    paddingVertical: 20,
+    borderRadius: 10,
+    marginVertical: 15,
   },
-
-  signinText: {
+  inputCont: {
+    width: "100%",
+  },
+  generateOtpText: {
     textAlign: "center",
     color: "#fff",
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "500",
+    letterSpacing: 1,
+  },
+  orText: {
+    textAlign: "center",
+    fontSize: 18,
+    fontWeight: "600",
+    color: "grey",
+    marginVertical: 10,
+  },
+  gmailContainer: {
+    display: "flex",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 20,
+    gap: 10,
+  },
+  image: {
+    width: 40,
+    height: 30,
+  },
+  gmailText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#5856d6",
+  },
+  highlightedText: {
+    color: "#09BD71",
+  },
+  termServiceTextContainer: {},
+  termServiceText: {
+    color: "grey",
+    fontSize: 18,
+    textAlign : 'center'
   },
 });
 
-export default GetStarted;
+export default Login;
