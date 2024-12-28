@@ -117,7 +117,7 @@ const TabBar: React.FC<MyTabBarProps> = ({
               <Text
                 style={{
                   color: isFocused ? "#256D85" : "black",
-                  fontSize: 12,
+                  fontSize: 14,
                 }}
               >
                 {route.name === "index" ? "Dashboard" : route.name}
