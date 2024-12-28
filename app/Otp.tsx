@@ -1,6 +1,6 @@
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { router } from "expo-router";
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import {
   Text,
   StyleSheet,
@@ -9,13 +9,22 @@ import {
   Image,
   TouchableOpacity,
 } from "react-native";
+
 const Otp = () => {
   const [otp, setOtp] = useState(["", "", "", ""]);
+  const inputRefs = useRef<TextInput[]>([]);
 
   const handleChangeText = (text: string, index: any) => {
     let otpCopy = [...otp];
     otpCopy[index] = text;
     setOtp(otpCopy);
+    if (text && index < otp.length - 1) {
+      inputRefs.current[index + 1]?.focus();
+    }
+
+    if (!text && index > 0) {
+      inputRefs.current[index - 1]?.focus();
+    }
   };
   return (
     <View style={styles.container}>
@@ -55,6 +64,7 @@ const Otp = () => {
               keyboardType="numeric"
               style={styles.input}
               autoFocus={index === 0}
+              ref={(el) => (inputRefs.current[index] = el!)}
             />
           ))}
         </View>
@@ -154,7 +164,7 @@ const styles = StyleSheet.create({
   btn: {
     width: "60%",
     backgroundColor: "#256D85",
-    paddingVertical: 10,
+    paddingVertical: 15,
     borderRadius: 10,
     marginVertical: 10,
     marginTop: 30,
@@ -162,7 +172,7 @@ const styles = StyleSheet.create({
   submitText: {
     textAlign: "center",
     color: "#fff",
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: "500",
     letterSpacing: 1,
   },
