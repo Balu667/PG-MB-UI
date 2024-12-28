@@ -1,5 +1,5 @@
 import { router } from "expo-router";
-import React from "react";
+import React, { useState } from "react";
 import {
   Text,
   StyleSheet,
@@ -10,6 +10,8 @@ import {
 } from "react-native";
 
 const Login = () => {
+  const [mobileNumber, setMobileNumber] = useState("+91 8779404201");
+
   return (
     <View style={styles.container}>
       <View style={styles.upperCurvedContainer}>
@@ -34,7 +36,8 @@ const Login = () => {
             style={styles.input}
             placeholder="Enter your mobile number"
             keyboardType="phone-pad"
-            value="+91 8779404201"
+            onChangeText={(text) => setMobileNumber(text)}
+            value={mobileNumber}
           />
         </View>
         <View>
