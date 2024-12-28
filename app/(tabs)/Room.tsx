@@ -1,19 +1,19 @@
 import React from "react";
 import { StyleSheet, View, Text } from "react-native";
 
-const Store = () => {
+const Room = () => {
   return (
     <View style={styles.container}>
-      <Text>Store</Text>
+      <Text>Room</Text>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    marginTop: 50,
     flex: 1,
+    marginTop: 50,
   },
 });
 
-export default Store;
+export default Room;

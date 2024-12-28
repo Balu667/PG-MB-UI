@@ -1,7 +1,7 @@
-import React, { } from "react";
+import React from "react";
 import { TouchableOpacity, View, Text, StyleSheet } from "react-native";
 import { BottomTabBarProps } from "@react-navigation/bottom-tabs";
-import { AntDesign , FontAwesome5 } from "@expo/vector-icons";
+import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 
 type MyTabBarProps = BottomTabBarProps;
 
@@ -10,30 +10,46 @@ const TabBar: React.FC<MyTabBarProps> = ({
   navigation,
   descriptors,
 }) => {
-
- 
-
   const returnIcons = (name: string, isFocused: boolean) => {
-  
     switch (name) {
       case "index":
         return (
-          <AntDesign
-            name="home"
-            color={isFocused ? "green" : "black"}
-            size={20}
+          <MaterialIcons
+            name="dashboard"
+            size={26}
+            color={isFocused ? "#256D85" : "black"}
           />
         );
-      case "Transaction":
+      case "Room":
         return (
-          <FontAwesome5 name="money-bill-alt" size={20}   color={isFocused ? "green" : "black"} />
+          <MaterialIcons
+            name="meeting-room"
+            size={26}
+            color={isFocused ? "#256D85" : "black"}
+          />
         );
-      case "Profile":
+      case "Property":
         return (
-          <AntDesign
-            name="profile"
-            color={isFocused ? "green" : "black"}
-            size={20}
+          <MaterialIcons
+            name="apartment"
+            size={26}
+            color={isFocused ? "#256D85" : "black"}
+          />
+        );
+      case "People":
+        return (
+          <MaterialIcons
+            name="groups"
+            size={26}
+            color={isFocused ? "#256D85" : "black"}
+          />
+        );
+      case "Store":
+        return (
+          <MaterialIcons
+            name="store"
+            size={26}
+            color={isFocused ? "#256D85" : "black"}
           />
         );
         break;
@@ -90,9 +106,9 @@ const TabBar: React.FC<MyTabBarProps> = ({
             <View style={[styles.icons]}>
               {returnIcons(route.name, isFocused)}
               <Text
-                style={{ color: isFocused ? "green" : "black", fontSize: 12 }}
+                style={{ color: isFocused ? "#256D85" : "black", fontSize: 12 }}
               >
-                {route.name === 'index' ? "Home" : route.name}
+                {route.name === "index" ? "Home" : route.name}
               </Text>
             </View>
           </TouchableOpacity>
@@ -106,12 +122,9 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
-    bottom: 25,
+    bottom: 5,
     backgroundColor: "white",
-    marginHorizontal: 25,
     paddingVertical: 15,
-    borderRadius: 25,
     borderCurve: "continuous",
     shadowColor: "black",
     shadowOffset: { width: 0, height: 10 },
@@ -123,7 +136,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    cursor:"pointer"
+    cursor: "pointer",
   },
   icons: {
     justifyContent: "center",

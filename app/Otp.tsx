@@ -1,5 +1,6 @@
+import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { router } from "expo-router";
-import React from "react";
+import React, { useState } from "react";
 import {
   Text,
   StyleSheet,
@@ -8,8 +9,14 @@ import {
   Image,
   TouchableOpacity,
 } from "react-native";
-
 const Otp = () => {
+  const [otp, setOtp] = useState(["", "", "", ""]);
+
+  const handleChangeText = (text: string, index: any) => {
+    let otpCopy = [...otp];
+    otpCopy[index] = text;
+    setOtp(otpCopy);
+  };
   return (
     <View style={styles.container}>
       <View style={styles.upperCurvedContainer}>
@@ -17,10 +24,56 @@ const Otp = () => {
 
         <View style={styles.bottomCenterContainer}>
           <Image
-            source={require("../assets/images/logo.png")}
+            source={require("../assets/images/otplogo.jpg")}
             style={styles.logoImg}
           />
-          <Text style={styles.logoName}>Right PG</Text>
+        </View>
+      </View>
+      <View style={styles.otpTextContainer}>
+        <Text style={styles.otpText}>OTP Verification</Text>
+        <View style={{ marginTop: 10 }}>
+          <Text style={styles.descriptionText}>
+            We will send you a one time password on
+          </Text>
+          <Text style={styles.descriptionText}>
+            this <Text style={{ fontWeight: "600" }}>Mobile Number</Text>
+          </Text>
+        </View>
+        <View style={styles.numberContainer}>
+          <View>
+            <Text style={styles.mobileNumberText}>+91 8779404201</Text>
+          </View>
+          <MaterialIcons name="edit" size={20} color="black" />
+        </View>
+        <View style={styles.otpContainer}>
+          {otp.map((digit, index) => (
+            <TextInput
+              key={index}
+              value={digit}
+              onChangeText={(text) => handleChangeText(text, index)}
+              maxLength={1}
+              keyboardType="numeric"
+              style={styles.input}
+              autoFocus={index === 0}
+            />
+          ))}
+        </View>
+        <View>
+          <Text style={styles.timerText}>00 : 30</Text>
+        </View>
+        <View style={styles.resendOtpContainer}>
+          <Text style={styles.timerText}>Do not send OTP ? </Text>
+          <TouchableOpacity>
+            <Text style={styles.sendOtpText}>Send OTP</Text>
+          </TouchableOpacity>
+        </View>
+        <View>
+          <TouchableOpacity
+            style={styles.btn}
+            onPress={() => router.push("/(tabs)")}
+          >
+            <Text style={styles.submitText}>Submit</Text>
+          </TouchableOpacity>
         </View>
       </View>
     </View>
@@ -34,7 +87,7 @@ const styles = StyleSheet.create({
   },
   upperCurvedContainer: {
     position: "relative",
-    height: 300,
+    height: 400,
     backgroundColor: "#256D85",
     opacity: 0.3,
     width: "100%",
@@ -57,20 +110,93 @@ const styles = StyleSheet.create({
     bottom: -50,
     left: "50%",
     transform: [{ translateX: "-50%" }],
-    width: 150,
-    height: 150,
+    width: 300,
+    height: 300,
     zIndex: 999,
     opacity: 1,
-    borderRadius: "50%",
+    justifyContent: "center",
+    alignItems: "center",
   },
   logoImg: {
     width: "100%",
-    height: "100%",
+    height: "90%",
   },
-  logoName: {
-    fontSize: 30,
+  otpTextContainer: {
+    marginTop: 70,
+    display: "flex",
+    flexDirection: "column",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  otpText: {
+    fontSize: 22,
     textAlign: "center",
-    color: "#256d85",
+    fontWeight: "600",
+  },
+  descriptionText: {
+    fontSize: 16,
+    textAlign: "center",
+  },
+  numberContainer: {
+    width: "100%",
+    display: "flex",
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop: 20,
+    gap: 5,
+  },
+  mobileNumberText: {
+    fontSize: 18,
+    color: "#000",
+    fontWeight: "bold",
+  },
+  btn: {
+    width: "60%",
+    backgroundColor: "#256D85",
+    paddingVertical: 10,
+    borderRadius: 10,
+    marginVertical: 10,
+    marginTop: 30,
+  },
+  submitText: {
+    textAlign: "center",
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "500",
+    letterSpacing: 1,
+  },
+  otpContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 20,
+    marginBottom: 20,
+  },
+  input: {
+    width: 60,
+    height: 60,
+    borderColor: "#256D85",
+    borderWidth: 1,
+    textAlign: "center",
+    fontSize: 24,
+    marginHorizontal: 5,
+    borderRadius: 50,
+  },
+  timerText: {
+    fontSize: 16,
+    color: "grey",
+  },
+  resendOtpContainer: {
+    marginTop: 20,
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "center",
+    flexDirection: "row",
+  },
+  sendOtpText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#256D85",
   },
 });
 

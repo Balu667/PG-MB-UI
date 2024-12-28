@@ -1,8 +1,12 @@
 import React from "react";
-import { StyleSheet, View } from "react-native";
+import { StyleSheet, View, Text } from "react-native";
 
 const Index = () => {
-  return <View style={styles.container}>Dashboard</View>;
+  return (
+    <View style={styles.container}>
+      <Text>Dashboard</Text>
+    </View>
+  );
 };
 
 const styles = StyleSheet.create({
