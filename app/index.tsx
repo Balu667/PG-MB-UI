@@ -14,7 +14,16 @@ const Login = () => {
     <View style={styles.container}>
       <View style={styles.upperCurvedContainer}>
         <View style={styles.rightSideCurvedContainer}></View>
+
+        <View style={styles.bottomCenterContainer}>
+          <Image
+            source={require("../assets/images/logo.png")}
+            style={styles.logoImg}
+          />
+          <Text style={styles.logoName}>Right PG</Text>
+        </View>
       </View>
+
       <View style={styles.inputContainer}>
         <Text style={styles.title}>Login with your Mobile Number</Text>
         <View style={styles.inputCont}>
@@ -23,6 +32,7 @@ const Login = () => {
             style={styles.input}
             placeholder="Enter your mobile number"
             keyboardType="phone-pad"
+            value="+91 8779404201"
           />
         </View>
         <View>
@@ -45,7 +55,7 @@ const Login = () => {
             <Text style={styles.gmailText}>Sign in with gmail</Text>
           </View>
         </View>
-        <View style={styles.termServiceTextContainer}>
+        <View>
           <Text style={styles.termServiceText}>
             By continuing you accept our{" "}
             <Text style={styles.highlightedText}>Term of Service</Text> Also
@@ -62,18 +72,23 @@ const Login = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    display: "flex",
+
     backgroundColor: "#f5f5f5",
   },
   upperCurvedContainer: {
+    flex: 0.7,
+    position: "relative",
     height: 300,
     backgroundColor: "#256D85",
     opacity: 0.3,
     width: "100%",
-    borderBottomLeftRadius: 80,
-    borderBottomRightRadius: 80,
+    borderBottomLeftRadius: "40%",
+    borderBottomRightRadius: "40%",
     display: "flex",
     alignItems: "flex-end",
   },
+
   rightSideCurvedContainer: {
     height: 200,
     backgroundColor: "#256D85",
@@ -81,11 +96,33 @@ const styles = StyleSheet.create({
     opacity: 0.8,
     borderBottomLeftRadius: 80,
   },
+
+  bottomCenterContainer: {
+    position: "absolute",
+    bottom: -50,
+    left: "50%",
+    transform: [{ translateX: "-50%" }],
+    width: 150,
+    height: 150,
+    zIndex: 999,
+    opacity: 1,
+    borderRadius: "50%",
+  },
+  logoImg: {
+    width: "100%",
+    height: "100%",
+  },
+  logoName: {
+    fontSize: 30,
+    textAlign: "center",
+    color: "#256d85",
+  },
   inputContainer: {
     paddingHorizontal: 25,
+    marginTop: 70,
   },
   title: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: "600",
     marginBottom: 20,
     color: "#31511E",
@@ -156,11 +193,12 @@ const styles = StyleSheet.create({
   highlightedText: {
     color: "#09BD71",
   },
-  termServiceTextContainer: {},
   termServiceText: {
     color: "grey",
     fontSize: 18,
-    textAlign : 'center'
+    textAlign: "center",
+    padding: 3,
+    lineHeight: 22,
   },
 });
 
