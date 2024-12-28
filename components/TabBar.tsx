@@ -2,6 +2,7 @@ import React from "react";
 import { TouchableOpacity, View, Text, StyleSheet } from "react-native";
 import { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
+import { LinearGradient } from "expo-linear-gradient"; // Import LinearGradient for gradient effect
 
 type MyTabBarProps = BottomTabBarProps;
 
@@ -104,9 +105,23 @@ const TabBar: React.FC<MyTabBarProps> = ({
             onLongPress={onLongPress}
           >
             <View style={[styles.icons]}>
+              {isFocused ? (
+                <LinearGradient
+                  colors={[
+                    "rgba(36, 147, 175, 0.55)",
+                    "rgba(246, 253, 255, 0.2)",
+                  ]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 0, y: 1 }}
+                  style={[styles.selectedTabGradient]}
+                />
+              ) : null}
               {returnIcons(route.name, isFocused)}
               <Text
-                style={{ color: isFocused ? "#256D85" : "black", fontSize: 12 }}
+                style={{
+                  color: isFocused ? "#256D85" : "black",
+                  fontSize: 12,
+                }}
               >
                 {route.name === "index" ? "Home" : route.name}
               </Text>
@@ -124,8 +139,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     bottom: 5,
     backgroundColor: "white",
-    paddingVertical: 15,
-    borderCurve: "continuous",
+    borderRadius: 20,
     shadowColor: "black",
     shadowOffset: { width: 0, height: 10 },
     shadowRadius: 10,
@@ -137,10 +151,22 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     cursor: "pointer",
+    position: "relative",
   },
   icons: {
+    width: "100%",
+    height: 60,
     justifyContent: "center",
-    alignItems: "center",
+    alignItems: "center"
+  },
+  selectedTabGradient: {
+    ...StyleSheet.absoluteFillObject,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderTopColor: "#256D85",
+    borderTopWidth: 2,
   },
 });
 
