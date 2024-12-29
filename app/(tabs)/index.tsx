@@ -1,8 +1,9 @@
 import React from "react";
-import { StyleSheet, View, Text, TextInput } from "react-native";
+import { StyleSheet, View, Text, TextInput, ScrollView } from "react-native";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import Entypo from "@expo/vector-icons/Entypo";
+import PropertyCard from "@/components/PropertyCard";
 
 const Index = () => {
   return (
@@ -28,9 +29,22 @@ const Index = () => {
           </View>
         </View>
         <View style={styles.inputContainer}>
-          <TextInput style={styles.inputText} />
+          <TextInput
+            style={styles.inputText}
+            placeholder='Search By "Properties"'
+            placeholderTextColor={"#fff"}
+          />
         </View>
       </View>
+      <ScrollView
+        style={styles.propertyCards}
+        showsVerticalScrollIndicator={false}
+      >
+        <Text style={styles.propertiesText}>Properties</Text>
+        {[1, 2, 3].map((card, index) => (
+          <PropertyCard key={index} />
+        ))}
+      </ScrollView>
     </View>
   );
 };
@@ -94,6 +108,16 @@ const styles = StyleSheet.create({
     marginVertical: 10,
     backgroundColor: "#678d9a",
     color: "#fff",
+  },
+
+  propertyCards: {
+    paddingHorizontal: 20,
+  },
+  propertiesText: {
+    fontSize : 30 ,
+    fontWeight : 'bold',
+    paddingHorizontal : 10 ,
+    marginBottom : 10 ,
   },
 });
 
