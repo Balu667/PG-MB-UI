@@ -41,7 +41,7 @@ const Index = () => {
         showsVerticalScrollIndicator={false}
       >
         <Text style={styles.propertiesText}>Properties</Text>
-        {[1, 2, 3].map((card, index) => (
+        {[1, 2, 3, 4, 5, 6].map((card, index) => (
           <PropertyCard key={index} />
         ))}
       </ScrollView>
@@ -114,10 +114,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   propertiesText: {
-    fontSize : 30 ,
-    fontWeight : 'bold',
-    paddingHorizontal : 10 ,
-    marginBottom : 10 ,
+    fontSize: 30,
+    fontWeight: "bold",
+    paddingHorizontal: 10,
+    marginBottom: 10,
   },
 });
 
