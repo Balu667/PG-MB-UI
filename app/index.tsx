@@ -29,7 +29,7 @@ const Login = () => {
       </View>
 
       <View style={styles.inputContainer}>
-        <Text style={styles.title}>Login with your Mobile Number</Text>
+        <Text style={styles.title}>Login with your Mobile </Text>
         <View style={styles.inputCont}>
           <Text style={styles.labels}>Enter Mobile Number</Text>
           <TextInput
@@ -43,7 +43,7 @@ const Login = () => {
         <View>
           <TouchableOpacity
             style={styles.btn}
-            onPress={() => router.replace("/Otp")}
+            onPress={() => router.replace("./Otp")}
           >
             <Text style={styles.generateOtpText}>Generate OTP</Text>
           </TouchableOpacity>
