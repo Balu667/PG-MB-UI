@@ -68,7 +68,7 @@ const Otp = () => {
               value={digit}
               onChangeText={(text) => handleChangeText(text, index)}
               maxLength={1}
-              keyboardType="numeric"
+              // keyboardType="numeric"
               style={styles.input}
               autoFocus={index === 0}
               ref={(el) => (inputRefs.current[index] = el!)}

@@ -5,6 +5,74 @@ import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import Entypo from "@expo/vector-icons/Entypo";
 import PropertyCard from "@/components/PropertyCard";
 
+const pgProperties = [
+  {
+    _id: "6801cc72e26fc33c842415e1",
+    metadata: {
+      totalRooms: 15,
+      totalBeds: 56,
+      vacantBeds: 48,
+      advancedBookings: 4,
+      occupiedBeds: 4,
+      underNotice: 0,
+      expenses: 0,
+      dues: 63000,
+      income: 0,
+    },
+    propertyId: "PG-00031",
+    propertyName: "Hanuman Gen's PG",
+    tenantType: "Male",
+    mealType: "Both",
+    doorNo: "900",
+    streetName: "100 Feet Road",
+    area: "Madhapur",
+    city: "Hyderabad",
+    state: "Telangana",
+    pincode: "500098",
+    country: "India",
+    landmark: "Near Tea shop",
+    facilities: ["Washing Machine", "Wifi", "Hot Water", "Table", "TV"],
+    notifications: {
+      sms: true,
+      whatsapp: true,
+    },
+    noticePeriod: "30",
+  },
+  {
+    _id: "6801ccbce26fc33c842415ec",
+    metadata: {
+      totalRooms: 1,
+      totalBeds: 1,
+      vacantBeds: 0,
+      advancedBookings: 0,
+      occupiedBeds: 1,
+      underNotice: 1,
+      expenses: 0,
+      dues: 4000,
+      income: 0,
+    },
+    propertyId: "PG-00032",
+    propertyName: "Hanuman Gen's PG",
+    tenantType: "Male",
+    mealType: "Both",
+    doorNo: "900",
+    streetName: "Btm Layout",
+    area: "Btm Layout",
+    city: "Bangalore Urban",
+    state: "Karnataka",
+    pincode: "524004",
+    country: "India",
+    landmark: "Near Water tank",
+    facilities: ["Washing Machine", "Wifi", "Hot Water", "Table", "TV", "AC"],
+    notifications: {
+      sms: true,
+      whatsapp: true,
+    },
+    noticePeriod: "30",
+  },
+];
+
+
 const Index = () => {
   return (
     <View style={styles.container}>
@@ -41,8 +109,8 @@ const Index = () => {
         showsVerticalScrollIndicator={false}
       >
         <Text style={styles.propertiesText}>Properties</Text>
-        {[1, 2, 3, 4, 5, 6].map((card, index) => (
-          <PropertyCard key={index} />
+        {pgProperties.map((property, index) => (
+          <PropertyCard key={property?._id} data={property} />
         ))}
       </ScrollView>
     </View>
