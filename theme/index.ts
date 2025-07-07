@@ -4,15 +4,16 @@ export const lightTheme = {
     background: "#FFFFFF",
     textPrimary: "#212529",
     textSecondary: "#6C757D",
+    textMuted: "#B3a9a3",
     surface: "#F8F9FA",
     white: "#FFFFFF",
     error: "red", // Included for validation or error messages
     success: "#28a745", // (Optional)
-     totalBeds: "#00f",
-     availableBeds: "#0a892e",
-     advBookedBeds: "#ed6d10",
-     filledBeds: "#c80b0b",
-      underNoticeBeds: "#6c3fc0",
+    totalBeds: "#00f",
+    availableBeds: "#0a892e",
+    advBookedBeds: "#ed6d10",
+    filledBeds: "#c80b0b",
+    underNoticeBeds: "#6c3fc0",
   },
   spacing: {
     xs: 4,
@@ -54,13 +55,13 @@ export const darkTheme: typeof lightTheme = {
     textSecondary: "#B0B0B0",
     surface: "#1F1F1F",
     white: "#000000", // ⚠️ This is a bit confusing — black is not "white". Consider renaming.
-    error: "red",      // ✅ Add this for parity
+    error: "red", // ✅ Add this for parity
     success: "#28a745", // ✅ Optional
     totalBeds: "#00f",
-     availableBeds: "#0a892e",
-     advBookedBeds: "#ed6d10",
-     filledBeds: "#c80b0b",
-      underNoticeBeds: "#6c3fc0",
+    availableBeds: "#0a892e",
+    advBookedBeds: "#ed6d10",
+    filledBeds: "#c80b0b",
+    underNoticeBeds: "#6c3fc0",
   },
   spacing: lightTheme.spacing,
   typography: lightTheme.typography,

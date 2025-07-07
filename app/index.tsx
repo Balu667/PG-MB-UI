@@ -1,232 +1,224 @@
-import { router } from "expo-router";
 import React, { useState } from "react";
 import {
-  Text,
-  StyleSheet,
   View,
-  TextInput,
+  Text,
+  SafeAreaView,
+  StyleSheet,
+  KeyboardAvoidingView,
+  Platform,
+  TouchableWithoutFeedback,
+  Keyboard,
   Image,
-  TouchableOpacity,
+  Dimensions,
 } from "react-native";
+import { useNavigation } from "@react-navigation/native";
+import PhoneInput from "@/components/PhoneInput";
+import DisableButton from "@/components/DisableButton";
+import { lightTheme } from "@/theme";
 
-const Login = () => {
-  const [mobileNumber, setMobileNumber] = useState("+91 8779404201");
+const COLORS = {
+  primary: "#1d3c34",
+  accent: "#d99136",
+  background: "#FFFFFF",
+  circle1: "#c0ebc9",
+  circle2: "#a3d9c9",
+  textPrimary: "#333333",
+  textSecondary: "#666666",
+  textMuted: "#999999",
+  border: "#E0E0E0",
+  link: "#4A86F7",
+  disabled: "#CCCCCC",
+};
+
+const FONT = {
+  regular: "400",
+  semiBold: "600",
+  bold: "700",
+};
+
+const SIZES = {
+  base: 16,
+  padding: 24,
+  margin: 16,
+  radius: 12,
+  inputHeight: 56,
+};
+
+const { width, height } = Dimensions.get("window");
+const scale = (size: number) => (width / 375) * size;
+
+const LoginScreen = () => {
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const navigation = useNavigation();
+
+  const handleContinue = () => {
+    if (phoneNumber.length === 10) {
+      navigation.navigate("Otp", { phoneNumber });
+    }
+  };
+
+  const dynamicStyles = StyleSheet.create({
+    circleLarge: {
+      width: scale(600),
+      height: scale(600),
+      borderRadius: scale(300),
+      top: scale(-280),
+      left: scale(-115),
+    },
+    circleSmall: {
+      width: scale(300),
+      height: scale(300),
+      borderRadius: scale(150),
+      top: scale(-100),
+      right: scale(-100),
+    },
+    logoContainer: {
+      paddingTop: height > 800 ? scale(60) : scale(40),
+    },
+    content: {
+      marginBottom: height > 800 ? scale(40) : scale(20),
+    },
+  });
 
   return (
-    <View style={styles.container}>
-      <View style={styles.upperCurvedContainer}>
-        <View style={styles.rightSideCurvedContainer}></View>
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+      <SafeAreaView style={styles.safeArea}>
+        {/* Background Circles */}
+        <View style={styles.backgroundContainer}>
+          <View style={[styles.circleLarge, dynamicStyles.circleLarge]} />
+          <View style={[styles.circleSmall, dynamicStyles.circleSmall]} />
+        </View>
 
-        <View style={styles.bottomCenterContainer}>
-          <View style={styles.logoWrapper}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={styles.container}
+          keyboardVerticalOffset={Platform.OS === "ios" ? -scale(100) : 0}
+        >
+          {/* Logo */}
+          <View style={[styles.logoContainer, dynamicStyles.logoContainer]}>
             <Image
               source={require("../assets/images/logo.png")}
-              style={styles.logoImg}
+              style={styles.logoImage}
+              resizeMode="contain"
             />
           </View>
-          <Text style={styles.logoName}>Right PG</Text>
-        </View>
-      </View>
 
-      <View style={styles.inputContainer}>
-        <Text style={styles.title}>Login with your Mobile </Text>
-        <View style={styles.inputCont}>
-          <Text style={styles.labels}>Enter Mobile Number</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Enter your mobile number"
-            keyboardType="phone-pad"
-            onChangeText={(text) => setMobileNumber(text)}
-            value={mobileNumber}
-          />
-        </View>
-        <View>
-          <TouchableOpacity
-            style={styles.btn}
-            onPress={() => router.replace("./Otp")}
-          >
-            <Text style={styles.generateOtpText}>Generate OTP</Text>
-          </TouchableOpacity>
-        </View>
-        <Text style={styles.orText}>Or</Text>
-        <View style={styles.gmailContainer}>
-          <View>
-            <Image
-              source={require("../assets/images/gmail.png")}
-              style={styles.image}
+          {/* Content */}
+          <View style={[styles.content, dynamicStyles.content]}>
+            <Text style={styles.welcomeText}>Welcome 👋</Text>
+            <Text style={styles.subtitle}>Let’s get started by entering your mobile number.</Text>
+
+            <PhoneInput value={phoneNumber} onChangeText={setPhoneNumber} />
+
+            <DisableButton
+              title="Generate OTP"
+              onPress={handleContinue}
+              disabled={phoneNumber.length !== 10}
             />
           </View>
-          <View>
-            <Text style={styles.gmailText}>Sign in with gmail</Text>
+
+          {/* Bottom Motivation Text */}
+          <View style={styles.inspirationBox}>
+            <Text style={styles.inspirationText}>
+              “Comfortable living starts with the right place.”
+            </Text>
           </View>
-        </View>
-        <View>
-          <Text style={styles.termServiceText}>
-            By continuing you accept our{" "}
-            <Text style={styles.highlightedText}>Term of Service</Text> Also
-            learn how we process your data in our{" "}
-            <Text style={styles.highlightedText}>Privacy Policy </Text> and{" "}
-            <Text style={styles.highlightedText}>Cookies Policy</Text>
-          </Text>
-        </View>
-      </View>
-    </View>
+
+          {/* Footer */}
+          <View style={styles.footer}>
+            <Text style={styles.footerText}>
+              By continuing, you accept our <Text style={styles.footerLink}>Terms of Service</Text>.
+              Learn how we process your data in our{" "}
+              <Text style={styles.footerLink}>Privacy Policy</Text> and{" "}
+              <Text style={styles.footerLink}>Cookies Policy</Text>.
+            </Text>
+          </View>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    </TouchableWithoutFeedback>
   );
 };
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+  },
+  backgroundContainer: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 0,
+  },
+  circleLarge: {
+    position: "absolute",
+    backgroundColor: COLORS.circle1,
+  },
+  circleSmall: {
+    position: "absolute",
+    backgroundColor: COLORS.circle2,
+  },
   container: {
     flex: 1,
-    display: "flex",
+    justifyContent: "space-between",
+    paddingHorizontal: SIZES.padding,
   },
-  upperCurvedContainer: {
-    position: "relative",
-    height: 300,
-    backgroundColor: "#256D85",
-    opacity: 0.4,
-    width: "100%",
-    borderBottomLeftRadius: "40%",
-    borderBottomRightRadius: "40%",
-  },
-
-  rightSideCurvedContainer: {
-    height: 160,
-    backgroundColor: "#256D85",
-    width: "50%",
-    opacity: 0.8,
-    top: 0,
-    left: 250,
-    borderBottomLeftRadius: "40%",
-    borderBottomRightRadius: "40%",
-  },
-
-  logoWrapper: {
-    width: 150,
-    height: 150,
-    borderRadius: 75,
-    overflow: "hidden",
-    marginBottom: 10,
-  },
-
-  bottomCenterContainer: {
-    position: "absolute",
-    bottom: -50,
-    left: "50%",
-    transform: [{ translateX: "-50%" }],
-    zIndex: 999,
-    opacity: 1,
+  logoContainer: {
     alignItems: "center",
+    marginTop: scale(90),
+  },
+  logoImage: {
+    width: scale(170),
+    height: scale(110),
   },
 
-  logoImg: {
-    width: "100%",
-    height: "100%",
-    resizeMode: "contain",
-  },
-
-  logoName: {
-    fontSize: 30,
-    textAlign: "center",
-    color: "#256D85",
-    fontWeight: "bold",
-  },
-
-  inputContainer: {
-    paddingHorizontal: 25,
-    marginTop: 70,
-  },
-
-  title: {
-    fontSize: 20,
-    fontWeight: "600",
-    marginBottom: 20,
-    color: "#000",
-    textAlign: "left",
-    marginTop: 50,
-  },
-
-  input: {
-    width: "100%",
-    height: 60,
+  content: {
+    backgroundColor: "rgba(255, 255, 255, 0.25)", // simulate glass
+    borderRadius: SIZES.radius,
+    padding: SIZES.padding,
     borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 10,
-    paddingHorizontal: 15,
-    paddingVertical: 10,
-    fontSize: 20,
-    lineHeight: 20,
-    marginVertical: 10,
-    backgroundColor: "#E9EAEA",
-    color: "#5856d6",
+    borderColor: "rgba(255, 255, 255, 0.3)", // light border
   },
 
-  labels: {
-    fontWeight: "600",
-    fontSize: 16,
-    marginBottom: 5,
-    color: "grey",
+  welcomeText: {
+    fontSize: scale(20),
+    fontWeight: FONT.bold,
+    color: COLORS.primary,
+    marginBottom: 4,
   },
-
-  btn: {
-    width: "100%",
-    backgroundColor: "#256D85",
-    paddingVertical: 20,
-    borderRadius: 10,
-    marginVertical: 15,
+  subtitle: {
+    fontSize: scale(14),
+    color: COLORS.textMuted,
+    marginBottom: scale(12),
   },
-
-  inputCont: {
-    width: "100%",
+  inspirationBox: {
+    paddingHorizontal: SIZES.padding,
+    marginTop: scale(10),
   },
-
-  generateOtpText: {
+  inspirationText: {
+    fontSize: scale(13),
+    color: COLORS.textSecondary,
+    fontStyle: "italic",
     textAlign: "center",
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "500",
-    letterSpacing: 1,
   },
-
-  orText: {
+  footer: {
+    paddingVertical: SIZES.base,
+    marginBottom: SIZES.base,
+    paddingHorizontal: SIZES.padding,
+  },
+  footerText: {
+    color: COLORS.textMuted,
+    fontSize: scale(12),
     textAlign: "center",
-    fontSize: 18,
-    fontWeight: "600",
-    color: "grey",
-    marginVertical: 10,
+    lineHeight: scale(18),
+    fontWeight: FONT.semiBold,
   },
-
-  gmailContainer: {
-    display: "flex",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 20,
-    gap: 10,
-  },
-
-  image: {
-    width: 40,
-    height: 30,
-  },
-
-  gmailText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#5856d6",
-  },
-
-  highlightedText: {
-    color: "#09BD71",
-  },
-
-  termServiceText: {
-    color: "grey",
-    fontSize: 16,
-    textAlign: "center",
-    padding: 3,
-    lineHeight: 22,
-    letterSpacing: 1,
+  footerLink: {
+    color: COLORS.link,
+    fontWeight: FONT.semiBold,
   },
 });
 
-export default Login;
+export default LoginScreen;
