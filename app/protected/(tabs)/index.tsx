@@ -3,7 +3,7 @@ import { StyleSheet, View, Text, TextInput, ScrollView } from "react-native";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import Entypo from "@expo/vector-icons/Entypo";
-import PropertyCard from "@/components/PropertyCard";
+import PropertyCard from "@/src/components/PropertyCard";
 
 const pgProperties = [
   {

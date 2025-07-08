@@ -1,10 +1,8 @@
 import { StyleSheet } from "react-native";
-import { useTheme } from "@/theme/ThemeContext"; // Adjust if your path differs
+import { useTheme } from "@/src/theme/ThemeContext"; // Adjust if your path differs
 
 export const useBS = () => {
   const theme = useTheme();
-
-  console.log("Using BS with theme:", theme);
 
   return StyleSheet.create({
     // ✅ FLEXBOX
@@ -52,11 +50,10 @@ export const useBS = () => {
     bgDanger: { backgroundColor: theme.colors.error },
     bgSuccess: { backgroundColor: theme.colors.success },
     totalBedsColor: { color: theme.colors.totalBeds },
-    availableBedsColor: { color: theme.colors.availableBeds },    
+    availableBedsColor: { color: theme.colors.availableBeds },
     advBookedBedsColor: { color: theme.colors.advBookedBeds },
     filledBedsColor: { color: theme.colors.filledBeds },
-    underNoticeBedsColor: { color: theme.colors.underNoticeBeds },    
-
+    underNoticeBedsColor: { color: theme.colors.underNoticeBeds },
 
     // ✅ SPACING (based on theme)
     m0: { margin: 0 },

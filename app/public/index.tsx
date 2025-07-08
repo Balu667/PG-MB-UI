@@ -12,9 +12,13 @@ import {
   Dimensions,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
-import PhoneInput from "@/components/PhoneInput";
-import DisableButton from "@/components/DisableButton";
-import { lightTheme } from "@/theme";
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import PhoneInput from "@/src/components/PhoneInput";
+import DisableButton from "@/src/components/DisableButton";
+import { lightTheme } from "@/src/theme";
+import { useGetLogin } from "@/src/hooks/login";
+import { RootStackParamList } from "@/src/types/navigation";
+import { ActivityIndicator } from "react-native";
 
 const COLORS = {
   primary: "#1d3c34",
@@ -47,15 +51,29 @@ const SIZES = {
 const { width, height } = Dimensions.get("window");
 const scale = (size: number) => (width / 375) * size;
 
+
 const LoginScreen = () => {
   const [phoneNumber, setPhoneNumber] = useState("");
-  const navigation = useNavigation();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+const onSuccessLogin = (data: any) => {
+  const { userId } = data;
+ 
+  navigation.navigate("otp", {
+    phoneNumber,
+    userId
+  });
+};
 
-  const handleContinue = () => {
-    if (phoneNumber.length === 10) {
-      navigation.navigate("Otp", { phoneNumber });
-    }
-  };
+
+const { mutate, status } = useGetLogin(onSuccessLogin);
+
+const handleContinue = () => {
+  
+  if (phoneNumber.length === 10) {
+    mutate({ phoneNumber }); // invoke the mutation
+  }
+};
+
 
   const dynamicStyles = StyleSheet.create({
     circleLarge: {
@@ -82,55 +100,59 @@ const LoginScreen = () => {
 
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView style={viewStyles.safeArea}>
         {/* Background Circles */}
-        <View style={styles.backgroundContainer}>
-          <View style={[styles.circleLarge, dynamicStyles.circleLarge]} />
-          <View style={[styles.circleSmall, dynamicStyles.circleSmall]} />
+        <View style={viewStyles.backgroundContainer}>
+          <View style={[viewStyles.circleLarge, dynamicStyles.circleLarge]} />
+          <View style={[viewStyles.circleSmall, dynamicStyles.circleSmall]} />
         </View>
 
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : "height"}
-          style={styles.container}
+          style={viewStyles.container}
           keyboardVerticalOffset={Platform.OS === "ios" ? -scale(100) : 0}
         >
           {/* Logo */}
-          <View style={[styles.logoContainer, dynamicStyles.logoContainer]}>
+          <View style={[viewStyles.logoContainer, dynamicStyles.logoContainer]}>
             <Image
-              source={require("../assets/images/logo.png")}
-              style={styles.logoImage}
+              source={require("@/assets/images/logo.png")}
+              style={imageStyles.logoImage}
               resizeMode="contain"
             />
           </View>
 
           {/* Content */}
-          <View style={[styles.content, dynamicStyles.content]}>
-            <Text style={styles.welcomeText}>Welcome 👋</Text>
-            <Text style={styles.subtitle}>Let’s get started by entering your mobile number.</Text>
+          <View style={[viewStyles.content, dynamicStyles.content]}>
+            <Text style={textStyles.welcomeText}>Welcome 👋</Text>
+            <Text style={textStyles.subtitle}>Let’s get started by entering your mobile number.</Text>
 
             <PhoneInput value={phoneNumber} onChangeText={setPhoneNumber} />
 
-            <DisableButton
-              title="Generate OTP"
-              onPress={handleContinue}
-              disabled={phoneNumber.length !== 10}
-            />
+           {status === "pending" ? (
+  <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 16 }} />
+) : (
+  <DisableButton
+    title="Generate OTP"
+    onPress={handleContinue}
+    disabled={phoneNumber.length !== 10}
+  />
+)}
           </View>
 
           {/* Bottom Motivation Text */}
-          <View style={styles.inspirationBox}>
-            <Text style={styles.inspirationText}>
+          <View style={viewStyles.inspirationBox}>
+            <Text style={textStyles.inspirationText}>
               “Comfortable living starts with the right place.”
             </Text>
           </View>
 
           {/* Footer */}
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>
-              By continuing, you accept our <Text style={styles.footerLink}>Terms of Service</Text>.
+          <View style={viewStyles.footer}>
+            <Text style={textStyles.footerText}>
+              By continuing, you accept our <Text style={textStyles.footerLink}>Terms of Service</Text>.
               Learn how we process your data in our{" "}
-              <Text style={styles.footerLink}>Privacy Policy</Text> and{" "}
-              <Text style={styles.footerLink}>Cookies Policy</Text>.
+              <Text style={textStyles.footerLink}>Privacy Policy  and{" "}</Text>
+              <Text style={textStyles.footerLink}>Cookies Policy</Text>.
             </Text>
           </View>
         </KeyboardAvoidingView>
@@ -139,7 +161,7 @@ const LoginScreen = () => {
   );
 };
 
-const styles = StyleSheet.create({
+const viewStyles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: COLORS.background,
@@ -169,11 +191,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: scale(90),
   },
-  logoImage: {
-    width: scale(170),
-    height: scale(110),
-  },
-
   content: {
     backgroundColor: "rgba(255, 255, 255, 0.25)", // simulate glass
     borderRadius: SIZES.radius,
@@ -181,10 +198,21 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255, 255, 255, 0.3)", // light border
   },
+  inspirationBox: {
+    paddingHorizontal: SIZES.padding,
+    marginTop: scale(10),
+  },
+  footer: {
+    paddingVertical: SIZES.base,
+    marginBottom: SIZES.base,
+    paddingHorizontal: SIZES.padding,
+  },
+});
 
+const textStyles = StyleSheet.create({
   welcomeText: {
     fontSize: scale(20),
-    fontWeight: FONT.bold,
+    fontWeight: FONT.bold as any,
     color: COLORS.primary,
     marginBottom: 4,
   },
@@ -193,31 +221,29 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     marginBottom: scale(12),
   },
-  inspirationBox: {
-    paddingHorizontal: SIZES.padding,
-    marginTop: scale(10),
-  },
   inspirationText: {
     fontSize: scale(13),
     color: COLORS.textSecondary,
     fontStyle: "italic",
     textAlign: "center",
   },
-  footer: {
-    paddingVertical: SIZES.base,
-    marginBottom: SIZES.base,
-    paddingHorizontal: SIZES.padding,
-  },
   footerText: {
     color: COLORS.textMuted,
     fontSize: scale(12),
     textAlign: "center",
     lineHeight: scale(18),
-    fontWeight: FONT.semiBold,
+    fontWeight: FONT.semiBold as any,
   },
   footerLink: {
     color: COLORS.link,
-    fontWeight: FONT.semiBold,
+    fontWeight: FONT.semiBold as any,
+  },
+});
+
+const imageStyles = StyleSheet.create({
+  logoImage: {
+    width: scale(170),
+    height: scale(110),
   },
 });
 

@@ -1,7 +1,7 @@
 import React from "react";
 import { TouchableOpacity, Text, StyleSheet } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { lightTheme } from "@/theme";
+import { lightTheme } from "@/src/theme";
 
 const DisableButton = ({ title, onPress, disabled = false }: any) => {
   return (
