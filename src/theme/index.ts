@@ -53,6 +53,7 @@ export const darkTheme: typeof lightTheme = {
     background: "#121212",
     textPrimary: "#FFFFFF",
     textSecondary: "#B0B0B0",
+    textMuted: "#8a8a8a",
     surface: "#1F1F1F",
     white: "#000000", // ⚠️ This is a bit confusing — black is not "white". Consider renaming.
     error: "red", // ✅ Add this for parity

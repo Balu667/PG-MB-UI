@@ -1,8 +1,8 @@
 import { View, Text, StyleSheet } from "react-native";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import FontAwesome5 from '@expo/vector-icons/FontAwesome5';
-import { useTheme } from "@/theme/ThemeContext";
-import { useBS } from "@/hooks/useBs";
+import { useTheme } from "@/src/theme/ThemeContext";
+import { useBS } from "@/src/hooks/useBs";
 
 interface PropertyMetadata {
   totalBeds?: number;

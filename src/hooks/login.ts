@@ -1,0 +1,119 @@
+import { useMutation } from "@tanstack/react-query";
+import Toast from "react-native-toast-message";
+import { fetchData } from "@/helper";
+import Constants from "expo-constants";
+
+const API_URL =
+  Constants.expoConfig?.extra?.API_URL || "https://pgapi.unitekra.in/api/";
+
+// Interfaces (simplified — expand as needed)
+interface LoginPayload {
+  phoneNumber: string;
+}
+
+interface LoginResponse {
+  message: string;
+  data: { token: string; name: string }; // Update with actual shape
+}
+
+interface OtpPayload {
+  _id: string;
+  otp: string;
+}
+
+interface OtpResponse {
+  message: string;
+  data: any; // Update with actual shape
+}
+
+const useGetLogin = (
+  onSuccessFunctions: (data: LoginResponse["data"]) => void
+) => {
+  return useMutation<LoginResponse, Error, LoginPayload>({
+    mutationFn: (data) => {
+      return fetchData<LoginResponse>({
+        url: `${API_URL}pgowner/login`,
+        method: "POST",
+        body: JSON.stringify(data),
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+    },
+    onError: (error) => {
+      Toast.show({
+        type: "error",
+        text1: "Login Failed",
+        text2: error.message,
+      });
+    },
+    onSuccess: (data) => {
+      Toast.show({
+        type: "success",
+        text1: "Login Successful",
+        text2: data.message,
+      });
+      onSuccessFunctions(data.data);
+    },
+  });
+};
+
+const useVerifyOtp = (
+  onSuccessFunctions: (data: OtpResponse["data"]) => void
+) => {
+  return useMutation<OtpResponse, Error, OtpPayload>({
+    mutationFn: (data) =>
+      fetchData<OtpResponse>({
+        url: `${API_URL}pgowner/verifyOtp`,
+        method: "POST",
+        body: JSON.stringify(data),
+        headers: {
+          "Content-Type": "application/json",
+        },
+      }),
+    onError: (error) => {
+      console.log(error.message);
+      Toast.show({
+        type: "error",
+        text1: "OTP Verification Failed",
+        text2: error.message,
+      });
+    },
+    onSuccess: (data) => {
+      Toast.show({
+        type: "error",
+        text1: "OTP Verification Failed",
+        text2: data?.data?.message,
+      });
+      onSuccessFunctions(data.data);
+    },
+  });
+};
+
+const useResendOtp = (
+  onSuccessFunctions: (data: OtpResponse["data"]) => void
+) => {
+  return useMutation<OtpResponse, Error, { phoneNumber: string }>({
+    mutationFn: (data) =>
+      fetchData<OtpResponse>({
+        url: `${API_URL}pgowner/resendOtp`,
+        method: "POST",
+        body: JSON.stringify(data),
+        headers: {
+          "Content-Type": "application/json",
+        },
+      }),
+    onError: (error) => {
+      Toast.show({
+        type: "error",
+        text1: "Resend OTP Failed",
+        text2: error.message,
+      });
+    },
+    onSuccess: (data) => {
+      onSuccessFunctions(data.data);
+    },
+  });
+};
+
+export { useGetLogin, useVerifyOtp, useResendOtp };

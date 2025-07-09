@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { View, Text, TextInput, StyleSheet } from "react-native";
-import { lightTheme } from "@/theme";
+import { lightTheme } from "@/src/theme";
 
 interface PhoneInputProps {
   value: string;

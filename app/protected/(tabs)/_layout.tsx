@@ -1,4 +1,4 @@
-import TabBar from "@/components/TabBar";
+import TabBar from "@/src/components/TabBar";
 import { Tabs } from "expo-router";
 import React from "react";
 
