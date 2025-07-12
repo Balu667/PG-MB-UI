@@ -798,12 +798,12 @@ const TabBar: React.FC<BottomTabBarProps> = ({ state, descriptors, navigation })
     const color = focused ? ICON_COLOR : "#7A7A7A";
     switch (name) {
       case "index":
-        return <MaterialIcons name="dashboard" size={24} color={color} />;
+        return <MaterialIcons name="apartment" size={24} color={color} />;
       case "Rooms":
         return <MaterialIcons name="meeting-room" size={24} color={color} />;
-      case "Properties":
-        return <MaterialIcons name="apartment" size={24} color={color} />;
-      case "People":
+      case "Dashboard":
+        return <MaterialIcons name="dashboard" size={24} color={color} />;
+      case "Tenants":
         return <MaterialIcons name="groups" size={24} color={color} />;
       default:
         return null;
@@ -839,7 +839,7 @@ const TabBar: React.FC<BottomTabBarProps> = ({ state, descriptors, navigation })
             >
               {getIcon(route.name, isFocused)}
               <Text style={[styles.label, isFocused && styles.labelFocused]}>
-                {route.name === "index" ? "Dashboard" : route.name}
+                {route.name === "index" ? "Properties" : route.name}
               </Text>
             </TouchableOpacity>
           );

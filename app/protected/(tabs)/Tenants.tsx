@@ -1,10 +1,10 @@
-import React from "react";
+import React, { useState } from "react";
 import { StyleSheet, View, Text } from "react-native";
 
-const Properties = () => {
+const Profile = () => {
   return (
     <View style={styles.container}>
-      <Text>Property</Text>
+      <Text>People</Text>
     </View>
   );
 };
@@ -12,8 +12,8 @@ const Properties = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    marginTop: 50,
+    marginTop: 500,
   },
 });
 
-export default Properties;
+export default Profile;

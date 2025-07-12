@@ -1,11 +1,13 @@
-import Config from "react-native-config";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform, Linking } from "react-native";
+import Constants from "expo-constants";
 
-const FILE_URL = Config.FILE_URL;
+// For Expo SDK 49+, use expoConfig; for older SDKs, use manifest
+const { apiUrl, fileUrl } = (Constants as any).expoConfig?.extra || {};
 
 // Types
 export interface FetchParams {
+  baseUrl?: string;
   url: string;
   method?: "GET" | "POST" | "PUT" | "DELETE";
   body?: any;
@@ -25,6 +27,7 @@ export interface BedData {
 export interface RoomTenantData extends BedData {}
 
 export async function fetchData<T = any>({
+  baseUrl = apiUrl,
   url,
   method = "GET",
   body,
@@ -32,7 +35,7 @@ export async function fetchData<T = any>({
   isAuthRequired = true,
 }: FetchParams): Promise<T> {
   const token = await AsyncStorage.getItem("userToken");
-
+  url = baseUrl + url;
   const fetchObject: RequestInit = {
     method,
     headers: {
@@ -42,12 +45,9 @@ export async function fetchData<T = any>({
     },
     body: body,
   };
-
   try {
     const response = await fetch(url, fetchObject);
-
     const data = await response.json();
-
     if ([400, 401, 500].includes(response.status)) {
       throw new Error(data.errorMessage || "Unknown error occurred");
     }
@@ -108,7 +108,7 @@ export function getBedStatus(
   bedNumber: string,
   roomTenantData: RoomTenantData[]
 ): string {
-  const bed = roomTenantData?.find((b) => b._id === bedNumber);
+  const bed = roomTenantData?.find((b) => b?._id === bedNumber);
   if (!bed) return "Available";
 
   for (const tenant of bed.tenantsPerBed) {
@@ -140,7 +140,7 @@ export const openFileInNewTab = (
 
 // Open file URL
 export const openFileUrlInNewTab = async (url: string): Promise<void> => {
-  const fullUrl = FILE_URL + url;
+  const fullUrl = fileUrl + url;
   await Linking.openURL(fullUrl);
 };
 

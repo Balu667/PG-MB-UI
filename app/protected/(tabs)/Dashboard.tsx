@@ -1,10 +1,10 @@
-import React, { useState } from "react";
+import React from "react";
 import { StyleSheet, View, Text } from "react-native";
 
-const Profile = () => {
+const Dashboard = () => {
   return (
     <View style={styles.container}>
-      <Text>People</Text>
+      <Text>In DashBoard</Text>
     </View>
   );
 };
@@ -16,4 +16,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default Profile;
+export default Dashboard;

@@ -21,13 +21,21 @@ import { useRoute, RouteProp } from "@react-navigation/native";
 import { lightTheme } from "@/src/theme";
 import DisableButton from "@/src/components/DisableButton";
 import { Ionicons } from "@expo/vector-icons";
-import { RootStackParamList } from "@/src/types/navigation";
+import { RootStackParamList } from "@/types/navigation";
 import { useResendOtp, useVerifyOtp } from "@/src/hooks/login";
 import { setProfileDetails } from "@/src/redux/slices/profileSlice";
 import { useDispatch } from "react-redux";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useNavigation, useRouter } from "expo-router";
 import Toast from "react-native-toast-message";
+import {jwtDecode} from 'jwt-decode';
+
+// Define the shape of your token payload
+type JwtPayload = {
+  _id: string;
+  role: string;
+  [key: string]: any;
+};
 
 const router = useRouter();
 const OTP_LENGTH = 4;
@@ -47,10 +55,17 @@ const { phoneNumber, userId } = route.params;
     try{
     // Store token
     await AsyncStorage.setItem("userToken", data);
-    dispatch(setProfileDetails({userId,signedIn:true,phoneNumber}));
+    const decoded: JwtPayload = jwtDecode<JwtPayload>(data);
+		dispatch(
+			setProfileDetails({
+				userId: decoded._id,
+				signedIn: true,
+				role: decoded?.role,
+			})
+		);
    router.replace("/protected/(tabs)");
     }catch(error){
-      console.log(error)
+      console.log(error,"error")
     }
 
   }

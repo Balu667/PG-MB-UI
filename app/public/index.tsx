@@ -17,8 +17,9 @@ import PhoneInput from "@/src/components/PhoneInput";
 import DisableButton from "@/src/components/DisableButton";
 import { lightTheme } from "@/src/theme";
 import { useGetLogin } from "@/src/hooks/login";
-import { RootStackParamList } from "@/src/types/navigation";
+import { RootStackParamList } from "@/types/navigation";
 import { ActivityIndicator } from "react-native";
+import { router } from "expo-router";
 
 const COLORS = {
   primary: "#1d3c34",
@@ -63,12 +64,8 @@ const onSuccessLogin = (data: any) => {
     userId
   });
 };
-
-
 const { mutate, status } = useGetLogin(onSuccessLogin);
-
 const handleContinue = () => {
-  
   if (phoneNumber.length === 10) {
     mutate({ phoneNumber }); // invoke the mutation
   }
@@ -98,6 +95,7 @@ const handleContinue = () => {
     },
   });
 
+ 
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
       <SafeAreaView style={viewStyles.safeArea}>
