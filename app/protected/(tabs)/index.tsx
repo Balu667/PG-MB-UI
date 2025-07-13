@@ -408,10 +408,12 @@ import PropertyCard from "@/src/components/PropertyCard";
 import { useGetPropertyDetailsList } from "@/src/hooks/propertyHook";
 import { useSelector } from "react-redux";
 import type { RootState } from "@/src/redux/store"; // Adjust the path if your store file is elsewhere
-
+import { router } from "expo-router";
 
 const Properites = () => {
- const { profileData } = useSelector((state: RootState) => state.profileDetails);
+  const { profileData } = useSelector(
+    (state: RootState) => state.profileDetails
+  );
   const pgPropertiesQuery = useGetPropertyDetailsList(profileData);
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -421,7 +423,10 @@ const Properites = () => {
         <View style={styles.headerContainer}>
           <View style={styles.headerTopRow}>
             <View style={{ flexDirection: "row", gap: 10 }}>
-              <Image source={{ uri: "https://via.placeholder.com/40" }} style={styles.avatar} />
+              <Image
+                source={{ uri: "https://via.placeholder.com/40" }}
+                style={styles.avatar}
+              />
               <TouchableOpacity style={styles.dropdownButton}>
                 <Text style={styles.dropdownText}>All Properties</Text>
                 <Entypo name="chevron-down" size={18} color="#fff" />
@@ -445,6 +450,12 @@ const Properites = () => {
               placeholderTextColor="#e5e5e5"
             />
           </View>
+          <TouchableOpacity
+            style={styles.floatingButton}
+            onPress={() => router.push("/protected/AddandEditProperty")}
+          >
+            <MaterialIcons name="add" size={30} color="#fff" />
+          </TouchableOpacity>
         </View>
 
         {/* Scrollable Content */}
@@ -458,15 +469,14 @@ const Properites = () => {
               showsVerticalScrollIndicator={false}
             >
               <Text style={styles.sectionTitle}>Your Properties</Text>
-              {pgPropertiesQuery.isLoading && (
-                <Text>Loading...</Text>
-              )}
+              {pgPropertiesQuery.isLoading && <Text>Loading...</Text>}
               {pgPropertiesQuery.isError && (
                 <Text>Error loading properties.</Text>
               )}
-              {Array.isArray(pgPropertiesQuery.data) && pgPropertiesQuery.data.map((property) => (
-                <PropertyCard key={property._id} data={property} />
-              ))}
+              {Array.isArray(pgPropertiesQuery.data) &&
+                pgPropertiesQuery.data.map((property) => (
+                  <PropertyCard key={property._id} data={property} />
+                ))}
             </ScrollView>
           </TouchableWithoutFeedback>
         </KeyboardAvoidingView>
@@ -493,6 +503,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#F7F8FA",
+    position: "relative",
   },
   headerContainer: {
     backgroundColor: "#256D85",
@@ -544,6 +555,23 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     marginHorizontal: 10,
     marginVertical: 5,
+  },
+  floatingButton: {
+    position: "absolute",
+    bottom: -500,
+    right: 20,
+    backgroundColor: "#256D85",
+    borderRadius: 30,
+    width: 60,
+    height: 60,
+    justifyContent: "center",
+    alignItems: "center",
+    elevation: 6, // Android shadow
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    zIndex: 100,
   },
 });
 

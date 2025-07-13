@@ -11,7 +11,7 @@ const _layout = () => {
       <Tabs.Screen name="index" options={{ title: "Properties" }} />
       <Tabs.Screen name="Rooms" options={{ title: "Rooms" }} />
       <Tabs.Screen name="Dashboard" options={{ title: "dashboard" }} />
-      <Tabs.Screen name="People" options={{ title: "People" }} />
+      <Tabs.Screen name="Tenants" options={{ title: "Tenants" }} />
       <Tabs.Screen name="Store" options={{ title: "Store" }} />
     </Tabs>
   );
