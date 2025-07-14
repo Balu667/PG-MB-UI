@@ -2,27 +2,33 @@ import React, { useState } from "react";
 import {
   View,
   Text,
-  StyleSheet,
   TouchableOpacity,
-  Modal,
-  Pressable,
+  StyleSheet,
   Dimensions,
   Platform,
+  Modal,
+  Pressable,
   Animated,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import Feather from "@expo/vector-icons/Feather";
-import { BlurView } from "expo-blur";
 
-const { width, height } = Dimensions.get("window");
 const ICON_COLOR = "#256D85";
+const screenWidth = Dimensions.get("window").width;
 
-const TabBar: React.FC<BottomTabBarProps> = ({ state, descriptors, navigation }) => {
+const TabBar: React.FC<BottomTabBarProps> = ({ state, descriptors, navigation }: any) => {
+  const insets = useSafeAreaInsets(); // handles overlap with nav bar
+  const maxVisibleTabs = 4;
+  const visibleTabs = state.routes.slice(0, maxVisibleTabs);
+  const moreTabs = state.routes.slice(maxVisibleTabs);
+
+  // Modal for "More"
   const [showMore, setShowMore] = useState(false);
-  const slideAnim = React.useRef(new Animated.Value(height)).current;
+  const slideAnim = React.useRef(new Animated.Value(300)).current;
 
-  const handleMorePress = () => {
+  const openMore = () => {
     setShowMore(true);
     Animated.timing(slideAnim, {
       toValue: 0,
@@ -31,100 +37,115 @@ const TabBar: React.FC<BottomTabBarProps> = ({ state, descriptors, navigation })
     }).start();
   };
 
-  const handleCloseMore = () => {
+  const closeMore = () => {
     Animated.timing(slideAnim, {
-      toValue: height,
+      toValue: 300,
       duration: 300,
       useNativeDriver: true,
     }).start(() => setShowMore(false));
   };
 
-  const getIcon = (name: string, focused: boolean) => {
-    const color = focused ? ICON_COLOR : "#7A7A7A";
-    switch (name) {
-      case "index":
-        return <MaterialIcons name="dashboard" size={24} color={color} />;
-      case "Rooms":
-        return <MaterialIcons name="meeting-room" size={24} color={color} />;
-      case "Properties":
-        return <MaterialIcons name="apartment" size={24} color={color} />;
-      case "People":
-        return <MaterialIcons name="groups" size={24} color={color} />;
-      default:
-        return null;
+  const handleTabPress = (route: any, index: any) => {
+    const isFocused = state.index === index;
+    const event = navigation.emit({ type: "tabPress", target: route.key });
+    if (!isFocused && !event.defaultPrevented) {
+      navigation.navigate(route.name);
     }
+  };
+
+  const getIcon = (name: any, focused: any) => {
+    const color = focused ? ICON_COLOR : "#7A7A7A";
+    const icons: any = {
+      index: "dashboard",
+      Rooms: "meeting-room",
+      Properties: "apartment",
+      People: "groups",
+      Store: "store",
+    };
+    return <MaterialIcons name={icons[name] || "circle"} size={24} color={color} />;
   };
 
   return (
     <>
-      <View style={styles.tabContainer}>
-        {state.routes.map((route, index) => {
-          if (["_sitemap", "+not-found"].includes(route.name)) return null;
-          if (route.name === "Store") return null;
-
+      <View
+        style={[
+          styles.tabContainer,
+          {
+            // floating above system nav, and gap for iOS home bar / Android navbar
+            marginBottom: insets.bottom ? insets.bottom + 10 : 20,
+            shadowOpacity: Platform.OS === "android" ? 0.2 : 0.1, // a bit more shadow on Android
+          },
+        ]}
+        pointerEvents="box-none"
+      >
+        {visibleTabs.map((route: any, index: any) => {
           const isFocused = state.index === index;
-          const onPress = () => {
-            const event = navigation.emit({
-              type: "tabPress",
-              target: route.key,
-              canPreventDefault: true,
-            });
-
-            if (!isFocused && !event.defaultPrevented) {
-              navigation.navigate(route.name);
-            }
-          };
-
           return (
             <TouchableOpacity
               key={route.key}
+              onPress={() => handleTabPress(route, index)}
+              // style={styles.tabItem}
+              style={[
+                styles.tabItem,
+                isFocused && styles.selectedTabBg, // <-- add this line
+              ]}
               accessibilityState={isFocused ? { selected: true } : {}}
-              onPress={onPress}
-              style={styles.tabItem}
+              accessibilityRole="button"
+              activeOpacity={0.7}
             >
               {getIcon(route.name, isFocused)}
-              <Text style={[styles.label, isFocused && styles.labelFocused]}>
-                {route.name === "index" ? "Dashboard" : route.name}
+              <Text
+                numberOfLines={1}
+                ellipsizeMode="tail"
+                style={[styles.label, isFocused && styles.labelFocused]}
+                allowFontScaling
+              >
+                {descriptors[route.key].options.title}
               </Text>
             </TouchableOpacity>
           );
         })}
 
-        <TouchableOpacity style={styles.tabItem} onPress={handleMorePress}>
-          <Feather name="more-horizontal" size={24} color={ICON_COLOR} />
-          <Text style={[styles.label, styles.labelFocused]}>More</Text>
-        </TouchableOpacity>
+        {moreTabs.length > 0 && (
+          <TouchableOpacity
+            style={styles.tabItem}
+            onPress={openMore}
+            accessibilityRole="button"
+            activeOpacity={0.7}
+          >
+            <Feather name="more-horizontal" size={24} color={ICON_COLOR} />
+            <Text style={styles.label}>More</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
-      <Modal visible={showMore} animationType="none" transparent onRequestClose={handleCloseMore}>
-        <Pressable style={styles.modalOverlay} onPress={handleCloseMore}>
+      {/* Modal for "More" */}
+      <Modal visible={showMore} animationType="fade" transparent onRequestClose={closeMore}>
+        <Pressable style={styles.modalOverlay} onPress={closeMore}>
           <Animated.View
             style={[
               styles.modalView,
-              {
-                transform: [{ translateY: slideAnim }],
-              },
+              { transform: [{ translateY: slideAnim }] },
+              // { marginBottom: insets.bottom || 20 },
             ]}
           >
-            <BlurView intensity={100} tint="light" style={StyleSheet.absoluteFill} />
             <View style={styles.modalHandle} />
             <View style={styles.moreContent}>
-              {[1, 2, 3, 4, 5].map((_, index) => (
+              {moreTabs.map((route: any, idx: any) => (
                 <TouchableOpacity
-                  key={index}
+                  key={route.key}
                   style={styles.moreItem}
                   onPress={() => {
-                    navigation.navigate("Store");
-                    handleCloseMore();
+                    navigation.navigate(route.name);
+                    closeMore();
                   }}
                 >
                   <View style={styles.itemContainer}>
-                    <MaterialIcons name="store" size={26} color={ICON_COLOR} />
-                    <Text style={styles.moreLabel}>Store</Text>
+                    {getIcon(route.name, false)}
+                    <Text style={styles.moreLabel}>{descriptors[route.key].options.title}</Text>
                   </View>
                 </TouchableOpacity>
               ))}
-              {/* Add more items as needed */}
             </View>
           </Animated.View>
         </Pressable>
@@ -134,82 +155,99 @@ const TabBar: React.FC<BottomTabBarProps> = ({ state, descriptors, navigation })
 };
 
 const styles = StyleSheet.create({
+  selectedTabBg: {
+    backgroundColor: "#E3F2FD", // Light blue (use your theme or adjust)
+    borderRadius: 18,
+    // paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+
   tabContainer: {
     flexDirection: "row",
-    backgroundColor: "#fff",
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 40,
-    marginHorizontal: 20,
-    marginBottom: Platform.OS === "ios" ? 30 : 20,
-    justifyContent: "space-between",
+    justifyContent: "space-around",
     alignItems: "center",
+    backgroundColor: "#fff",
+    borderRadius: 25,
+    paddingVertical: 5,
+    paddingHorizontal: 6,
+    marginHorizontal: 12,
+    // Floating look:
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 8,
+    shadowOpacity: 0.13,
+    shadowRadius: 18,
+    elevation: 18,
     position: "absolute",
-    bottom: 0,
     left: 0,
     right: 0,
+    bottom: 0,
+    zIndex: 101,
   },
   tabItem: {
-    alignItems: "center",
     flex: 1,
+    alignItems: "center",
+    paddingHorizontal: 5,
+    minWidth: 56,
   },
   label: {
+    marginTop: 2,
     fontSize: 12,
     color: "#7A7A7A",
+    textAlign: "center",
+    maxWidth: screenWidth / 5 - 20,
+    includeFontPadding: false,
   },
   labelFocused: {
     color: ICON_COLOR,
     fontWeight: "600",
   },
+  // Modal
   modalOverlay: {
     flex: 1,
     justifyContent: "flex-end",
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    backgroundColor: "rgba(0,0,0,0.33)",
   },
   modalView: {
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
     backgroundColor: "#fff",
-    minHeight: height * 0.25,
-    overflow: "hidden",
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    padding: 18,
+    minHeight: 130,
+    // Shadow for modal
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.13,
+    shadowRadius: 12,
+    elevation: 10,
   },
   modalHandle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: "rgba(0, 0, 0, 0.3)",
+    width: 38,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: "#ddd",
     alignSelf: "center",
-    marginBottom: 20,
+    marginBottom: 15,
   },
   moreContent: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "flex-start",
-    // paddingHorizontal: 10,
+    flexDirection: "column",
   },
   moreItem: {
-    width: "50%",
-    paddingVertical: 15,
-    paddingHorizontal: 10,
+    paddingVertical: 13,
+    paddingHorizontal: 2,
   },
   itemContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.05)",
-    borderRadius: 12,
+    backgroundColor: "rgba(0,0,0,0.05)",
+    borderRadius: 10,
     padding: 12,
   },
   moreLabel: {
-    marginLeft: 10,
+    marginLeft: 12,
     fontSize: 16,
     fontWeight: "500",
     color: "#000",
+    flexShrink: 1,
   },
 });
 

@@ -1,13 +1,9 @@
-import TabBar from "@/src/components/TabBar";
 import { Tabs } from "expo-router";
-import React from "react";
+import TabBar from "@/src/components/TabBar";
 
-const _layout = () => {
+export default function Layout() {
   return (
-    <Tabs
-      screenOptions={{ headerShown: false }}
-      tabBar={(props) => <TabBar {...props} />}
-    >
+    <Tabs screenOptions={{ headerShown: false }} tabBar={(props) => <TabBar {...props} />}>
       <Tabs.Screen name="index" options={{ title: "Dashboard" }} />
       <Tabs.Screen name="Rooms" options={{ title: "Rooms" }} />
       <Tabs.Screen name="Properties" options={{ title: "Properties" }} />
@@ -15,6 +11,4 @@ const _layout = () => {
       <Tabs.Screen name="Store" options={{ title: "Store" }} />
     </Tabs>
   );
-};
-
-export default _layout;
+}
