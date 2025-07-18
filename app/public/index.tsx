@@ -271,6 +271,7 @@ import DisableButton from "@/src/components/DisableButton";
 import { useGetLogin } from "@/src/hooks/login";
 import { RootStackParamList } from "@/src/types/navigation";
 import { ActivityIndicator } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const COLORS = {
   primary: "#1d3c34",
@@ -318,6 +319,7 @@ const LoginScreen = () => {
   // Animations
   const logoAnim = useRef(new Animated.Value(0)).current;
   const contentAnim = useRef(new Animated.Value(0)).current;
+  const insets = useSafeAreaInsets();
 
   React.useEffect(() => {
     // Accessibility: respects user "reduce motion" setting

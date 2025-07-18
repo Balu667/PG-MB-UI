@@ -215,7 +215,7 @@ import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import FontAwesome5 from "@expo/vector-icons/FontAwesome5";
 import { useTheme } from "@/src/theme/ThemeContext";
 import * as Haptics from "expo-haptics";
-// import LinearGradient from "expo-linear-gradient";
+import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 
 interface PropertyMetadata {
@@ -255,7 +255,7 @@ const PropertyCard = ({ data, onPress }: PropertyCardProps) => {
   if (screenWidth >= 900) numColumns = 3;
   else if (screenWidth >= 600) numColumns = 2;
   else numColumns = 1;
-
+  const router = useRouter();
   const cardMargin = 12;
   const cardWidth = (screenWidth - cardMargin * (numColumns + 1)) / numColumns;
 
@@ -301,6 +301,7 @@ const PropertyCard = ({ data, onPress }: PropertyCardProps) => {
     }
     // call actual onPress if given
     onPress && onPress();
+    router.push(`/protected/property/${data._id}`);
   };
 
   return (

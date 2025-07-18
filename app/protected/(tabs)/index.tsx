@@ -340,13 +340,13 @@ const Dashboard = () => {
               <MaterialIcons name="notifications" size={24} color="#fff" />
             </Pressable>
           </View>
-          <View style={styles.searchContainer}>
+          {/* <View style={styles.searchContainer}>
             <TextInput
               style={styles.searchInput}
               placeholder="Search By Property"
               placeholderTextColor="#e5e5e5"
             />
-          </View>
+          </View> */}
         </View>
 
         {/* Cards List */}
