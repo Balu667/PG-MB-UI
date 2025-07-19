@@ -27,7 +27,8 @@ const TabBar: React.FC<BottomTabBarProps> = ({ state, descriptors, navigation }:
   // Modal for "More"
   const [showMore, setShowMore] = useState(false);
   const slideAnim = React.useRef(new Animated.Value(300)).current;
-
+  const focusedRoute = state.routes[state.index];
+  const isMoreFocused = moreTabs.some((r: any) => r.key === focusedRoute.key);
   const openMore = () => {
     setShowMore(true);
     Animated.timing(slideAnim, {
@@ -72,7 +73,7 @@ const TabBar: React.FC<BottomTabBarProps> = ({ state, descriptors, navigation }:
           styles.tabContainer,
           {
             // floating above system nav, and gap for iOS home bar / Android navbar
-            marginBottom: insets.bottom ? insets.bottom + 10 : 20,
+            marginBottom: Math.max(insets.bottom, 8),
             shadowOpacity: Platform.OS === "android" ? 0.2 : 0.1, // a bit more shadow on Android
           },
         ]}
@@ -106,7 +107,7 @@ const TabBar: React.FC<BottomTabBarProps> = ({ state, descriptors, navigation }:
           );
         })}
 
-        {moreTabs.length > 0 && (
+        {/* {moreTabs.length > 0 && (
           <TouchableOpacity
             style={styles.tabItem}
             onPress={openMore}
@@ -115,6 +116,24 @@ const TabBar: React.FC<BottomTabBarProps> = ({ state, descriptors, navigation }:
           >
             <Feather name="more-horizontal" size={24} color={ICON_COLOR} />
             <Text style={styles.label}>More</Text>
+          </TouchableOpacity>
+        )} */}
+        {moreTabs.length > 0 && (
+          <TouchableOpacity
+            style={[
+              styles.tabItem,
+              isMoreFocused && styles.selectedTabBg, // highlight “More” when needed
+            ]}
+            onPress={openMore}
+            accessibilityRole="button"
+            activeOpacity={0.7}
+          >
+            <Feather
+              name="more-horizontal"
+              size={24}
+              color={isMoreFocused ? ICON_COLOR : "#7A7A7A"}
+            />
+            <Text style={[styles.label, isMoreFocused && styles.labelFocused]}>More</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -131,21 +150,24 @@ const TabBar: React.FC<BottomTabBarProps> = ({ state, descriptors, navigation }:
           >
             <View style={styles.modalHandle} />
             <View style={styles.moreContent}>
-              {moreTabs.map((route: any, idx: any) => (
-                <TouchableOpacity
-                  key={route.key}
-                  style={styles.moreItem}
-                  onPress={() => {
-                    navigation.navigate(route.name);
-                    closeMore();
-                  }}
-                >
-                  <View style={styles.itemContainer}>
-                    {getIcon(route.name, false)}
-                    <Text style={styles.moreLabel}>{descriptors[route.key].options.title}</Text>
-                  </View>
-                </TouchableOpacity>
-              ))}
+              {moreTabs.map((route: any, idx: any) => {
+                const isCurrent = route.key === focusedRoute.key;
+                return (
+                  <TouchableOpacity
+                    key={route.key}
+                    style={[styles.moreItem, isCurrent && styles.moreItemSelected]}
+                    onPress={() => {
+                      navigation.navigate(route.name);
+                      closeMore();
+                    }}
+                  >
+                    <View style={styles.itemContainer}>
+                      {getIcon(route.name, false)}
+                      <Text style={styles.moreLabel}>{descriptors[route.key].options.title}</Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
           </Animated.View>
         </Pressable>
@@ -160,6 +182,10 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     // paddingHorizontal: 16,
     paddingVertical: 10,
+  },
+  moreItemSelected: {
+    backgroundColor: "#E3F2FD", // same light blue you use on the bar
+    borderRadius: 10,
   },
 
   tabContainer: {

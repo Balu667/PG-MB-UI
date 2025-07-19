@@ -147,14 +147,28 @@ const OtpScreen = () => {
   }, []);
 
   /* ---------- Capture Android hardware‑back ---------- */
+  // useFocusEffect(
+  //   React.useCallback(() => {
+  //     const onBack = () => {
+  //       setIsModalVisible(true); // show the confirmation modal you already styled
+  //       return true; // prevent automatic pop
+  //     };
+  //     BackHandler.addEventListener("hardwareBackPress", onBack);
+  //     return () => BackHandler.removeEventListener("hardwareBackPress", onBack);
+  //   }, [])
+  // );
   useFocusEffect(
     React.useCallback(() => {
       const onBack = () => {
-        setIsModalVisible(true); // show the confirmation modal you already styled
-        return true; // prevent automatic pop
+        setIsModalVisible(true); // open the “Edit number?” popup
+        return true; // block the default back‑navigation
       };
-      BackHandler.addEventListener("hardwareBackPress", onBack);
-      return () => BackHandler.removeEventListener("hardwareBackPress", onBack);
+
+      // ✅ modern API: returns a subscription object
+      const backSub = BackHandler.addEventListener("hardwareBackPress", onBack);
+
+      // ✅ clean‑up
+      return () => backSub.remove();
     }, [])
   );
 
@@ -297,7 +311,7 @@ const OtpScreen = () => {
 
         {/* ---------------- Back button ---------------- */}
         <Pressable
-          onPress={() => navigation.goBack()}
+          onPress={() => setIsModalVisible(true)}
           style={[
             styles.backButton,
             { top: insets.top + (isTablet ? scale(8) : scale(12)) }, // 🆕 respects notch
