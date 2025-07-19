@@ -27,6 +27,8 @@ interface Props {
   selectedId: string;
   onSelectProperty: (id: string) => void;
   onNotificationPress?: () => void;
+  showBack?: boolean;
+  onBackPress?: () => void;
 }
 
 const AppHeader: React.FC<Props> = ({
@@ -35,6 +37,8 @@ const AppHeader: React.FC<Props> = ({
   selectedId,
   onSelectProperty,
   onNotificationPress,
+  showBack = false,
+  onBackPress,
 }) => {
   const insets = useSafeAreaInsets();
   const [showMenu, setShowMenu] = useState(false);
@@ -66,7 +70,19 @@ const AppHeader: React.FC<Props> = ({
         <View style={styles.row}>
           {/* Avatar + dropdown trigger */}
           <View style={styles.leftRow}>
-            <Image source={{ uri: avatarUri }} style={styles.avatar} />
+            {/* <Image source={{ uri: avatarUri }} style={styles.avatar} /> */}
+            {showBack ? (
+              <Pressable
+                onPress={onBackPress}
+                android_ripple={{ color: "#ffffff44", borderless: true }}
+                style={styles.backWrapper}
+                accessibilityRole="button"
+              >
+                <Entypo name="chevron-left" size={26} color="#fff" />
+              </Pressable>
+            ) : (
+              <Image source={{ uri: avatarUri }} style={styles.avatar} />
+            )}
 
             <TouchableOpacity
               style={styles.dropdownButton}
@@ -191,6 +207,13 @@ const styles = StyleSheet.create({
   menuText: { fontSize: 16, color: "#333" },
   selectedText: { color: "#256D85", fontWeight: "700" },
   separator: { height: 1, backgroundColor: "#f1f1f1" },
+  backWrapper: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: "center",
+    alignItems: "center",
+  },
 });
 
 export default AppHeader;

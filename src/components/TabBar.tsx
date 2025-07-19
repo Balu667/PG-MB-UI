@@ -60,7 +60,7 @@ const TabBar: React.FC<BottomTabBarProps> = ({ state, descriptors, navigation }:
       index: "dashboard",
       Rooms: "meeting-room",
       Properties: "apartment",
-      People: "groups",
+      Tenants: "groups",
       Store: "store",
     };
     return <MaterialIcons name={icons[name] || "circle"} size={24} color={color} />;

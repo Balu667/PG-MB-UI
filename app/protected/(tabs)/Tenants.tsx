@@ -9,7 +9,7 @@ export default function RedirectRooms() {
     const firstId = pgProperties[0]._id; // later: use selectedId in redux
     router.replace({
       pathname: `/protected/property/${firstId}`,
-      params: { tab: "Rooms" }, // or "Tenants"
+      params: { tab: "Tenants" }, // or "Tenants"
     });
   }, []);
   return null;
