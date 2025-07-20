@@ -48,6 +48,7 @@ interface Props {
   value: RoomFilter;
   onChange: (f: RoomFilter) => void;
   onClose: () => void;
+  customContent?: Record<string, React.ReactNode>;
 }
 
 const RoomFilterSheet: React.FC<Props> = ({ visible, value, onChange, onClose }) => {
