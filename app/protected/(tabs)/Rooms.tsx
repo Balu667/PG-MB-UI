@@ -1,19 +1,16 @@
-import React from "react";
-import { StyleSheet, View, Text } from "react-native";
+import { useRouter } from "expo-router";
+import { useEffect } from "react";
+// import { pgProperties } from "@/src/constants/mockData"; // same dummy list
+import { pgProperties } from "@/src/constants/mockData";
 
-const Rooms = () => {
-  return (
-    <View style={styles.container}>
-      <Text>Room</Text>
-    </View>
-  );
-};
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    marginTop: 50,
-  },
-});
-
-export default Rooms;
+export default function RedirectRooms() {
+  const router = useRouter();
+  useEffect(() => {
+    const firstId = pgProperties[0]._id; // later: use selectedId in redux
+    router.replace({
+      pathname: `/protected/property/${firstId}`,
+      params: { tab: "Rooms" }, // or "Tenants"
+    });
+  }, []);
+  return null;
+}
