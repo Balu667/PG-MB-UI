@@ -1,86 +1,182 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import Toast from "react-native-toast-message";
+import { Alert } from "react-native";
 import { fetchData } from "@/helper";
-import Constants from "expo-constants";
 
-const API_URL = Constants.expoConfig?.extra?.API_URL;
-
-interface PropertyDetails {
-  id: string;
-  layoutName: string;
-  // Add other fields as needed
-}
-
-interface PropertyResponse {
-  data: PropertyDetails;
-  message?: string;
-}
-
-interface BookingPayload {
+interface ProfileData {
   userId: string;
-  propertyId: string;
-  // Add booking form fields
+  role: number;
 }
 
-interface BookingResponse {
+interface PropertyData {
+  _id: string;
+  filePath?: string;
+}
+
+interface FetchResponse {
   message: string;
-  bookingId?: string;
-  // Add other fields if returned
+  data?: any;
 }
 
-const useGetPropertyDetails = (id: string | undefined) => {
-  const query = useQuery<PropertyDetails, Error>({
-    queryKey: ["propertyLayoutDetails", id],
-    queryFn: async () => {
-      const res: PropertyResponse = await fetchData({
-        url: `${API_URL}propertyLayout/${id}`,
-      });
-      return res.data;
-    },
+const useGetPropertyList = (profileData: ProfileData) => {
+  const { userId: id, role } = profileData;
+  const url =
+    role === 1 ? `properties/owner/${id}` : `employees/properties/${id}`;
+
+  return useQuery({
+    queryKey: ["propertyList", id],
+    queryFn: () => fetchData({ url }),
     enabled: !!id,
     refetchOnMount: "always",
   });
-
-  if (query.error) {
-    Toast.show({
-      type: "error",
-      text1: "Fetch Error",
-      text2: query.error.message.split(":")[1] ?? "Unknown error",
-    });
-  }
-
-  return query;
 };
 
-const useInsertBooking = (
-  onSuccessFunctions: (data: BookingResponse) => void
+const useGetPropertyData = (id: string) => {
+  const url = `properties/${id}`;
+
+  return useQuery({
+    queryKey: ["property", id],
+    queryFn: () => fetchData({ url }),
+    enabled: !!id,
+    refetchOnMount: "always",
+  });
+};
+
+const useGetPropertyDetailsList = (profileData: any) => {
+  const id = profileData?.userId;
+  const url =
+    profileData?.role === 1
+      ? `propertiesDetails/${id}`
+      : `employees/propertiesDetails/${id}`;
+
+  return useQuery({
+    queryKey: ["propertyDetailsList", id],
+    queryFn: async () => {
+      const response = await fetchData({ url });
+      return response?.data;
+    },
+    enabled: !!id,
+  });
+};
+
+const useInsertProperty = (
+  onSuccessFunctions: (data: FetchResponse) => void,
+  id: string
 ) => {
   const queryClient = useQueryClient();
-
-  return useMutation<BookingResponse, Error, BookingPayload>({
-    mutationFn: (data: BookingPayload) =>
-      fetchData({
-        url: `${API_URL}properties`,
-        method: "POST",
-        body: data,
-      }),
+  return useMutation({
+    mutationFn: (data: FormData) =>
+      fetchData({ url: "properties", method: "POST", body: data }),
     onError: (error: Error) => {
-      Toast.show({
-        type: "error",
-        text1: "Booking Failed",
-        text2: error.message,
-      });
+      Alert.alert("Error", error.message);
     },
-    onSuccess: (data: BookingResponse) => {
-      Toast.show({
-        type: "success",
-        text1: "Booking Successful",
-        text2: data.message,
-      });
+    onSuccess: (data: FetchResponse) => {
+      Alert.alert("Success", data.message);
       onSuccessFunctions(data);
-      queryClient.invalidateQueries({ queryKey: ["propertyList"] });
+      queryClient.invalidateQueries({ queryKey: ["propertyList", id] });
+      queryClient.invalidateQueries({ queryKey: ["propertyDetailsList", id] });
     },
   });
 };
 
-export { useGetPropertyDetails, useInsertBooking };
+const useUpdateProperty = (
+  onSuccessFunctions: (data: FetchResponse) => void,
+  id: string
+) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      formData,
+      propertyId,
+    }: {
+      formData: FormData;
+      propertyId: string;
+    }) =>
+      fetchData({
+        url: `properties/${propertyId}`,
+        method: "PUT",
+        body: formData,
+      }),
+    onError: (error: Error) => {
+      Alert.alert("Error", error.message);
+    },
+    onSuccess: (data: FetchResponse) => {
+      Alert.alert("Success", data.message);
+      onSuccessFunctions(data);
+      queryClient.invalidateQueries({ queryKey: ["propertyDetailsList"] });
+      queryClient.invalidateQueries({ queryKey: ["propertyList", id] });
+    },
+  });
+};
+
+const useDeletePropertyImage = (
+  onSuccessFunctions: (data: FetchResponse) => void
+) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      payload,
+      propertyId,
+    }: {
+      payload: any;
+      propertyId: string;
+    }) =>
+      fetchData({
+        url: `properties/${propertyId}/images`,
+        method: "DELETE",
+        body: JSON.stringify(payload),
+        headers: { "Content-Type": "application/json" },
+      }),
+    onError: (error: Error) => {
+      Alert.alert("Error", error.message);
+    },
+    onSuccess: (data: FetchResponse) => {
+      Alert.alert("Success", data.message);
+      onSuccessFunctions(data);
+      queryClient.invalidateQueries({ queryKey: ["propertyDetailsList"] });
+    },
+  });
+};
+
+const useGetPropertyMertics = (onSuccessFunctions: (data: any) => void) => {
+  return useMutation({
+    mutationFn: async (data: any) => {
+      const response = await fetchData({
+        url: "dashboard/metrics",
+        method: "POST",
+        body: JSON.stringify(data),
+        headers: { "Content-Type": "application/json" },
+      });
+      return response.data;
+    },
+    onError: (error: Error) => {
+      Alert.alert("Error", error.message);
+    },
+    onSuccess: (data: any) => {
+      onSuccessFunctions(data);
+    },
+  });
+};
+
+const useGetStateCityList = (onSuccessFunctions: (data: any) => void) => {
+  return useMutation({
+    mutationFn: (stateCode: string) =>
+      fetchData({ url: `cities/${stateCode}`, method: "GET" }),
+    onError: (error: Error) => {
+      Alert.alert("Error", error.message);
+    },
+    onSuccess: (data: any) => {
+      onSuccessFunctions(data);
+    },
+  });
+};
+
+export {
+  useInsertProperty,
+  useGetPropertyList,
+  useUpdateProperty,
+  useDeletePropertyImage,
+  useGetPropertyDetailsList,
+  useGetPropertyMertics,
+  useGetStateCityList,
+  useGetPropertyData,
+};

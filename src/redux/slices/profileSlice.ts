@@ -1,15 +1,17 @@
-import { createSlice, PayloadAction } from '@reduxjs/toolkit';
+import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 
 interface ProfileState {
   profileData: Record<string, any> | null;
 }
 
 const initialState: ProfileState = {
-  profileData: null,
+  profileData: {
+    signedIn: false,
+  },
 };
 
 const profileSlice = createSlice({
-  name: 'ProfileDetails',
+  name: "ProfileDetails",
   initialState,
   reducers: {
     setProfileDetails: (state, action: PayloadAction<Record<string, any>>) => {

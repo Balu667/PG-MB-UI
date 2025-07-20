@@ -31,7 +31,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context"; // 🆕
 import PhoneInput from "@/src/components/PhoneInput";
 import DisableButton from "@/src/components/DisableButton";
 import { useGetLogin } from "@/src/hooks/login";
-import { RootStackParamList } from "@/src/types/navigation";
+import { RootStackParamList } from "@/types/navigation";
+import { router } from "expo-router";
 
 /* ============================================================================
    Design‑system tokens
@@ -52,7 +53,13 @@ const COLORS = {
 };
 
 const FONT = { regular: "400", semiBold: "600", bold: "700" };
-const SIZES = { base: 16, padding: 24, margin: 16, radius: 16, inputHeight: 56 };
+const SIZES = {
+  base: 16,
+  padding: 24,
+  margin: 16,
+  radius: 16,
+  inputHeight: 56,
+};
 
 /* ============================================================================
    Helpers
@@ -70,7 +77,8 @@ function clampFontSize(size: number) {
    ========================================================================== */
 const LoginScreen = () => {
   const [phoneNumber, setPhoneNumber] = useState("");
-  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const navigation =
+    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [reduceMotion, setReduceMotion] = useState(false);
   const insets = useSafeAreaInsets(); // 🆕 safe‑area
 
@@ -82,7 +90,11 @@ const LoginScreen = () => {
     AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion);
     if (!reduceMotion) {
       Animated.stagger(150, [
-        Animated.spring(logoAnim, { toValue: 1, useNativeDriver: true, bounciness: 10 }),
+        Animated.spring(logoAnim, {
+          toValue: 1,
+          useNativeDriver: true,
+          bounciness: 10,
+        }),
         Animated.timing(contentAnim, {
           toValue: 1,
           duration: 600,
@@ -118,8 +130,16 @@ const LoginScreen = () => {
     : isSmallDevice
     ? SIZES.padding / 2
     : SIZES.padding;
-  const logoTop = isLargeDevice ? scale(80) : isSmallDevice ? scale(30) : scale(60);
-  const contentMarginBottom = isLargeDevice ? scale(60) : isSmallDevice ? scale(12) : scale(30);
+  const logoTop = isLargeDevice
+    ? scale(80)
+    : isSmallDevice
+    ? scale(30)
+    : scale(60);
+  const contentMarginBottom = isLargeDevice
+    ? scale(60)
+    : isSmallDevice
+    ? scale(12)
+    : scale(30);
 
   /* ==========================================================================
      Render
@@ -239,17 +259,25 @@ const LoginScreen = () => {
               },
             ]}
           >
-            <Text style={[textStyles.welcomeText, { fontSize: clampFontSize(22) }]}>
+            <Text
+              style={[textStyles.welcomeText, { fontSize: clampFontSize(22) }]}
+            >
               Welcome 👋
             </Text>
-            <Text style={[textStyles.subtitle, { fontSize: clampFontSize(15) }]}>
+            <Text
+              style={[textStyles.subtitle, { fontSize: clampFontSize(15) }]}
+            >
               Let’s get started by entering your mobile number.
             </Text>
 
             <PhoneInput value={phoneNumber} onChangeText={setPhoneNumber} />
 
             {status === "pending" ? (
-              <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 16 }} />
+              <ActivityIndicator
+                size="large"
+                color={COLORS.primary}
+                style={{ marginTop: 16 }}
+              />
             ) : (
               <DisableButton
                 title="Generate OTP"
@@ -275,15 +303,18 @@ const LoginScreen = () => {
               {
                 paddingBottom:
                   insets.bottom + // safe‑area
-                  (Platform.OS === "android" ? Math.max(24, SIZES.base * 2) : SIZES.base * 1.2),
+                  (Platform.OS === "android"
+                    ? Math.max(24, SIZES.base * 2)
+                    : SIZES.base * 1.2),
                 minHeight: 50,
               },
             ]}
           >
             <Text style={textStyles.footerText}>
               By continuing, you accept our{" "}
-              <Text style={textStyles.footerLink}>Terms of Service</Text>. Learn how we process your
-              data in our <Text style={textStyles.footerLink}>Privacy Policy</Text> and{" "}
+              <Text style={textStyles.footerLink}>Terms of Service</Text>. Learn
+              how we process your data in our{" "}
+              <Text style={textStyles.footerLink}>Privacy Policy</Text> and{" "}
               <Text style={textStyles.footerLink}>Cookies Policy</Text>.
             </Text>
           </View>

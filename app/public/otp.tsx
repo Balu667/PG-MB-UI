@@ -30,7 +30,12 @@ import {
   AppState, // 🆕 keep timer accurate when app backgrounded
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useRoute, RouteProp, useNavigation, useFocusEffect } from "@react-navigation/native";
+import {
+  useRoute,
+  RouteProp,
+  useNavigation,
+  useFocusEffect,
+} from "@react-navigation/native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context"; // 🆕
 import Toast from "react-native-toast-message";
@@ -40,9 +45,17 @@ import { useDispatch } from "react-redux";
 
 import { lightTheme } from "@/src/theme";
 import DisableButton from "@/src/components/DisableButton";
-import { RootStackParamList } from "@/src/types/navigation";
+import { RootStackParamList } from "@/types/navigation";
 import { useResendOtp, useVerifyOtp } from "@/src/hooks/login";
 import { setProfileDetails } from "@/src/redux/slices/profileSlice";
+import { jwtDecode } from "jwt-decode";
+
+// Define the shape of your token payload
+type JwtPayload = {
+  _id: string;
+  role: string;
+  [key: string]: any;
+};
 
 /* ============================================================================
    Constants & helpers
@@ -55,7 +68,8 @@ const scale = (size: number) => {
   return Math.round((width / 375) * size);
 };
 
-const clamp = (min: number, value: number, max: number) => Math.max(min, Math.min(value, max));
+const clamp = (min: number, value: number, max: number) =>
+  Math.max(min, Math.min(value, max));
 
 const isSmall = width < 340;
 const isTablet = width > 600;
@@ -78,6 +92,7 @@ const OtpScreen = () => {
   const [otp, setOtp] = useState<string[]>(Array(OTP_LENGTH).fill(""));
   const [error, setError] = useState("");
   const [isModalVisible, setIsModalVisible] = useState(false);
+
   const [reduceMotion, setReduceMotion] = useState(false);
 
   const inputs = useRef<Array<TextInput | null>>([]);
@@ -99,7 +114,11 @@ const OtpScreen = () => {
     AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion);
     if (!reduceMotion) {
       Animated.stagger(120, [
-        Animated.spring(logoAnim, { toValue: 1, useNativeDriver: true, bounciness: 8 }),
+        Animated.spring(logoAnim, {
+          toValue: 1,
+          useNativeDriver: true,
+          bounciness: 8,
+        }),
         Animated.timing(contentAnim, {
           toValue: 1,
           useNativeDriver: true,
@@ -236,7 +255,8 @@ const OtpScreen = () => {
   };
 
   const handleBlur = () => {
-    if (otp.join("").length !== OTP_LENGTH) setError("Please enter all 4 digits of the OTP");
+    if (otp.join("").length !== OTP_LENGTH)
+      setError("Please enter all 4 digits of the OTP");
   };
 
   const handleSubmit = () => {
@@ -252,12 +272,23 @@ const OtpScreen = () => {
   /* --------------------------------------------------------------------------
    * Responsive values (unchanged)
    * ------------------------------------------------------------------------ */
-  const otpBoxSize = clamp(40, isTablet ? width / 12 : isSmall ? width / 8 : width / 9, 72);
+  const otpBoxSize = clamp(
+    40,
+    isTablet ? width / 12 : isSmall ? width / 8 : width / 9,
+    72
+  );
   const otpFontSize = clamp(19, otpBoxSize * 0.45, 28);
   const contentPadding = isTablet ? scale(36) : isSmall ? scale(16) : scale(24);
   const contentRadius = isTablet ? 30 : 18;
-  const logoHeight = isTablet ? height * 0.21 : isSmall ? height * 0.19 : height * 0.24;
-  const formattedPhone = `+91 ${phoneNumber?.substring(0, 5)} ${phoneNumber?.substring(5)}`;
+  const logoHeight = isTablet
+    ? height * 0.21
+    : isSmall
+    ? height * 0.19
+    : height * 0.24;
+  const formattedPhone = `+91 ${phoneNumber?.substring(
+    0,
+    5
+  )} ${phoneNumber?.substring(5)}`;
 
   /* ==========================================================================
      Render
@@ -334,7 +365,11 @@ const OtpScreen = () => {
             style={[
               styles.logoContainer,
               {
-                marginTop: isTablet ? scale(30) : isSmall ? scale(5) : scale(16),
+                marginTop: isTablet
+                  ? scale(30)
+                  : isSmall
+                  ? scale(5)
+                  : scale(16),
                 opacity: logoAnim,
                 transform: [
                   {
@@ -379,10 +414,20 @@ const OtpScreen = () => {
               },
             ]}
           >
-            <Text style={[styles.title, { fontSize: clamp(18, scale(isTablet ? 27 : 24), 32) }]}>
+            <Text
+              style={[
+                styles.title,
+                { fontSize: clamp(18, scale(isTablet ? 27 : 24), 32) },
+              ]}
+            >
               OTP Verification
             </Text>
-            <Text style={[styles.subtitle, { fontSize: clamp(13, scale(isTablet ? 17 : 15), 22) }]}>
+            <Text
+              style={[
+                styles.subtitle,
+                { fontSize: clamp(13, scale(isTablet ? 17 : 15), 22) },
+              ]}
+            >
               We've sent a verification code to
             </Text>
 
@@ -405,14 +450,19 @@ const OtpScreen = () => {
 
             {/* OTP inputs */}
             <View
-              style={[styles.otpContainer, { marginBottom: scale(20), gap: isTablet ? 22 : 13 }]}
+              style={[
+                styles.otpContainer,
+                { marginBottom: scale(20), gap: isTablet ? 22 : 13 },
+              ]}
             >
               {Array(OTP_LENGTH)
                 .fill(null)
                 .map((_, idx: any) => (
                   <TextInput
                     key={idx}
-                    ref={(ref) => (inputs.current[idx] = ref)}
+                    ref={(ref) => {
+                      inputs.current[idx] = ref;
+                    }}
                     style={[
                       styles.otpInput,
                       {
@@ -423,7 +473,9 @@ const OtpScreen = () => {
                         borderColor: error ? "red" : lightTheme.colors.primary,
                       },
                     ]}
-                    keyboardType={Platform.OS === "ios" ? "number-pad" : "numeric"}
+                    keyboardType={
+                      Platform.OS === "ios" ? "number-pad" : "numeric"
+                    }
                     maxLength={1}
                     value={otp[idx]}
                     onChangeText={(t) => handleChangeText(t, idx)}
@@ -431,7 +483,11 @@ const OtpScreen = () => {
                     onBlur={handleBlur}
                     selectTextOnFocus
                     importantForAutofill="yes"
-                    textContentType={idx === 0 && Platform.OS === "ios" ? "oneTimeCode" : "none"}
+                    textContentType={
+                      idx === 0 && Platform.OS === "ios"
+                        ? "oneTimeCode"
+                        : "none"
+                    }
                     accessibilityLabel={`OTP digit ${idx + 1}`}
                   />
                 ))}
@@ -489,16 +545,14 @@ const OtpScreen = () => {
                   />
                   <Text style={styles.modalTitle}>Edit mobile number?</Text>
                   <Text style={styles.modalSubtitle}>
-                    You’ll return to the previous screen to enter a different number.
+                    You’ll return to the previous screen to enter a different
+                    number.
                   </Text>
                   <View style={styles.modalButtons}>
                     <TouchableOpacity
                       onPress={() => {
                         setIsModalVisible(false);
-                        navigation.reset({
-                          index: 0,
-                          routes: [{ name: "index" }], // 🔄 point to your Login screen
-                        });
+                        router.back();
                       }}
                       style={styles.modalButtonYes}
                     >
@@ -538,7 +592,11 @@ const styles = StyleSheet.create({
     zIndex: 0,
   },
 
-  logoContainer: { alignItems: "center", justifyContent: "center", minHeight: 30 },
+  logoContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 30,
+  },
 
   container: {
     flex: 1,
@@ -565,7 +623,12 @@ const styles = StyleSheet.create({
     letterSpacing: 0.1,
     textAlign: "center",
   },
-  subtitle: { textAlign: "center", marginTop: scale(10), color: "#444", fontWeight: "500" },
+  subtitle: {
+    textAlign: "center",
+    marginTop: scale(10),
+    color: "#444",
+    fontWeight: "500",
+  },
 
   phoneRow: {
     flexDirection: "row",
@@ -576,7 +639,11 @@ const styles = StyleSheet.create({
   },
   phoneText: { fontWeight: "600", color: "#000", fontSize: scale(17) },
 
-  otpContainer: { flexDirection: "row", justifyContent: "space-evenly", width: "100%" },
+  otpContainer: {
+    flexDirection: "row",
+    justifyContent: "space-evenly",
+    width: "100%",
+  },
 
   otpInput: {
     backgroundColor: "#fff",
