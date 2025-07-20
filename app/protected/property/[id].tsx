@@ -18,6 +18,7 @@ import RoomCard from "@/src/components/property/RoomCard";
 import { mockRooms } from "@/src/constants/mockRooms";
 import { useWindowDimensions } from "react-native";
 import RoomsTab from "@/src/components/property/RoomsTab";
+import TenantsTab from "@/src/components/property/TenantsTab";
 
 const TABS = ["Property Details", "Rooms", "Tenants", "Expenses", "Facilities", "Staff"] as const;
 type TabKey = (typeof TABS)[number];
@@ -54,8 +55,9 @@ export default function PropertyDetails() {
       {/* internal tabs */}
       <SegmentBar tabs={TABS} value={activeTab} onChange={(t) => setActiveTab(t as TabKey)} />
       {activeTab === "Rooms" ? (
-        /* 🟢 NO outer ScrollView here – just the FlatList component */
-        <RoomsTab />
+        <RoomsTab /> // already OK
+      ) : activeTab === "Tenants" ? (
+        <TenantsTab /> // NEW – naked, no ScrollView wrapper
       ) : (
         /* other tabs keep the ScrollView */
         <ScrollView
@@ -75,7 +77,8 @@ export default function PropertyDetails() {
               }}
             />
           )}
-          {activeTab === "Tenants" && <Placeholder l="Tenants list goes here…" />}
+          {/* {activeTab === "Tenants" && <Placeholder l="Tenants list goes here…" />} */}
+          {/* {activeTab === "Tenants" && <TenantsTab />} */}
           {activeTab === "Expenses" && <Placeholder l="Expenses list goes here…" />}
           {activeTab === "Facilities" && <Placeholder l="Facilities list goes here…" />}
           {activeTab === "Staff" && <Placeholder l="Staff list goes here…" />}

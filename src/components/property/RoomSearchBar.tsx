@@ -17,9 +17,11 @@ const clamp = (min: number, v: number, max: number) => Math.max(min, Math.min(v,
 export default function RoomSearchBar({
   onSearch,
   onFilter,
+  active = false,
 }: {
   onSearch: (t: string) => void;
   onFilter: () => void;
+  active?: boolean;
 }) {
   const { width } = useWindowDimensions();
   const [text, setText] = useState("");
@@ -31,7 +33,7 @@ export default function RoomSearchBar({
   const inputHeight = clamp(42, width * 0.085, 54);
   //   font‑size that respects system “Display Size”
   const font = clamp(13, width * 0.035, 16) / PixelRatio.getFontScale();
-
+  const hasActive = active;
   return (
     <View style={[styles.wrap, { gap: btnSize * 0.26 }]}>
       {/* ---- search field ---- */}
@@ -79,7 +81,22 @@ export default function RoomSearchBar({
         ]}
         onPress={onFilter}
       >
-        <Feather name="sliders" size={font + 6} color={Colors.textAccent} />
+        <View>
+          <Feather name="sliders" size={font + 6} color={Colors.textAccent} />
+          {active && (
+            <View
+              style={{
+                position: "absolute",
+                top: -10,
+                right: -10,
+                width: 10,
+                height: 10,
+                borderRadius: 10,
+                backgroundColor: "#256D85",
+              }}
+            />
+          )}
+        </View>
       </TouchableOpacity>
     </View>
   );
