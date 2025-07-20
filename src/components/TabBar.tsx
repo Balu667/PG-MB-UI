@@ -18,11 +18,7 @@ import Feather from "@expo/vector-icons/Feather";
 const ICON_COLOR = "#256D85";
 const screenWidth = Dimensions.get("window").width;
 
-const TabBar: React.FC<BottomTabBarProps> = ({
-  state,
-  descriptors,
-  navigation,
-}: any) => {
+const TabBar: React.FC<BottomTabBarProps> = ({ state, descriptors, navigation }: any) => {
   const insets = useSafeAreaInsets(); // handles overlap with nav bar
   const maxVisibleTabs = 4;
   const visibleTabs = state.routes.slice(0, maxVisibleTabs);
@@ -61,15 +57,13 @@ const TabBar: React.FC<BottomTabBarProps> = ({
   const getIcon = (name: any, focused: any) => {
     const color = focused ? ICON_COLOR : "#7A7A7A";
     const icons: any = {
-      index: "apartment",
+      index: "dashboard",
       Rooms: "meeting-room",
-      Dashboard: "dashboard",
+      Properties: "apartment",
       Tenants: "groups",
       Store: "store",
     };
-    return (
-      <MaterialIcons name={icons[name] || "circle"} size={24} color={color} />
-    );
+    return <MaterialIcons name={icons[name] || "circle"} size={24} color={color} />;
   };
 
   return (
@@ -139,20 +133,13 @@ const TabBar: React.FC<BottomTabBarProps> = ({
               size={24}
               color={isMoreFocused ? ICON_COLOR : "#7A7A7A"}
             />
-            <Text style={[styles.label, isMoreFocused && styles.labelFocused]}>
-              More
-            </Text>
+            <Text style={[styles.label, isMoreFocused && styles.labelFocused]}>More</Text>
           </TouchableOpacity>
         )}
       </View>
 
       {/* Modal for "More" */}
-      <Modal
-        visible={showMore}
-        animationType="fade"
-        transparent
-        onRequestClose={closeMore}
-      >
+      <Modal visible={showMore} animationType="fade" transparent onRequestClose={closeMore}>
         <Pressable style={styles.modalOverlay} onPress={closeMore}>
           <Animated.View
             style={[
@@ -168,10 +155,7 @@ const TabBar: React.FC<BottomTabBarProps> = ({
                 return (
                   <TouchableOpacity
                     key={route.key}
-                    style={[
-                      styles.moreItem,
-                      isCurrent && styles.moreItemSelected,
-                    ]}
+                    style={[styles.moreItem, isCurrent && styles.moreItemSelected]}
                     onPress={() => {
                       navigation.navigate(route.name);
                       closeMore();
@@ -179,9 +163,7 @@ const TabBar: React.FC<BottomTabBarProps> = ({
                   >
                     <View style={styles.itemContainer}>
                       {getIcon(route.name, false)}
-                      <Text style={styles.moreLabel}>
-                        {descriptors[route.key].options.title}
-                      </Text>
+                      <Text style={styles.moreLabel}>{descriptors[route.key].options.title}</Text>
                     </View>
                   </TouchableOpacity>
                 );
