@@ -1,10 +1,6 @@
 import { useMutation } from "@tanstack/react-query";
 import Toast from "react-native-toast-message";
 import { fetchData } from "@/helper";
-import Constants from "expo-constants";
-
-const API_URL =
-  Constants.expoConfig?.extra?.API_URL || "https://pgapi.unitekra.in/api/";
 
 // Interfaces (simplified — expand as needed)
 interface LoginPayload {
@@ -32,7 +28,7 @@ const useGetLogin = (
   return useMutation<LoginResponse, Error, LoginPayload>({
     mutationFn: (data) => {
       return fetchData<LoginResponse>({
-        url: `${API_URL}pgowner/login`,
+        url: `pgowner/login`,
         method: "POST",
         body: JSON.stringify(data),
         headers: {
@@ -64,7 +60,7 @@ const useVerifyOtp = (
   return useMutation<OtpResponse, Error, OtpPayload>({
     mutationFn: (data) =>
       fetchData<OtpResponse>({
-        url: `${API_URL}pgowner/verifyOtp`,
+        url: `pgowner/verifyOtp`,
         method: "POST",
         body: JSON.stringify(data),
         headers: {
@@ -72,7 +68,6 @@ const useVerifyOtp = (
         },
       }),
     onError: (error) => {
-      console.log(error.message);
       Toast.show({
         type: "error",
         text1: "OTP Verification Failed",
@@ -96,7 +91,7 @@ const useResendOtp = (
   return useMutation<OtpResponse, Error, { phoneNumber: string }>({
     mutationFn: (data) =>
       fetchData<OtpResponse>({
-        url: `${API_URL}pgowner/resendOtp`,
+        url: `pgowner/resendOtp`,
         method: "POST",
         body: JSON.stringify(data),
         headers: {
