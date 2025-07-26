@@ -4,7 +4,7 @@
 import { useState, useMemo } from "react";
 import { FlatList, useWindowDimensions, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-
+import SearchBar from "@/src/components/SearchBar";
 import StatsGrid from "./StatsGrid";
 import RoomSearchBar from "./RoomSearchBar";
 import RoomCard from "./RoomCard";
@@ -60,11 +60,11 @@ export default function RoomsTab() {
         ListHeaderComponent={
           <>
             <StatsGrid />
-            <RoomSearchBar
+            <SearchBar
+              placeholder="Search by room type"
               onSearch={setQuery}
               onFilter={() => setSheetOpen(true)}
-              /* blue dot only when some filter is active */
-              active={Object.values(filter).some((a) => a.length)}
+              filterActive={Object.values(filter).some((a) => a.length)}
             />
           </>
         }

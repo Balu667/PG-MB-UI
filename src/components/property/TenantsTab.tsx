@@ -6,7 +6,7 @@ import TenantCard from "./TenantCard";
 import { emptyTenantFilter, TenantFilter } from "@/src/constants/tenantFilter";
 import { mockTenants } from "@/src/constants/mockTenants";
 import TenantFilterSheet from "./TenantFilterSheet";
-
+import SearchBar from "@/src/components/SearchBar";
 export default function TenantsTab() {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -53,10 +53,11 @@ export default function TenantsTab() {
           rowGap: 14,
         }}
         ListHeaderComponent={
-          <TenantSearchBar
+          <SearchBar
+            placeholder="Search tenant name"
             onSearch={setQuery}
             onFilter={() => setSheetOpen(true)}
-            active={
+            filterActive={
               filter.sharing.length > 0 ||
               filter.status.length > 0 ||
               filter.downloadedApp.length > 0 ||
