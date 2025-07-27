@@ -5,15 +5,83 @@ import { useState, useMemo } from "react";
 import { FlatList, useWindowDimensions, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import SearchBar from "@/src/components/SearchBar";
-import StatsGrid from "./StatsGrid";
+import StatsGrid from "@/src/components/StatsGrid";
 import RoomSearchBar from "./RoomSearchBar";
 import RoomCard from "./RoomCard";
-import RoomFilterSheet, {
-  RoomFilter,
-  emptyFilter,
-} from "@/src/components/property/RoomFilterSheet";
-
+import FilterSheet, { Section } from "@/src/components/FilterSheet";
+import { RoomFilter, emptyFilter } from "@/src/constants/roomFilter";
 import { mockRooms } from "@/src/constants/mockRooms"; // ← your 15 dummy rooms
+
+const roomMetrics: Metric[] = [
+  {
+    key: "rooms",
+    label: "Total Rooms",
+    value: 37,
+    icon: "office-building",
+    iconBg: "#DBEAFE",
+  },
+  {
+    key: "beds",
+    label: "Total Beds",
+    value: 128,
+    icon: "bed",
+    iconBg: "#DBEAFE",
+  },
+  {
+    key: "vacant",
+    label: "Vacant Beds",
+    value: 24,
+    icon: "bed",
+    iconBg: "#BBF7D0",
+    iconColor: "#059669",
+  },
+  {
+    key: "notice",
+    label: "Under Notice",
+    value: 5,
+    icon: "bed",
+    iconBg: "#DDD6FE",
+    iconColor: "#7C3AED",
+  },
+];
+
+<StatsGrid metrics={roomMetrics} />;
+
+const roomSections: Section[] = [
+  {
+    key: "status",
+    label: "Room Status",
+    mode: "checkbox",
+    options: ["Available", "Partial", "Filled"].map((s) => ({ label: s, value: s })),
+  },
+  {
+    key: "sharing",
+    label: "Sharing",
+    mode: "checkbox",
+    options: Array.from({ length: 10 }, (_, i) => ({
+      label: `${i + 1} Sharing`,
+      value: i + 1,
+    })),
+  },
+  {
+    key: "floor",
+    label: "Floor",
+    mode: "checkbox",
+    options: ["GF", ...Array.from({ length: 10 }, (_, i) => `${i + 1}F`)].map((f) => ({
+      label: f === "GF" ? "Ground Floor" : `${f.replace("F", "")} Floor`,
+      value: f,
+    })),
+  },
+  {
+    key: "facilities",
+    label: "Facilities",
+    mode: "checkbox",
+    options: ["AC", "Geyser", "WM", "WiFi", "TV", "Furnished"].map((f) => ({
+      label: f,
+      value: f,
+    })),
+  },
+];
 
 /* --------------------------------------------------------------- */
 export default function RoomsTab() {
@@ -59,7 +127,7 @@ export default function RoomsTab() {
         columnWrapperStyle={cols > 1 ? styles.columnGap : undefined}
         ListHeaderComponent={
           <>
-            <StatsGrid />
+            <StatsGrid metrics={roomMetrics} minColumns={3} />
             <SearchBar
               placeholder="Search by room type"
               onSearch={setQuery}
@@ -78,11 +146,13 @@ export default function RoomsTab() {
       />
 
       {/* bottom‑sheet */}
-      <RoomFilterSheet
+      <FilterSheet
         visible={sheetOpen}
         value={filter}
         onChange={setFilter}
         onClose={() => setSheetOpen(false)}
+        sections={roomSections}
+        resetValue={emptyFilter}
       />
     </>
   );

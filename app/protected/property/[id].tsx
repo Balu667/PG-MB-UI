@@ -11,7 +11,6 @@ import AppHeader from "@/src/components/AppHeader";
 import TopInfo from "@/src/components/property/TopInfo";
 import SegmentBar from "@/src/components/property/SegmentBar";
 import InfoCard from "@/src/components/property/InfoCard";
-import StatsGrid from "@/src/components/property/StatsGrid";
 import { pgProperties } from "@/src/constants/mockData";
 import RoomSearchBar from "@/src/components/property/RoomSearchBar";
 import RoomCard from "@/src/components/property/RoomCard";
@@ -19,8 +18,18 @@ import { mockRooms } from "@/src/constants/mockRooms";
 import { useWindowDimensions } from "react-native";
 import RoomsTab from "@/src/components/property/RoomsTab";
 import TenantsTab from "@/src/components/property/TenantsTab";
+import ExpensesTab from "@/src/components/property/ExpensesTab";
+import PGLayout from "@/src/components/property/PGLayout";
 
-const TABS = ["Property Details", "Rooms", "Tenants", "Expenses", "Facilities", "Staff"] as const;
+const TABS = [
+  "Property Details",
+  "PG Layout",
+  "Rooms",
+  "Tenants",
+  "Expenses",
+  "Facilities",
+  "Staff",
+] as const;
 type TabKey = (typeof TABS)[number];
 
 export default function PropertyDetails() {
@@ -54,10 +63,15 @@ export default function PropertyDetails() {
 
       {/* internal tabs */}
       <SegmentBar tabs={TABS} value={activeTab} onChange={(t) => setActiveTab(t as TabKey)} />
-      {activeTab === "Rooms" ? (
-        <RoomsTab /> // already OK
+
+      {activeTab === "PG Layout" ? (
+        <PGLayout />
+      ) : activeTab === "Rooms" ? (
+        <RoomsTab />
       ) : activeTab === "Tenants" ? (
-        <TenantsTab /> // NEW – naked, no ScrollView wrapper
+        <TenantsTab />
+      ) : activeTab === "Expenses" ? (
+        <ExpensesTab />
       ) : (
         /* other tabs keep the ScrollView */
         <ScrollView

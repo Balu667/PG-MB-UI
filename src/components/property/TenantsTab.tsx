@@ -3,10 +3,43 @@ import { FlatList, useWindowDimensions, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import TenantSearchBar from "./RoomSearchBar";
 import TenantCard from "./TenantCard";
-import { emptyTenantFilter, TenantFilter } from "@/src/constants/tenantFilter";
 import { mockTenants } from "@/src/constants/mockTenants";
-import TenantFilterSheet from "./TenantFilterSheet";
+import FilterSheet, { Section } from "@/src/components/FilterSheet";
+import { TenantFilter, emptyTenantFilter } from "@/src/constants/tenantFilter";
 import SearchBar from "@/src/components/SearchBar";
+
+const tenantSections: Section[] = [
+  {
+    key: "sharing",
+    label: "Sharing",
+    mode: "checkbox",
+    options: Array.from({ length: 10 }, (_, i) => ({
+      label: `${i + 1} Sharing`,
+      value: i + 1,
+    })),
+  },
+  {
+    key: "status",
+    label: "Status",
+    mode: "checkbox",
+    options: ["Active", "Dues", "Under Notice"].map((s) => ({ label: s, value: s })),
+  },
+  {
+    key: "joinDate",
+    label: "Joining Date",
+    mode: "date",
+  },
+  {
+    key: "downloadStatus",
+    label: "Download Status",
+    mode: "checkbox",
+    options: [
+      { label: "App Downloaded", value: "App Downloaded" },
+      { label: "App Not Downloaded", value: "App Not Downloaded" },
+    ],
+  },
+];
+
 export default function TenantsTab() {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -69,11 +102,13 @@ export default function TenantsTab() {
         showsVerticalScrollIndicator={false}
       />
 
-      <TenantFilterSheet
+      <FilterSheet
         visible={sheetOpen}
         value={filter}
         onChange={setFilter}
         onClose={() => setSheetOpen(false)}
+        sections={tenantSections}
+        resetValue={emptyTenantFilter}
       />
     </>
   );
