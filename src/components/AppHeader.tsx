@@ -62,7 +62,7 @@ const AppHeader: React.FC<Props> = ({
             //   insets.top +
             //   10 + // push content down
             //   Math.max(0, (insets.top - 44) / 2), // ⬅️ extra 6 px for Dynamic Island / tall punch‑holes
-            paddingTop: +insets.top + 20 + Math.max(0, (insets.top - 44) / 2),
+            paddingTop: +insets.top + 20,
           },
         ]}
       >
