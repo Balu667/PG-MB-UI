@@ -15,6 +15,7 @@ interface LoginResponse {
 interface OtpPayload {
   _id: string;
   otp: string;
+  role: number;
 }
 
 interface OtpResponse {

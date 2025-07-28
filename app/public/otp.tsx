@@ -266,7 +266,7 @@ const OtpScreen = () => {
       return;
     }
     Haptics.selectionAsync();
-    mutate({ _id: userId, otp: fullOtp });
+    mutate({ _id: userId, otp: fullOtp, role: 1 });
   };
 
   /* --------------------------------------------------------------------------

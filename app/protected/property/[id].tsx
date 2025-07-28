@@ -37,11 +37,17 @@ export default function PropertyDetails() {
 
   const cols = width >= 1000 ? 3 : width >= 740 ? 2 : 1;
   /* ------------------------------------------------ props */
-  const { id, tab = TABS[0] } = useLocalSearchParams<{ id: string; tab?: TabKey }>();
+  const { id, tab = TABS[0] } = useLocalSearchParams<{
+    id: string;
+    tab?: TabKey;
+  }>();
   const router = useRouter();
 
   /* ------------------------------------------------ data */
-  const property = useMemo(() => pgProperties.find((p) => p._id === id) ?? pgProperties[0], [id]);
+  const property = useMemo(
+    () => pgProperties.find((p) => p._id === id) ?? pgProperties[0],
+    [id]
+  );
 
   /* ------------------------------------------------ local state */
   const [activeTab, setActiveTab] = useState<TabKey>(tab as TabKey);
@@ -51,7 +57,7 @@ export default function PropertyDetails() {
     <SafeAreaView style={{ flex: 1 }} edges={["left", "right"]}>
       <AppHeader
         showBack
-        onBackPress={() => router.replace("/protected/(tabs)/index")}
+        onBackPress={() => router.replace("/protected/(tabs)")}
         avatarUri=""
         propertyOptions={[]}
         selectedId=""
@@ -59,10 +65,18 @@ export default function PropertyDetails() {
       />
 
       {/* hero / address */}
-      <TopInfo name={property.propertyName} area={property.area} city={property.city} />
+      <TopInfo
+        name={property.propertyName}
+        area={property.area}
+        city={property.city}
+      />
 
       {/* internal tabs */}
-      <SegmentBar tabs={TABS} value={activeTab} onChange={(t) => setActiveTab(t as TabKey)} />
+      <SegmentBar
+        tabs={TABS}
+        value={activeTab}
+        onChange={(t) => setActiveTab(t as TabKey)}
+      />
 
       {activeTab === "PG Layout" ? (
         <PGLayout />
@@ -93,8 +107,12 @@ export default function PropertyDetails() {
           )}
           {/* {activeTab === "Tenants" && <Placeholder l="Tenants list goes here…" />} */}
           {/* {activeTab === "Tenants" && <TenantsTab />} */}
-          {activeTab === "Expenses" && <Placeholder l="Expenses list goes here…" />}
-          {activeTab === "Facilities" && <Placeholder l="Facilities list goes here…" />}
+          {activeTab === "Expenses" && (
+            <Placeholder l="Expenses list goes here…" />
+          )}
+          {activeTab === "Facilities" && (
+            <Placeholder l="Facilities list goes here…" />
+          )}
           {activeTab === "Staff" && <Placeholder l="Staff list goes here…" />}
         </ScrollView>
       )}
@@ -103,7 +121,18 @@ export default function PropertyDetails() {
 }
 
 const Placeholder = ({ l }: { l: string }) => (
-  <Text style={{ textAlign: "center", marginTop: 60, color: "#9CA3AF", fontSize: 16 }}>{l}</Text>
+  <Text
+    style={{
+      textAlign: "center",
+      marginTop: 60,
+      color: "#9CA3AF",
+      fontSize: 16,
+    }}
+  >
+    {l}
+  </Text>
 );
 
-const styles: any = StyleSheet.create({ body: { padding: 16, gap: 14, paddingBottom: 50 } });
+const styles: any = StyleSheet.create({
+  body: { padding: 16, gap: 14, paddingBottom: 50 },
+});
