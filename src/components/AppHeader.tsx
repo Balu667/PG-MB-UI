@@ -57,12 +57,12 @@ const AppHeader: React.FC<Props> = ({
         style={[
           styles.wrapper,
           {
-            marginTop: -insets.top, // keep BG behind status‑bar
+            // marginTop: -insets.top, // keep BG behind status‑bar
             // paddingTop:
             //   insets.top +
             //   10 + // push content down
             //   Math.max(0, (insets.top - 44) / 2), // ⬅️ extra 6 px for Dynamic Island / tall punch‑holes
-            paddingTop: +insets.top + 50 + Math.max(0, (insets.top - 44) / 2),
+            paddingTop: +insets.top + 20 + Math.max(0, (insets.top - 44) / 2),
           },
         ]}
       >

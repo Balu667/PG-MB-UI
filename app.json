@@ -9,13 +9,15 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.yourcompany.pgms"
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
-      }
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#FFFFFF"
+      },
+      "package": "com.yourcompany.pgms"
     },
     "web": {
       "bundler": "metro",
@@ -36,6 +38,19 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "apiUrl": "https://mypgmsqa.wonderfulcliff-4b9b3f4d.southindia.azurecontainerapps.io/api/",
+      "fileUrl": "https://pgdevcontainer.blob.core.windows.net/pg-dev/",
+      "eas": {
+        "projectId": "cc062d73-005b-4bee-8da1-f12f51827572"
+      }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/cc062d73-005b-4bee-8da1-f12f51827572"
     }
   }
 }
