@@ -1,8 +1,3 @@
-/* --------------------------------------------------------------------------
- * Property‑Details screen
- * route: /protected/property/[id]?tab=<rooms|tenants|…>
- * ------------------------------------------------------------------------ */
-
 import React, { useMemo, useState } from "react";
 import { ScrollView, StyleSheet, Text, FlatList } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -12,9 +7,6 @@ import TopInfo from "@/src/components/property/TopInfo";
 import SegmentBar from "@/src/components/property/SegmentBar";
 import InfoCard from "@/src/components/property/InfoCard";
 import { pgProperties } from "@/src/constants/mockData";
-import RoomSearchBar from "@/src/components/property/RoomSearchBar";
-import RoomCard from "@/src/components/property/RoomCard";
-import { mockRooms } from "@/src/constants/mockRooms";
 import { useWindowDimensions } from "react-native";
 import RoomsTab from "@/src/components/property/RoomsTab";
 import TenantsTab from "@/src/components/property/TenantsTab";
@@ -34,8 +26,6 @@ type TabKey = (typeof TABS)[number];
 
 export default function PropertyDetails() {
   const { width } = useWindowDimensions();
-
-  const cols = width >= 1000 ? 3 : width >= 740 ? 2 : 1;
   /* ------------------------------------------------ props */
   const { id, tab = TABS[0] } = useLocalSearchParams<{
     id: string;

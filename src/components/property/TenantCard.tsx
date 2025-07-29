@@ -1,9 +1,9 @@
 import React from "react";
-import { View, Text, StyleSheet, Image } from "react-native";
+import { View, Text, StyleSheet, Image, Pressable } from "react-native";
 import Colors from "@/src/constants/Colors";
 
-const TenantCard = ({ tenant }) => (
-  <View style={styles.card}>
+const TenantCard = ({ tenant, onPress }: { tenant: Tenant; onPress?: () => void }) => (
+  <Pressable onPress={onPress} android_ripple={{ color: "#E2E8F0" }} style={styles.card}>
     <View style={styles.topRow}>
       <Image source={{ uri: tenant.imageUri }} style={styles.avatar} />
       <View style={styles.info}>
@@ -26,7 +26,7 @@ const TenantCard = ({ tenant }) => (
         <Text style={styles.statusText}>{tenant.status}</Text>
       </View>
     </View>
-  </View>
+  </Pressable>
 );
 
 const styles = StyleSheet.create({

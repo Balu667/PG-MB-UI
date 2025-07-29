@@ -1,12 +1,14 @@
 import React, { useState, useMemo } from "react";
-import { FlatList, useWindowDimensions, StyleSheet } from "react-native";
+import { FlatList, useWindowDimensions, StyleSheet, Pressable } from "react-native";
+import MaterialIcons from "@expo/vector-icons/MaterialIcons";
+import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import TenantSearchBar from "./RoomSearchBar";
 import TenantCard from "./TenantCard";
 import { mockTenants } from "@/src/constants/mockTenants";
 import FilterSheet, { Section } from "@/src/components/FilterSheet";
 import { TenantFilter, emptyTenantFilter } from "@/src/constants/tenantFilter";
 import SearchBar from "@/src/components/SearchBar";
+import * as Haptics from "expo-haptics";
 
 const tenantSections: Section[] = [
   {
@@ -43,6 +45,7 @@ const tenantSections: Section[] = [
 export default function TenantsTab() {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
+  const router = useRouter();
 
   const [query, setQuery] = useState("");
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -76,7 +79,15 @@ export default function TenantsTab() {
       <FlatList
         data={tenants}
         keyExtractor={(t) => t.id}
-        renderItem={({ item }) => <TenantCard tenant={item} />}
+        renderItem={({ item }) => (
+          <TenantCard
+            tenant={item}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              router.push(`/protected/tenant/${item.id}`);
+            }}
+          />
+        )}
         numColumns={cols}
         columnWrapperStyle={cols > 1 ? styles.columnGap : undefined}
         contentContainerStyle={{
@@ -110,10 +121,36 @@ export default function TenantsTab() {
         sections={tenantSections}
         resetValue={emptyTenantFilter}
       />
+      <Pressable
+        onPress={() => router.push("/protected/tenant/add")}
+        style={({ pressed }) => [
+          styles.fab,
+          { bottom: insets.bottom + 24 },
+          pressed && { transform: [{ scale: 0.96 }] },
+        ]}
+        android_ripple={{ color: "#ffffff55", borderless: true }}
+      >
+        <MaterialIcons name="add" size={28} color="#fff" />
+      </Pressable>
     </>
   );
 }
 
 const styles = StyleSheet.create({
   columnGap: { gap: 14 },
+  fab: {
+    position: "absolute",
+    right: 24,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: "#256D85",
+    justifyContent: "center",
+    alignItems: "center",
+    elevation: 6,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+  },
 });

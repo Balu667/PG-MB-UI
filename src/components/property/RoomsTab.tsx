@@ -6,7 +6,6 @@ import { FlatList, useWindowDimensions, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import SearchBar from "@/src/components/SearchBar";
 import StatsGrid from "@/src/components/StatsGrid";
-import RoomSearchBar from "./RoomSearchBar";
 import RoomCard from "./RoomCard";
 import FilterSheet, { Section } from "@/src/components/FilterSheet";
 import { RoomFilter, emptyFilter } from "@/src/constants/roomFilter";
@@ -44,8 +43,6 @@ const roomMetrics: Metric[] = [
     iconColor: "#7C3AED",
   },
 ];
-
-<StatsGrid metrics={roomMetrics} />;
 
 const roomSections: Section[] = [
   {
@@ -127,7 +124,7 @@ export default function RoomsTab() {
         columnWrapperStyle={cols > 1 ? styles.columnGap : undefined}
         ListHeaderComponent={
           <>
-            <StatsGrid metrics={roomMetrics} minColumns={3} />
+            <StatsGrid metrics={roomMetrics} />
             <SearchBar
               placeholder="Search by room type"
               onSearch={setQuery}

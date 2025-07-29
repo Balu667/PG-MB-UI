@@ -14,107 +14,94 @@ import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import Colors from "@/src/constants/Colors";
 
 /* ------------------------------------------------------------------ */
-/** Every metric card you want to show */
 export interface Metric {
-  /** Unique key for FlatList */
   key: string;
   label: string;
-  /** string|number because sometimes you'll pass “₹12 k” etc. */
   value: string | number;
-  /** Any MaterialCommunityIcons icon name (or pass null for no icon) */
   icon?: keyof typeof MaterialCommunityIcons.glyphMap;
-  /** Pastel background behind the icon bubble */
   iconBg?: string;
-  /** Override icon colour (defaults to theme primary) */
   iconColor?: string;
 }
 
-/** Optional tweaks                              */
 export interface StatsGridProps {
   metrics: Metric[];
-  /**   2 (default) | 3 | 4 */
-  minColumns?: 2 | 3 | 4;
-  /** Card aspect ratio when you have 1‑column layouts */
-  cardHeight?: number;
+  minVisible?: 2 | 3 | 4; // default 2
+  cardHeight?: number; // default now 88
   style?: ViewStyle;
 }
 
 /* ------------------------------------------------------------------ */
 const StatsGrid: React.FC<StatsGridProps> = ({
   metrics,
-  minColumns = 2,
-  cardHeight = 110,
+  minVisible = 2,
+  cardHeight = 88,
   style,
 }) => {
   const { width } = useWindowDimensions();
 
-  /* --- determine how many columns for this screen width --- */
-  const columns = React.useMemo(() => {
-    if (width >= 1100) return 4; // big tablets, desktop web
-    if (width >= 780) return Math.max(minColumns, 3); // tablets / landscape phones
-    return minColumns; // portrait phones
-  }, [width, minColumns]);
-
-  const GAP = 14; // card spacing
+  /* --------------- sizing ---------------------------------------- */
+  const GAP = 14;
   const SIDE_PADDING = 32;
-  const cardWidth = (width - SIDE_PADDING - GAP * (columns - 1)) / columns;
+  const MIN_CARD_W = 116; // ← smaller
+  const targetCols = Math.max(minVisible, Math.floor(width / 140));
+  const cardW = React.useMemo(
+    () => Math.max(MIN_CARD_W, (width - SIDE_PADDING - GAP * (targetCols - 1)) / targetCols),
+    [width, targetCols]
+  );
 
-  /* Utility to keep font readable at all sizes */
+  /* --------------- font helper ----------------------------------- */
   const clamp = (min: number, v: number, max: number) =>
     Math.max(min, Math.min(v, max)) / PixelRatio.getFontScale();
 
+  /* --------------- render ---------------------------------------- */
   return (
     <FlatList
+      horizontal
       data={metrics}
       keyExtractor={(m) => m.key}
-      numColumns={columns}
-      scrollEnabled={false}
-      /* -------------- horizontal spacing -------------- */
-      columnWrapperStyle={{ gap: GAP }}
-      /* -------------- vertical spacing -------------- */
-      contentContainerStyle={[{ paddingTop: 18, paddingBottom: GAP }, style]}
-      renderItem={({ item, index }) => {
-        /* add bottom‑margin to every row except the last one */
-        const isLastRow = Math.ceil((index + 1) / columns) === Math.ceil(metrics.length / columns);
+      showsHorizontalScrollIndicator={false}
+      snapToInterval={cardW + GAP}
+      decelerationRate="fast"
+      contentContainerStyle={[
+        {
+          paddingLeft: 16,
+          paddingRight: 16 - GAP,
+          paddingVertical: 14,
+          gap: GAP,
+        },
+        style,
+      ]}
+      renderItem={({ item }) => (
+        <View style={[styles.card, { width: cardW, minHeight: cardHeight }]}>
+          {item.icon && (
+            <View style={[styles.iconBubble, { backgroundColor: item.iconBg ?? "#E5F0FF" }]}>
+              <MaterialCommunityIcons
+                name={item.icon}
+                size={17}
+                color={item.iconColor ?? Colors.primary}
+              />
+            </View>
+          )}
 
-        return (
-          <View
-            style={[
-              styles.card,
-              {
-                width: cardWidth,
-                minHeight: cardHeight,
-                marginBottom: isLastRow ? 0 : GAP,
-              },
-            ]}
+          <Text
+            style={[styles.value, { fontSize: clamp(18, cardW * 0.16, 30) }]}
+            numberOfLines={1}
+            adjustsFontSizeToFit
           >
-            {item.icon && (
-              <View style={[styles.iconBubble, { backgroundColor: item.iconBg ?? "#E5F0FF" }]}>
-                <MaterialCommunityIcons
-                  name={item.icon}
-                  size={20}
-                  color={item.iconColor ?? Colors.primary}
-                />
-              </View>
-            )}
+            {item.value}
+          </Text>
 
-            <Text
-              style={[styles.value, { fontSize: clamp(20, cardWidth * 0.16, 32) }]}
-              numberOfLines={1}
-              adjustsFontSizeToFit
-            >
-              {item.value}
-            </Text>
-
-            <Text
-              style={[styles.label, { fontSize: clamp(12, cardWidth * 0.09, 16) }]}
-              numberOfLines={2}
-            >
-              {item.label}
-            </Text>
-          </View>
-        );
-      }}
+          <Text
+            style={[styles.label, { fontSize: clamp(11, cardW * 0.095, 15) }]}
+            numberOfLines={2}
+          >
+            {item.label}
+          </Text>
+        </View>
+      )}
+      /* enable wrap on big screens */
+      ListFooterComponent={() => <View style={{ width: SIDE_PADDING }} />}
+      numColumns={width >= 780 ? Math.min(metrics.length, targetCols) : 1}
     />
   );
 };
@@ -123,26 +110,25 @@ const StatsGrid: React.FC<StatsGridProps> = ({
 const styles = StyleSheet.create({
   card: {
     backgroundColor: "#FFFFFF",
-    borderRadius: 18,
-    paddingVertical: 18,
-    paddingHorizontal: 16,
+    borderRadius: 16, // slightly tighter radius
+    paddingVertical: 14,
+    paddingHorizontal: 14,
     justifyContent: "space-between",
 
-    /* soft shadow */
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 5,
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.07,
+    shadowRadius: 10,
+    elevation: 4,
   },
   iconBubble: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     alignItems: "center",
     justifyContent: "center",
     alignSelf: "flex-end",
-    marginBottom: 6,
+    marginBottom: 4,
   },
   value: {
     fontWeight: "700",

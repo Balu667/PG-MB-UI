@@ -102,7 +102,6 @@ const Bed = ({ status }: { status: BedStatus }) => (
 export default function PGLayout() {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const cols = width >= 1100 ? 4 : width >= 780 ? 3 : 2;
   const metrics = useMemo(metricsFromRooms, []);
   const [outerScrollEnabled, setOuterScrollEnabled] = useState(true);
 
@@ -114,7 +113,7 @@ export default function PGLayout() {
       scrollEnabled={outerScrollEnabled}
       showsVerticalScrollIndicator={false}
     >
-      <StatsGrid metrics={metrics} minColumns={cols} />
+      <StatsGrid metrics={metrics} />
 
       {/* sticky legend (wraps automatically) */}
       <LegendCard />

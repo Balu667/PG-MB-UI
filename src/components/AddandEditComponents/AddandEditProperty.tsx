@@ -22,7 +22,7 @@ import {
   HelperText,
   DefaultTheme,
 } from "react-native-paper";
-import { useForm, Controller, Resolver } from "react-hook-form";
+import { useForm, Controller } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
@@ -47,15 +47,11 @@ export default function AddEditPropertyScreen({ type, propertyData }: Props) {
   const formType: "add" | "edit" = type === "edit" ? "edit" : "add";
 
   const [images, setImages] = useState<string[]>(
-    (propertydata?.images ?? []).filter(
-      (img): img is string => typeof img === "string"
-    )
+    (propertydata?.images ?? []).filter((img): img is string => typeof img === "string")
   );
 
   const [facilities, setFacilities] = useState<string[]>(
-    (propertydata?.facilities ?? []).filter(
-      (f): f is string => typeof f === "string"
-    )
+    (propertydata?.facilities ?? []).filter((f): f is string => typeof f === "string")
   );
 
   const [isTouched, setIsTouched] = useState(false);
@@ -89,14 +85,10 @@ export default function AddEditPropertyScreen({ type, propertyData }: Props) {
 
   const handleBackPress = () => {
     if (isTouched || Object.values(formValues).some(Boolean)) {
-      Alert.alert(
-        "Unsaved Changes",
-        "Form data might be lost. Are you sure you want to go back?",
-        [
-          { text: "Cancel", style: "cancel" },
-          { text: "Yes", onPress: () => router.back() },
-        ]
-      );
+      Alert.alert("Unsaved Changes", "Form data might be lost. Are you sure you want to go back?", [
+        { text: "Cancel", style: "cancel" },
+        { text: "Yes", onPress: () => router.back() },
+      ]);
       return true;
     } else {
       router.back();
@@ -105,10 +97,7 @@ export default function AddEditPropertyScreen({ type, propertyData }: Props) {
   };
 
   useEffect(() => {
-    const sub = BackHandler.addEventListener(
-      "hardwareBackPress",
-      handleBackPress
-    );
+    const sub = BackHandler.addEventListener("hardwareBackPress", handleBackPress);
     return () => sub.remove();
   }, [formValues]);
 
@@ -262,11 +251,7 @@ export default function AddEditPropertyScreen({ type, propertyData }: Props) {
             ))}
           </View>
 
-          <Button
-            mode="outlined"
-            onPress={pickImages}
-            style={layout.uploadButton}
-          >
+          <Button mode="outlined" onPress={pickImages} style={layout.uploadButton}>
             Upload Property Images
           </Button>
 
@@ -285,11 +270,7 @@ export default function AddEditPropertyScreen({ type, propertyData }: Props) {
             ))}
           </ScrollView>
 
-          <Button
-            mode="contained"
-            onPress={handleSubmit(onSubmit)}
-            style={styles.saveButton}
-          >
+          <Button mode="contained" onPress={handleSubmit(onSubmit)} style={styles.saveButton}>
             Save Property
           </Button>
         </ScrollView>
