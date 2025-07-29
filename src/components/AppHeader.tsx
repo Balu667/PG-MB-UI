@@ -15,6 +15,10 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Entypo from "@expo/vector-icons/Entypo";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
+import { Button } from "react-native-paper";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { router } from "expo-router";
+import { useDispatch } from "react-redux";
 
 interface PropertyOption {
   _id: string;
@@ -42,6 +46,7 @@ const AppHeader: React.FC<Props> = ({
 }) => {
   const insets = useSafeAreaInsets();
   const [showMenu, setShowMenu] = useState(false);
+  const dispatch = useDispatch();
 
   const currentTitle =
     propertyOptions.find((p) => p._id === selectedId)?.propertyName ??
@@ -50,6 +55,20 @@ const AppHeader: React.FC<Props> = ({
   /* =========================================================================
      Render
      ========================================================================= */
+
+  const logout = async () => {
+    try {
+      await AsyncStorage.removeItem("userToken");
+
+      //Clearing the all redux state
+      dispatch({ type: "LOGOUT" });
+
+      // Navigate to login screen
+      router.replace("/public");
+    } catch (error) {
+      console.error("Failed to clear AsyncStorage:", error);
+    }
+  };
   return (
     <>
       {/* ===================== Top Bar ===================== */}
@@ -108,6 +127,17 @@ const AppHeader: React.FC<Props> = ({
             ]}
           >
             <MaterialIcons name="notifications" size={24} color="#fff" />
+          </Pressable>
+          <Pressable
+            onPress={onNotificationPress}
+            android_ripple={{ color: "#ffffff44", borderless: true }}
+            style={({ pressed }) => [
+              styles.iconWrapper,
+              pressed &&
+                Platform.OS === "ios" && { backgroundColor: "#ffffff22" },
+            ]}
+          >
+            <Button onPress={logout}>Logout</Button>
           </Pressable>
         </View>
       </View>
