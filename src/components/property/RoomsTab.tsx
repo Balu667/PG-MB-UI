@@ -2,14 +2,19 @@
    RoomsTab – lists the cards, runs search + filter
 ------------------------------------------------------------------- */
 import { useState, useMemo } from "react";
-import { FlatList, useWindowDimensions, StyleSheet } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { FlatList, useWindowDimensions, StyleSheet, Text } from "react-native";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 import SearchBar from "@/src/components/SearchBar";
 import StatsGrid from "@/src/components/StatsGrid";
 import RoomCard from "./RoomCard";
 import FilterSheet, { Section } from "@/src/components/FilterSheet";
 import { RoomFilter, emptyFilter } from "@/src/constants/roomFilter";
+import { useLocalSearchParams } from "expo-router";
 import { mockRooms } from "@/src/constants/mockRooms"; // ← your 15 dummy rooms
+import { useGetAllRooms } from "@/src/hooks/room";
 
 const roomMetrics: Metric[] = [
   {
@@ -49,7 +54,10 @@ const roomSections: Section[] = [
     key: "status",
     label: "Room Status",
     mode: "checkbox",
-    options: ["Available", "Partial", "Filled"].map((s) => ({ label: s, value: s })),
+    options: ["Available", "Partial", "Filled"].map((s) => ({
+      label: s,
+      value: s,
+    })),
   },
   {
     key: "sharing",
@@ -64,10 +72,12 @@ const roomSections: Section[] = [
     key: "floor",
     label: "Floor",
     mode: "checkbox",
-    options: ["GF", ...Array.from({ length: 10 }, (_, i) => `${i + 1}F`)].map((f) => ({
-      label: f === "GF" ? "Ground Floor" : `${f.replace("F", "")} Floor`,
-      value: f,
-    })),
+    options: ["GF", ...Array.from({ length: 10 }, (_, i) => `${i + 1}F`)].map(
+      (f) => ({
+        label: f === "GF" ? "Ground Floor" : `${f.replace("F", "")} Floor`,
+        value: f,
+      })
+    ),
   },
   {
     key: "facilities",
@@ -84,6 +94,10 @@ const roomSections: Section[] = [
 export default function RoomsTab() {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
+  const { id } = useLocalSearchParams();
+
+  const { data, isLoading, isRefetching } = useGetAllRooms(id as string);
+  console.log(data, isLoading, "params in RoomsTab");
 
   /* ───────────────── state ───────────────── */
   const [query, setQuery] = useState("");
@@ -91,7 +105,10 @@ export default function RoomsTab() {
   const [filter, setFilter] = useState<RoomFilter>(emptyFilter);
 
   /* ───────────────── responsive columns ───────────────── */
-  const cols = useMemo(() => (width >= 1000 ? 3 : width >= 740 ? 2 : 1), [width]);
+  const cols = useMemo(
+    () => (width >= 1000 ? 3 : width >= 740 ? 2 : 1),
+    [width]
+  );
 
   /* ───────────────── search + filter ───────────────── */
   const rooms = useMemo(() => {
@@ -99,19 +116,33 @@ export default function RoomsTab() {
     const q = query.trim().toLowerCase();
     const byQ = q
       ? mockRooms.filter(
-          (r) => r.roomNo.toLowerCase().includes(q) || r.floor.toLowerCase().includes(q)
+          (r) =>
+            r.roomNo.toLowerCase().includes(q) ||
+            r.floor.toLowerCase().includes(q)
         )
       : mockRooms;
 
     /* ② checkbox filters */
     return byQ
       .filter((r) => !filter.status.length || filter.status.includes(r.status))
-      .filter((r) => !filter.sharing.length || filter.sharing.includes(r.sharing))
+      .filter(
+        (r) => !filter.sharing.length || filter.sharing.includes(r.sharing)
+      )
       .filter((r) => !filter.floor.length || filter.floor.includes(r.floor))
       .filter(
-        (r) => !filter.facilities.length || filter.facilities.every((f) => r.facilities.includes(f))
+        (r) =>
+          !filter.facilities.length ||
+          filter.facilities.every((f) => r.facilities.includes(f))
       );
   }, [query, filter]);
+
+  if (isLoading || isRefetching) {
+    return (
+      <SafeAreaView style={styles.safeArea} edges={["left", "right"]}>
+        <Text>Loading...</Text>
+      </SafeAreaView>
+    );
+  }
 
   /* ───────────────── render ───────────────── */
   return (
@@ -156,5 +187,6 @@ export default function RoomsTab() {
 }
 
 const styles = StyleSheet.create({
+  safeArea: { flex: 1, backgroundColor: "#F7F8FA" },
   columnGap: { gap: 14 }, // horizontal gap between cards
 });

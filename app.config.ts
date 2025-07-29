@@ -26,7 +26,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   android: {
     package: "com.yourcompany.pgms", // ✅ Change this
     adaptiveIcon: {
-      foregroundImage: "./assets/adaptive-icon.png",
+      foregroundImage: "./assets/images/adaptive-icon.png",
       backgroundColor: "#FFFFFF",
     },
   },

@@ -8,6 +8,7 @@
  * -------------------------------------------------------------------------- */
 
 import React, { useState, useRef, useEffect } from "react";
+import { jwtDecode } from "jwt-decode";
 import {
   View,
   Text,
@@ -48,14 +49,7 @@ import DisableButton from "@/src/components/DisableButton";
 import { RootStackParamList } from "@/types/navigation";
 import { useResendOtp, useVerifyOtp } from "@/src/hooks/login";
 import { setProfileDetails } from "@/src/redux/slices/profileSlice";
-import { jwtDecode } from "jwt-decode";
-
-// Define the shape of your token payload
-type JwtPayload = {
-  _id: string;
-  role: string;
-  [key: string]: any;
-};
+import { JwtPayload } from "@/src/interfaces";
 
 /* ============================================================================
    Constants & helpers
@@ -195,12 +189,30 @@ const OtpScreen = () => {
      API calls (unchanged)
      ======================================================================== */
   const onVerifySuccess = async (data: string) => {
+    console.log(data, "data");
     try {
+      // Save token
       await AsyncStorage.setItem("userToken", data);
-      dispatch(setProfileDetails({ userId, signedIn: true, phoneNumber }));
+
+      // Decode token
+      const decoded: any = jwtDecode<JwtPayload>(data);
+
+      console.log("Decoded JWT:", decoded);
+
+      // Dispatch decoded details
+      dispatch(
+        setProfileDetails({
+          userId: decoded._id,
+          signedIn: true,
+          phoneNumber: decoded?.phoneNumber,
+          role: decoded?.role, // add more fields if needed
+        })
+      );
+
+      // Navigate to protected screen
       router.replace("/protected/(tabs)");
     } catch (err) {
-      console.log(err);
+      console.log("Error verifying OTP", err);
     }
   };
   const { mutate } = useVerifyOtp(onVerifySuccess);

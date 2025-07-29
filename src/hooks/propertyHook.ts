@@ -52,6 +52,7 @@ const useGetPropertyDetailsList = (profileData: any) => {
     queryKey: ["propertyDetailsList", id],
     queryFn: async () => {
       const response = await fetchData({ url });
+      console.log("Property Details Response:", response);
       return response?.data;
     },
     enabled: !!id,
