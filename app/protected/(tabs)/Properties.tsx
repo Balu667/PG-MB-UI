@@ -1,17 +1,22 @@
+import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
-  Text,
-  StyleSheet,
   FlatList,
   KeyboardAvoidingView,
   Platform,
+  StyleSheet,
+  Text,
   useWindowDimensions,
 } from "react-native";
-import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 
 import AppHeader from "@/src/components/AppHeader";
+import AddButton from "@/src/components/Common/AddButton";
 import PropertyCard from "@/src/components/PropertyCard";
+import { useTheme } from "react-native-paper";
 
 /* -------------------- dummy data -------------------- */
 const pgProperties = [
@@ -79,7 +84,7 @@ const Properties = () => {
   const router = useRouter();
   const { width: screenWidth } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-
+  const theme = useTheme(); // Assuming useTheme is defined in your context
   /* default to first property */
   const [selectedId, setSelectedId] = useState<string>(pgProperties[0]._id);
 
@@ -117,18 +122,27 @@ const Properties = () => {
         <FlatList
           data={pgProperties}
           keyExtractor={(item) => item._id}
-          ListHeaderComponent={() => <Text style={styles.sectionTitle}>Your Properties</Text>}
+          ListHeaderComponent={() => (
+            <Text style={styles.sectionTitle}>Your Properties</Text>
+          )}
           renderItem={({ item }) => (
-            <PropertyCard data={item} onPress={() => router.push(`/properties/${item._id}`)} />
+            <PropertyCard
+              data={item}
+              onPress={() => router.push(`/properties/${item._id}`)}
+            />
           )}
           numColumns={numColumns}
           contentContainerStyle={[
             styles.cardsContainer,
             { paddingBottom: insets.bottom + TAB_BAR_HEIGHT + 12 }, // space for TabBar, no extra gap
           ]}
-          columnWrapperStyle={numColumns > 1 ? { justifyContent: "flex-start" } : undefined}
+          columnWrapperStyle={
+            numColumns > 1 ? { justifyContent: "flex-start" } : undefined
+          }
           showsVerticalScrollIndicator={false}
-          ListEmptyComponent={<Text style={styles.emptyText}>No properties found.</Text>}
+          ListEmptyComponent={
+            <Text style={styles.emptyText}>No properties found.</Text>
+          }
           getItemLayout={(_, index) => ({
             length: 275,
             offset: 275 * index,
@@ -136,34 +150,40 @@ const Properties = () => {
           })}
         />
       </KeyboardAvoidingView>
+      {/* ---------- Floating Action Button ---------- */}
+      <AddButton onPress={() => router.push("/properties/add")} />
     </SafeAreaView>
   );
 };
 
 /* ---------------- styles ---------------- */
-const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#F7F8FA" },
+const usePropertiesStyles = () => {
+  const theme = useTheme();
+  return StyleSheet.create({
+    safeArea: { flex: 1, backgroundColor: "#F7F8FA" },
 
-  sectionTitle: {
-    fontSize: 22,
-    fontWeight: "700",
-    marginLeft: 18,
-    marginBottom: 4,
-    marginTop: 14,
-    color: "#1A2748",
-  },
+    sectionTitle: {
+      fontSize: 22,
+      fontWeight: "700",
+      marginLeft: 18,
+      marginBottom: 4,
+      marginTop: 14,
+      color: "#1A2748",
+    },
 
-  cardsContainer: {
-    paddingHorizontal: 10,
-    paddingVertical: 16,
-  },
+    cardsContainer: {
+      paddingHorizontal: 10,
+      paddingVertical: 16,
+    },
 
-  emptyText: {
-    textAlign: "center",
-    color: "#aab6c6",
-    fontSize: 17,
-    marginTop: 80,
-  },
-});
+    emptyText: {
+      textAlign: "center",
+      color: "#aab6c6",
+      fontSize: 17,
+      marginTop: 80,
+    },
+  });
+};
+const styles = usePropertiesStyles();
 
 export default Properties;

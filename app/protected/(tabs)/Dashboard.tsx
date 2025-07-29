@@ -63,7 +63,7 @@ const pgProperties = [
     noticePeriod: "30",
   },
 ];
-const DashboardScreen = () => {
+const Dashboard = () => {
   const [selectedId, setSelectedId] = useState<string>(pgProperties[0]._id);
   return (
     <SafeAreaView style={{ flex: 1 }} edges={["left", "right"]}>
@@ -91,4 +91,4 @@ const styles = StyleSheet.create({
   comingSoon: { fontSize: 18, fontWeight: "600", color: "#888" },
 });
 
-export default DashboardScreen;
+export default Dashboard;
