@@ -49,8 +49,7 @@ const AppHeader: React.FC<Props> = ({
   const dispatch = useDispatch();
 
   const currentTitle =
-    propertyOptions.find((p) => p._id === selectedId)?.propertyName ??
-    "Select property";
+    propertyOptions?.find((p) => p._id === selectedId)?.propertyName ?? "Select property";
 
   /* =========================================================================
      Render
@@ -122,8 +121,7 @@ const AppHeader: React.FC<Props> = ({
             android_ripple={{ color: "#ffffff44", borderless: true }}
             style={({ pressed }) => [
               styles.iconWrapper,
-              pressed &&
-                Platform.OS === "ios" && { backgroundColor: "#ffffff22" },
+              pressed && Platform.OS === "ios" && { backgroundColor: "#ffffff22" },
             ]}
           >
             <MaterialIcons name="notifications" size={24} color="#fff" />
@@ -133,8 +131,7 @@ const AppHeader: React.FC<Props> = ({
             android_ripple={{ color: "#ffffff44", borderless: true }}
             style={({ pressed }) => [
               styles.iconWrapper,
-              pressed &&
-                Platform.OS === "ios" && { backgroundColor: "#ffffff22" },
+              pressed && Platform.OS === "ios" && { backgroundColor: "#ffffff22" },
             ]}
           >
             <Button onPress={logout}>Logout</Button>
@@ -149,10 +146,7 @@ const AppHeader: React.FC<Props> = ({
         animationType="fade"
         onRequestClose={() => setShowMenu(false)}
       >
-        <Pressable
-          style={styles.modalOverlay}
-          onPress={() => setShowMenu(false)}
-        >
+        <Pressable style={styles.modalOverlay} onPress={() => setShowMenu(false)}>
           <View
             style={[
               styles.menuPanel,
@@ -174,10 +168,7 @@ const AppHeader: React.FC<Props> = ({
                   }}
                 >
                   <Text
-                    style={[
-                      styles.menuText,
-                      selectedId === item._id && styles.selectedText,
-                    ]}
+                    style={[styles.menuText, selectedId === item._id && styles.selectedText]}
                     numberOfLines={1}
                   >
                     {item.propertyName}

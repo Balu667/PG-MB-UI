@@ -8,10 +8,7 @@ import {
   Text,
   useWindowDimensions,
 } from "react-native";
-import {
-  SafeAreaView,
-  useSafeAreaInsets,
-} from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 import AppHeader from "@/src/components/AppHeader";
 import AddButton from "@/src/components/Common/AddButton";
@@ -32,11 +29,7 @@ const Properties = () => {
 
   console.log("Profile Data:", profileData);
 
-  const {
-    isLoading,
-    data: propertyData,
-    isFetching,
-  } = useGetPropertyDetailsList(profileData);
+  const { isLoading, data: propertyData, isFetching } = useGetPropertyDetailsList(profileData);
 
   console.log("Property Data:", propertyData);
 
@@ -74,7 +67,7 @@ const Properties = () => {
       {/* ---------- Header ---------- */}
       <AppHeader
         avatarUri="https://via.placeholder.com/40"
-        propertyOptions={propertyData.map(({ _id, propertyName }) => ({
+        propertyOptions={propertyData?.map(({ _id, propertyName }) => ({
           _id,
           propertyName,
         }))}
@@ -91,9 +84,7 @@ const Properties = () => {
         <FlatList
           data={propertyData}
           keyExtractor={(item) => item._id}
-          ListHeaderComponent={() => (
-            <Text style={styles.sectionTitle}>Your Properties</Text>
-          )}
+          ListHeaderComponent={() => <Text style={styles.sectionTitle}>Your Properties</Text>}
           renderItem={({ item }) => (
             <PropertyCard
               data={item}
@@ -105,13 +96,9 @@ const Properties = () => {
             styles.cardsContainer,
             { paddingBottom: insets.bottom + TAB_BAR_HEIGHT + 12 }, // space for TabBar, no extra gap
           ]}
-          columnWrapperStyle={
-            numColumns > 1 ? { justifyContent: "flex-start" } : undefined
-          }
+          columnWrapperStyle={numColumns > 1 ? { justifyContent: "flex-start" } : undefined}
           showsVerticalScrollIndicator={false}
-          ListEmptyComponent={
-            <Text style={styles.emptyText}>No properties found.</Text>
-          }
+          ListEmptyComponent={<Text style={styles.emptyText}>No properties found.</Text>}
           getItemLayout={(_, index) => ({
             length: 275,
             offset: 275 * index,

@@ -1,14 +1,4 @@
-/* --------------------------------------------------------------------------
- * OTP Verification screen
- * --------------------------------------------------------------------------
- * – Respects notches, punch‑holes and the Android gesture bar by using
- *   react‑native‑safe‑area‑context.
- * – All existing layout / animations / responsiveness preserved.
- * – Heavily commented so your team understands every piece.
- * -------------------------------------------------------------------------- */
-
-import React, { useState, useRef, useEffect } from "react";
-import { jwtDecode } from "jwt-decode";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -27,510 +17,277 @@ import {
   Animated,
   Easing,
   AccessibilityInfo,
-  BackHandler, // 🆕 for hardware‑back capture
-  AppState, // 🆕 keep timer accurate when app backgrounded
+  BackHandler,
+  AppState,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import {
-  useRoute,
-  RouteProp,
-  useNavigation,
-  useFocusEffect,
-} from "@react-navigation/native";
+import { useRoute, RouteProp, useNavigation, useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
-import { useSafeAreaInsets } from "react-native-safe-area-context"; // 🆕
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import * as Haptics from "expo-haptics";
 import Toast from "react-native-toast-message";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import * as Haptics from "expo-haptics";
+import { jwtDecode } from "jwt-decode";
 import { useDispatch } from "react-redux";
-
-import { lightTheme } from "@/src/theme";
+import { useTheme } from "@/src/theme/ThemeContext";
+import { AppTheme } from "@/src/theme";
 import DisableButton from "@/src/components/DisableButton";
-import { RootStackParamList } from "@/types/navigation";
 import { useResendOtp, useVerifyOtp } from "@/src/hooks/login";
-import { setProfileDetails } from "@/src/redux/slices/profileSlice";
 import { JwtPayload } from "@/src/interfaces";
+import { setProfileDetails } from "@/src/redux/slices/profileSlice";
+import { RootStackParamList } from "@/types/navigation";
 
-/* ============================================================================
-   Constants & helpers
-   ========================================================================== */
-const OTP_LENGTH = 4;
 const { width, height } = Dimensions.get("window");
+const clamp = (min: number, v: number, max: number) => Math.max(min, Math.min(v, max));
+const scale = (n: number) => Math.round((width / 375) * n);
 
-const scale = (size: number) => {
-  if (width > 600) return Math.round(size * (width / 600)); // avoid over‑scaling on tablets
-  return Math.round((width / 375) * size);
-};
+const OTP_LEN = 4;
+const SMALL = width < 350;
+const TABLET = width > 600;
+const OtpScreen: React.FC = () => {
+  const t = useTheme();
+  const { colors, spacing, radius } = t;
+  const insets = useSafeAreaInsets();
 
-const clamp = (min: number, value: number, max: number) =>
-  Math.max(min, Math.min(value, max));
-
-const isSmall = width < 340;
-const isTablet = width > 600;
-
-/* ============================================================================
-   Component
-   ========================================================================== */
-const OtpScreen = () => {
-  /* -------------- Navigation / route -------------- */
-  type OtpRouteProp = RouteProp<RootStackParamList, "otp">;
-  const navigation = useNavigation();
-  const route = useRoute<OtpRouteProp>();
+  type Rt = RouteProp<RootStackParamList, "otp">;
+  const { params } = useRoute<Rt>();
+  const nav = useNavigation();
   const router = useRouter();
 
-  /* -------------- Safe area -------------- */
-  const insets = useSafeAreaInsets(); // 🆕
-
-  /* -------------- Local state -------------- */
-  const { phoneNumber, userId } = route.params;
-  const [otp, setOtp] = useState<string[]>(Array(OTP_LENGTH).fill(""));
-  const [error, setError] = useState("");
-  const [isModalVisible, setIsModalVisible] = useState(false);
-
+  const [boxes, setBoxes] = useState<string[]>(Array(OTP_LEN).fill(""));
+  const [err, setErr] = useState("");
+  const [modal, setModal] = useState(false);
   const [reduceMotion, setReduceMotion] = useState(false);
 
-  const inputs = useRef<Array<TextInput | null>>([]);
-  const dispatch = useDispatch();
+  const logoA = useRef(new Animated.Value(0)).current;
+  const cardA = useRef(new Animated.Value(0)).current;
 
-  /* -------------- Animations -------------- */
-  const logoAnim = useRef(new Animated.Value(0)).current;
-  const contentAnim = useRef(new Animated.Value(0)).current;
-
-  /* ---------- 30‑second resend timer ---------- */
-  const [secondsLeft, setSecondsLeft] = useState(30);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
-
-  /* Keep track of when we last started the timer so
-   we can resume accurately after backgrounding  */
-  const lastTickRef = useRef(Date.now());
-
-  useEffect(() => {
-    AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion);
-    if (!reduceMotion) {
-      Animated.stagger(120, [
-        Animated.spring(logoAnim, {
-          toValue: 1,
-          useNativeDriver: true,
-          bounciness: 8,
-        }),
-        Animated.timing(contentAnim, {
-          toValue: 1,
-          useNativeDriver: true,
-          duration: 550,
-          easing: Easing.out(Easing.exp),
-        }),
-      ]).start();
-    } else {
-      logoAnim.setValue(1);
-      contentAnim.setValue(1);
-    }
-  }, [reduceMotion]);
-
-  /* ---------- Countdown logic ---------- */
-  useEffect(() => {
-    // Clear any previous interval
-    if (timerRef.current) clearInterval(timerRef.current);
-
-    // Reset for a fresh 30‑seconds
-    setSecondsLeft(30);
-    lastTickRef.current = Date.now();
-
-    timerRef.current = setInterval(() => {
-      setSecondsLeft((prev) => {
-        const diff = Math.round((Date.now() - lastTickRef.current) / 1000);
-        return Math.max(30 - diff, 0);
-      });
+  const [secLeft, setSecLeft] = useState(30);
+  const lastTick = useRef(Date.now());
+  const timer = useRef<NodeJS.Timeout>();
+  const restartTimer = () => {
+    clearInterval(timer.current as NodeJS.Timeout);
+    lastTick.current = Date.now();
+    setSecLeft(30);
+    timer.current = setInterval(() => {
+      const diff = Math.round((Date.now() - lastTick.current) / 1000);
+      setSecLeft(Math.max(30 - diff, 0));
     }, 1000);
-
-    return () => clearInterval(timerRef.current as NodeJS.Timeout);
-  }, []); // ⬅️ runs once when the screen mounts
-
-  /* ---------- Handle app going to background ---------- */
+  };
   useEffect(() => {
-    const sub = AppState.addEventListener("change", (state) => {
-      if (state === "active") {
-        // Re‑calculate how many seconds remain
-        setSecondsLeft((prev) => {
-          const diff = Math.round((Date.now() - lastTickRef.current) / 1000);
-          return Math.max(30 - diff, 0);
-        });
+    restartTimer();
+    return () => clearInterval(timer.current as NodeJS.Timeout);
+  }, []);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (s) => {
+      if (s === "active") {
+        const diff = Math.round((Date.now() - lastTick.current) / 1000);
+        setSecLeft(Math.max(30 - diff, 0));
       }
     });
     return () => sub.remove();
   }, []);
 
-  /* ---------- Capture Android hardware‑back ---------- */
-  // useFocusEffect(
-  //   React.useCallback(() => {
-  //     const onBack = () => {
-  //       setIsModalVisible(true); // show the confirmation modal you already styled
-  //       return true; // prevent automatic pop
-  //     };
-  //     BackHandler.addEventListener("hardwareBackPress", onBack);
-  //     return () => BackHandler.removeEventListener("hardwareBackPress", onBack);
-  //   }, [])
-  // );
   useFocusEffect(
-    React.useCallback(() => {
-      const onBack = () => {
-        setIsModalVisible(true); // open the “Edit number?” popup
-        return true; // block the default back‑navigation
+    useCallback(() => {
+      const h = () => {
+        setModal(true);
+        return true; // block default
       };
-
-      // ✅ modern API: returns a subscription object
-      const backSub = BackHandler.addEventListener("hardwareBackPress", onBack);
-
-      // ✅ clean‑up
-      return () => backSub.remove();
+      const sub = BackHandler.addEventListener("hardwareBackPress", h);
+      return () => sub.remove();
     }, [])
   );
 
-  /* ==========================================================================
-     API calls (unchanged)
-     ======================================================================== */
-  const onVerifySuccess = async (data: string) => {
-    console.log(data, "data");
-    try {
-      // Save token
-      await AsyncStorage.setItem("userToken", data);
-
-      // Decode token
-      const decoded: any = jwtDecode<JwtPayload>(data);
-
-      console.log("Decoded JWT:", decoded);
-
-      // Dispatch decoded details
-      dispatch(
-        setProfileDetails({
-          userId: decoded._id,
-          signedIn: true,
-          phoneNumber: decoded?.phoneNumber,
-          role: decoded?.role, // add more fields if needed
-        })
-      );
-
-      // Navigate to protected screen
-      router.replace("/protected/(tabs)");
-    } catch (err) {
-      console.log("Error verifying OTP", err);
+  useEffect(() => {
+    AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion);
+  }, []);
+  useEffect(() => {
+    if (reduceMotion) {
+      logoA.setValue(1);
+      cardA.setValue(1);
+    } else {
+      Animated.stagger(120, [
+        Animated.spring(logoA, { toValue: 1, bounciness: 8, useNativeDriver: true }),
+        Animated.timing(cardA, {
+          toValue: 1,
+          duration: 550,
+          easing: Easing.out(Easing.exp),
+          useNativeDriver: true,
+        }),
+      ]).start();
     }
-  };
-  const { mutate } = useVerifyOtp(onVerifySuccess);
+  }, [reduceMotion]);
 
-  const resendSuccess = (data: any) => {
-    Toast.show({
-      type: "success",
-      text1: "Resent successfully",
-      text2: data.message,
-    });
+  const refs = useRef<Array<TextInput | null>>([]);
 
-    // ⏱️ restart the 30‑second countdown
-    lastTickRef.current = Date.now();
-    setSecondsLeft(30);
-  };
+  const handleChange = (txt: string, idx: number) => {
+    setErr("");
 
-  const { mutate: resendOtp } = useResendOtp(resendSuccess);
-  const resendPayload = { id: userId, phoneNumber };
-
-  /* ==========================================================================
-     Handlers
-     ======================================================================== */
-  const handleChangeText = (text: string, index: number) => {
-    setError("");
-    /* ------ Support full OTP paste (4 digits at once) ------ */
-    if (text.length > 1) {
-      const pasted = text.replace(/\D/g, "").slice(0, OTP_LENGTH).split("");
-      const newOtp = Array(OTP_LENGTH).fill("");
-      pasted.forEach((d, i) => {
-        newOtp[i] = d;
-        inputs.current[i]?.setNativeProps({ text: d });
-      });
-      setOtp(newOtp);
-      Keyboard.dismiss();
+    if (txt.length > 1) {
+      const digs = txt.replace(/\D/g, "").slice(0, OTP_LEN).split("");
+      const filled = Array(OTP_LEN).fill("");
+      digs.forEach((d, i) => (filled[i] = d));
+      setBoxes(filled);
+      digs.length === OTP_LEN && Keyboard.dismiss();
+      refs.current.forEach((r, i) => r?.setNativeProps({ text: filled[i] }));
       return;
     }
 
-    /* ------ Normal single‑digit entry ------ */
-    const newOtp = [...otp];
-    newOtp[index] = text.replace(/\D/g, "");
-    setOtp(newOtp);
-
-    /* Move focus */
-    if (text && index < OTP_LENGTH - 1) inputs.current[index + 1]?.focus();
-    if (index === OTP_LENGTH - 1 && text) Keyboard.dismiss();
+    const next = [...boxes];
+    next[idx] = txt.replace(/\D/g, "");
+    setBoxes(next);
+    if (txt && idx < OTP_LEN - 1) refs.current[idx + 1]?.focus();
+    if (idx === OTP_LEN - 1 && txt) Keyboard.dismiss();
   };
 
-  const handleKeyPress = (e: any, index: number) => {
-    if (e.nativeEvent.key === "Backspace" && !otp[index] && index > 0) {
-      inputs.current[index - 1]?.focus();
-    }
+  const handleKey = (e: any, idx: number) => {
+    if (e.nativeEvent.key === "Backspace" && !boxes[idx] && idx > 0) refs.current[idx - 1]?.focus();
   };
 
-  const handleBlur = () => {
-    if (otp.join("").length !== OTP_LENGTH)
-      setError("Please enter all 4 digits of the OTP");
+  const onBlur = () => {
+    if (boxes.join("").length !== OTP_LEN) setErr("Please enter all 4 digits of the OTP");
   };
 
-  const handleSubmit = () => {
-    const fullOtp = otp.join("");
-    if (fullOtp.length !== OTP_LENGTH) {
-      setError("Please enter the complete 4‑digit OTP");
-      return;
-    }
+  const dispatch = useDispatch();
+
+  const onVerifySuccess = async (token: string) => {
+    await AsyncStorage.setItem("userToken", token);
+    const decoded = jwtDecode<JwtPayload>(token);
+    dispatch(
+      setProfileDetails({
+        userId: decoded._id,
+        signedIn: true,
+        phoneNumber: decoded.phoneNumber,
+        role: decoded.role,
+      })
+    );
+    router.replace("/protected/(tabs)");
+  };
+  const { mutate: verifyOtp } = useVerifyOtp(onVerifySuccess);
+
+  const { mutate: resendOtp } = useResendOtp((d) => {
+    Toast.show({ type: "success", text1: "OTP resent", text2: d.message });
+    restartTimer();
+  });
+
+  const submit = () => {
+    const code = boxes.join("");
+    if (code.length !== OTP_LEN) return setErr("Please enter the complete 4‑digit OTP");
     Haptics.selectionAsync();
-    mutate({ _id: userId, otp: fullOtp, role: 1 });
+    verifyOtp({ _id: params.userId, otp: code, role: 1 });
   };
 
-  /* --------------------------------------------------------------------------
-   * Responsive values (unchanged)
-   * ------------------------------------------------------------------------ */
-  const otpBoxSize = clamp(
-    40,
-    isTablet ? width / 12 : isSmall ? width / 8 : width / 9,
-    72
-  );
-  const otpFontSize = clamp(19, otpBoxSize * 0.45, 28);
-  const contentPadding = isTablet ? scale(36) : isSmall ? scale(16) : scale(24);
-  const contentRadius = isTablet ? 30 : 18;
-  const logoHeight = isTablet
-    ? height * 0.21
-    : isSmall
-    ? height * 0.19
-    : height * 0.24;
-  const formattedPhone = `+91 ${phoneNumber?.substring(
-    0,
-    5
-  )} ${phoneNumber?.substring(5)}`;
-
-  /* ==========================================================================
-     Render
-     ======================================================================== */
+  const box = clamp(44, TABLET ? width / 12 : width / 9, 72);
+  const boxFont = clamp(18, box * 0.45, 30);
+  const contentPad = TABLET ? spacing.xl : SMALL ? spacing.sm : spacing.lg;
+  const logoH = TABLET ? height * 0.22 : SMALL ? height * 0.19 : height * 0.24;
+  const formatted = `+91 ${params.phoneNumber.slice(0, 5)} ${params.phoneNumber.slice(5)}`;
+  const st = s(colors, spacing, radius, box, boxFont);
+  const cardW = TABLET ? Math.min(width * 1.65, 580) : "100%";
   return (
     <TouchableWithoutFeedback
       onPress={() => {
         Keyboard.dismiss();
-        handleBlur();
+        onBlur();
       }}
     >
-      {/* SafeAreaView now receives dynamic top/bottom padding */}
-      <SafeAreaView
-        style={[
-          styles.safeArea,
-          { paddingTop: insets.top, paddingBottom: insets.bottom }, // 🆕
-        ]}
-      >
-        {/* ---------------- Decorative circles ---------------- */}
-        <View style={styles.backgroundContainer} pointerEvents="none">
-          <Animated.View
-            style={{
-              width: isTablet ? width * 1.4 : width * 1.15,
-              height: isTablet ? width * 1.4 : width * 1.15,
-              borderRadius: isTablet ? width * 0.7 : width * 0.58,
-              top: isTablet ? -width * 0.58 : -width * 0.48,
-              left: isTablet ? -width * 0.42 : -width * 0.3,
-              backgroundColor: "#c0ebc9",
-              opacity: 1,
-              shadowColor: "#0d0c22",
-              shadowOpacity: 0.06,
-              shadowOffset: { width: 0, height: 22 },
-              shadowRadius: 60,
-              elevation: 8,
-              position: "absolute",
-            }}
-          />
-          <Animated.View
-            style={{
-              width: isTablet ? width * 0.62 : width * 0.46,
-              height: isTablet ? width * 0.62 : width * 0.46,
-              borderRadius: isTablet ? width * 0.31 : width * 0.23,
-              top: isTablet ? scale(95) : scale(45),
-              right: isTablet ? scale(-135) : scale(-70),
-              backgroundColor: "#a3d9c9",
-              opacity: 0.75,
-              position: "absolute",
-            }}
-          />
+      <SafeAreaView style={[st.safe, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+        {/* decorative circles */}
+        <View style={StyleSheet.absoluteFill} pointerEvents="none">
+          <Animated.View style={st.circle1(TABLET, logoA)} />
+          <Animated.View style={st.circle2(TABLET, logoA)} />
         </View>
 
-        {/* ---------------- Back button ---------------- */}
+        {/* back btn */}
         <Pressable
-          onPress={() => setIsModalVisible(true)}
-          style={[
-            styles.backButton,
-            { top: insets.top + (isTablet ? scale(8) : scale(12)) }, // 🆕 respects notch
-          ]}
+          onPress={() => setModal(true)}
+          style={[st.backBtn, { top: insets.top + scale(10) }]}
           hitSlop={12}
           accessibilityRole="button"
           accessibilityLabel="Back"
         >
-          <Ionicons name="arrow-back" size={28} color="#222" />
+          <Ionicons name="arrow-back" size={28} color={colors.textPrimary} />
         </Pressable>
 
-        {/* ---------------- Main layout ---------------- */}
+        {/* main */}
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : undefined}
-          style={styles.container}
-          keyboardVerticalOffset={0}
+          style={st.main(TABLET)}
         >
-          {/* ----------- Illustration (animated) ----------- */}
-          <Animated.View
-            style={[
-              styles.logoContainer,
-              {
-                marginTop: isTablet
-                  ? scale(30)
-                  : isSmall
-                  ? scale(5)
-                  : scale(16),
-                opacity: logoAnim,
-                transform: [
-                  {
-                    translateY: logoAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [32, 0],
-                    }),
-                  },
-                ],
-              },
-            ]}
-          >
+          {/* illustration */}
+          <Animated.View style={st.logoWrap(logoA, TABLET)}>
             <Image
               source={require("@/assets/images/otp-image.png")}
-              style={{
-                width: width * (isTablet ? 0.43 : 0.7),
-                height: logoHeight,
-                maxHeight: 250,
-              }}
+              style={{ width: width * (TABLET ? 0.43 : 0.7), height: logoH, maxHeight: 250 }}
               resizeMode="contain"
-              accessibilityLabel="OTP Illustration"
             />
           </Animated.View>
 
-          {/* --------------- Card ---------------- */}
-          <Animated.View
-            style={[
-              styles.content,
-              {
-                marginBottom: isTablet ? scale(42) : scale(16),
-                padding: contentPadding,
-                borderRadius: contentRadius,
-                opacity: contentAnim,
-                transform: [
-                  {
-                    translateY: contentAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [48, 0],
-                    }),
-                  },
-                ],
-              },
-            ]}
-          >
-            <Text
-              style={[
-                styles.title,
-                { fontSize: clamp(18, scale(isTablet ? 27 : 24), 32) },
-              ]}
-            >
-              OTP Verification
-            </Text>
-            <Text
-              style={[
-                styles.subtitle,
-                { fontSize: clamp(13, scale(isTablet ? 17 : 15), 22) },
-              ]}
-            >
-              We've sent a verification code to
-            </Text>
+          {/* card */}
+          <Animated.View style={st.card(cardA, contentPad, TABLET, cardW)}>
+            <Text style={st.h1(TABLET)}>OTP Verification</Text>
+            <Text style={st.sub(TABLET)}>We've sent a verification code to</Text>
 
-            {/* Phone number row */}
-            <View style={styles.phoneRow}>
-              <Text style={styles.phoneText}>{formattedPhone}</Text>
-              <TouchableOpacity
-                onPress={() => setIsModalVisible(true)}
-                accessibilityRole="button"
-                accessibilityLabel="Edit phone number"
-              >
+            {/* phone row */}
+            <View style={st.phoneRow}>
+              <Text style={st.phone}>{formatted}</Text>
+              <TouchableOpacity onPress={() => setModal(true)} accessibilityRole="button">
                 <Ionicons
                   name="create-outline"
                   size={scale(20)}
-                  color="#4A86F7"
+                  color={colors.link}
                   style={{ marginLeft: scale(10) }}
                 />
               </TouchableOpacity>
             </View>
 
-            {/* OTP inputs */}
-            <View
-              style={[
-                styles.otpContainer,
-                { marginBottom: scale(20), gap: isTablet ? 22 : 13 },
-              ]}
-            >
-              {Array(OTP_LENGTH)
-                .fill(null)
-                .map((_, idx: any) => (
-                  <TextInput
-                    key={idx}
-                    ref={(ref) => {
-                      inputs.current[idx] = ref;
-                    }}
-                    style={[
-                      styles.otpInput,
-                      {
-                        width: otpBoxSize,
-                        height: otpBoxSize,
-                        borderRadius: otpBoxSize / 2,
-                        fontSize: otpFontSize,
-                        borderColor: error ? "red" : lightTheme.colors.primary,
-                      },
-                    ]}
-                    keyboardType={
-                      Platform.OS === "ios" ? "number-pad" : "numeric"
-                    }
-                    maxLength={1}
-                    value={otp[idx]}
-                    onChangeText={(t) => handleChangeText(t, idx)}
-                    onKeyPress={(e) => handleKeyPress(e, idx)}
-                    onBlur={handleBlur}
-                    selectTextOnFocus
-                    importantForAutofill="yes"
-                    textContentType={
-                      idx === 0 && Platform.OS === "ios"
-                        ? "oneTimeCode"
-                        : "none"
-                    }
-                    accessibilityLabel={`OTP digit ${idx + 1}`}
-                  />
-                ))}
+            {/* otp boxes */}
+            <View style={st.boxRow(TABLET)}>
+              {Array.from({ length: OTP_LEN }).map((_, i) => (
+                <TextInput
+                  key={i}
+                  ref={(r) => (refs.current[i] = r)}
+                  autoFocus={i === 0}
+                  style={st.box(boxFont, err)}
+                  keyboardType={Platform.OS === "ios" ? "number-pad" : "numeric"}
+                  maxLength={1}
+                  value={boxes[i]}
+                  onChangeText={(txt) => handleChange(txt, i)}
+                  onKeyPress={(e) => handleKey(e, i)}
+                  onBlur={onBlur}
+                  selectTextOnFocus
+                  importantForAutofill="yes"
+                  textContentType={i === 0 && Platform.OS === "ios" ? "oneTimeCode" : "none"}
+                  accessibilityLabel={`OTP digit ${i + 1}`}
+                />
+              ))}
             </View>
 
-            {!!error && <Text style={styles.errorText}>{error}</Text>}
+            {!!err && <Text style={st.err}>{err}</Text>}
 
             <DisableButton
               title="Verify OTP"
-              onPress={handleSubmit}
-              disabled={otp.join("").length !== OTP_LENGTH}
+              onPress={submit}
+              disabled={boxes.join("").length !== OTP_LEN}
             />
 
-            {/* Resend row */}
-            <View style={styles.resendContainer}>
-              {secondsLeft > 0 ? (
-                <Text style={styles.resendText}>
-                  Resend in 0:{secondsLeft.toString().padStart(2, "0")}
-                </Text>
+            {/* resend */}
+            <View style={st.resendRow}>
+              {secLeft > 0 ? (
+                <Text style={st.resendTxt}>Resend in 0:{secLeft.toString().padStart(2, "0")}</Text>
               ) : (
                 <>
-                  <Text style={styles.resendText}>Didn't receive code? </Text>
+                  <Text style={st.resendTxt}>Didn't receive code? </Text>
                   <TouchableOpacity
                     onPress={() => {
                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      resendOtp(resendPayload);
+                      resendOtp({ id: params.userId, phoneNumber: params.phoneNumber });
                     }}
                     accessibilityRole="button"
-                    accessibilityLabel="Resend OTP"
                   >
-                    <Text style={styles.resendLink}>Resend</Text>
+                    <Text style={st.resendLink}>Resend</Text>
                   </TouchableOpacity>
                 </>
               )}
@@ -538,43 +295,38 @@ const OtpScreen = () => {
           </Animated.View>
         </KeyboardAvoidingView>
 
-        {/* ---------------- Edit‑number modal ---------------- */}
         <Modal
-          visible={isModalVisible}
+          visible={modal}
           transparent
           animationType="fade"
-          onRequestClose={() => setIsModalVisible(false)}
+          onRequestClose={() => setModal(false)}
         >
-          <TouchableWithoutFeedback onPress={() => setIsModalVisible(false)}>
-            <View style={styles.modalOverlay}>
+          <TouchableWithoutFeedback onPress={() => setModal(false)}>
+            <View style={st.modalOverlay}>
               <TouchableWithoutFeedback>
-                <View style={styles.modalContainer}>
+                <View style={st.modalBox}>
                   <Ionicons
                     name="help-circle"
                     size={40}
-                    color="#1d3c34"
+                    color={colors.accent}
                     style={{ marginBottom: 12 }}
                   />
-                  <Text style={styles.modalTitle}>Edit mobile number?</Text>
-                  <Text style={styles.modalSubtitle}>
-                    You’ll return to the previous screen to enter a different
-                    number.
+                  <Text style={st.modalH}>Edit mobile number?</Text>
+                  <Text style={st.modalP}>
+                    You’ll return to the previous screen to enter a different number.
                   </Text>
-                  <View style={styles.modalButtons}>
+                  <View style={st.modalBtns}>
                     <TouchableOpacity
+                      style={st.modalYes}
                       onPress={() => {
-                        setIsModalVisible(false);
+                        setModal(false);
                         router.back();
                       }}
-                      style={styles.modalButtonYes}
                     >
-                      <Text style={styles.modalButtonYesText}>Yes</Text>
+                      <Text style={st.modalYesTxt}>Yes</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity
-                      onPress={() => setIsModalVisible(false)}
-                      style={styles.modalButtonCancel}
-                    >
-                      <Text style={styles.modalButtonCancelText}>Cancel</Text>
+                    <TouchableOpacity style={st.modalCancel} onPress={() => setModal(false)}>
+                      <Text style={st.modalCancelTxt}>Cancel</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -587,176 +339,193 @@ const OtpScreen = () => {
   );
 };
 
-/* ============================================================================
-   Styles (the core palette/layout is unchanged)
-   ========================================================================== */
-const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#FFFFFF" },
+const s = (
+  c: AppTheme["colors"],
+  sp: AppTheme["spacing"],
+  r: AppTheme["radius"],
+  box: number,
+  font: number
+) => {
+  const shadow = {
+    shadowColor: c.shadow,
+    shadowOpacity: 0.08,
+    shadowOffset: { width: 0, height: 18 },
+    shadowRadius: 60,
+    elevation: 10,
+  };
+  return StyleSheet.create({
+    safe: { flex: 1, backgroundColor: c.background },
+    backBtn: { position: "absolute", padding: 10, zIndex: 10 },
 
-  backButton: { position: "absolute", zIndex: 10, padding: 10 },
+    circle1: (tab: boolean, a: Animated.Value) => ({
+      position: "absolute",
+      width: tab ? width * 1.3 : width * 1.1,
+      height: tab ? width * 1.3 : width * 1.1,
+      borderRadius: tab ? width * 0.65 : width * 0.55,
+      top: tab ? -width * 0.6 : -width * 0.53,
+      left: tab ? -width * 0.42 : -width * 0.3,
+      backgroundColor: c.circle1,
+      ...shadow,
+      opacity: a.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1] }),
+    }),
+    circle2: (tab: boolean, a: Animated.Value) => ({
+      position: "absolute",
+      width: width * 0.6,
+      height: width * 0.6,
+      borderRadius: width * 0.3,
+      top: tab ? scale(95) : scale(45),
+      right: tab ? scale(-135) : scale(-70),
+      backgroundColor: c.circle2,
+      opacity: a.interpolate({ inputRange: [0, 1], outputRange: [0.3, 0.65] }),
+    }),
 
-  backgroundContainer: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 0,
-  },
+    main: (tab: boolean) => ({
+      flex: 1,
+      justifyContent: "center",
+      paddingHorizontal: tab ? sp.xl * 1.6 : SMALL ? sp.sm : sp.lg,
+    }),
 
-  logoContainer: {
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 30,
-  },
+    logoWrap: (a: Animated.Value, tab: boolean) => ({
+      alignItems: "center",
+      marginTop: tab ? scale(30) : SMALL ? scale(5) : scale(16),
+      opacity: a,
+      transform: [{ translateY: a.interpolate({ inputRange: [0, 1], outputRange: [32, 0] }) }],
+    }),
 
-  container: {
-    flex: 1,
-    justifyContent: "center",
-    paddingHorizontal: isTablet ? scale(70) : isSmall ? scale(10) : scale(24),
-  },
+    card: (a: Animated.Value, pad: number, tab: boolean, w: number | string) => ({
+      width: w,
+      alignSelf: "center",
+      backgroundColor: c.background2,
+      borderRadius: TABLET ? r.extremeLarge : r.extraLarge,
+      padding: pad,
+      borderWidth: 1,
+      borderColor: c.circle2,
+      opacity: a,
+      transform: [{ translateY: a.interpolate({ inputRange: [0, 1], outputRange: [48, 0] }) }],
+      alignItems: "center",
+    }),
 
-  content: {
-    backgroundColor: "rgba(255,255,255,0.95)",
-    borderWidth: 1,
-    borderColor: "rgba(210,210,210,0.13)",
-    shadowColor: "#0d0c22",
-    shadowOpacity: 0.1,
-    shadowRadius: 24,
-    elevation: 5,
-    alignItems: "center",
-    width: "100%",
-  },
+    h1: (tab: boolean) => ({
+      color: c.primary,
+      fontWeight: "700",
+      fontSize: clamp(18, scale(tab ? 27 : 24), 32),
+      marginBottom: scale(7),
+      textAlign: "center",
+    }),
+    sub: (tab: boolean) => ({
+      color: c.textSecondary,
+      fontSize: clamp(13, scale(tab ? 17 : 15), 22),
+      textAlign: "center",
+      marginTop: scale(10),
+    }),
 
-  title: {
-    fontWeight: "700",
-    marginBottom: scale(7),
-    color: "#1d3c34",
-    letterSpacing: 0.1,
-    textAlign: "center",
-  },
-  subtitle: {
-    textAlign: "center",
-    marginTop: scale(10),
-    color: "#444",
-    fontWeight: "500",
-  },
+    phoneRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      marginTop: scale(9),
+      marginBottom: scale(21),
+    },
+    phone: { color: c.textPrimary, fontWeight: "600", fontSize: scale(17) },
 
-  phoneRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: scale(9),
-    marginBottom: scale(21),
-  },
-  phoneText: { fontWeight: "600", color: "#000", fontSize: scale(17) },
+    boxRow: (tab: boolean) => ({
+      flexDirection: "row",
+      justifyContent: "space-evenly",
+      width: "100%",
+      marginBottom: scale(20),
+      gap: tab ? 22 : 13,
+    }),
+    box: (errorFont: number, error?: string) => ({
+      width: box,
+      height: box,
+      borderRadius: box / 2,
+      backgroundColor: c.white,
+      borderWidth: 1.5,
+      borderColor: error ? c.error : c.primary,
+      textAlign: "center",
+      fontWeight: "600",
+      color: c.textPrimary,
+      fontSize: errorFont,
+      ...Platform.select({
+        ios: {
+          shadowColor: c.shadow,
+          shadowOpacity: 0.1,
+          shadowOffset: { width: 0, height: 1 },
+          shadowRadius: 3,
+        },
+        android: { elevation: 3, shadowColor: c.shadow },
+      }),
+    }),
 
-  otpContainer: {
-    flexDirection: "row",
-    justifyContent: "space-evenly",
-    width: "100%",
-  },
+    err: { color: c.error, fontSize: scale(13), marginBottom: scale(7), textAlign: "center" },
 
-  otpInput: {
-    backgroundColor: "#fff",
-    borderWidth: 1.5,
-    textAlign: "center",
-    fontWeight: "600",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 3,
-    color: "#000",
-  },
+    resendRow: {
+      flexDirection: "row",
+      marginTop: scale(14),
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    resendTxt: { color: c.textSecondary, fontSize: scale(14) },
+    resendLink: { color: c.link, fontSize: scale(14), fontWeight: "700" },
 
-  errorText: {
-    color: "red",
-    fontSize: scale(13),
-    marginBottom: scale(7),
-    textAlign: "center",
-  },
-
-  resendContainer: {
-    flexDirection: "row",
-    marginTop: scale(14),
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  resendText: { fontSize: scale(14), color: "#444" },
-  resendLink: { fontSize: scale(14), color: "#4A86F7", fontWeight: "700" },
-
-  /* ------------ Modal styles ------------ */
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.45)", // darker backdrop
-    justifyContent: "center",
-    alignItems: "center",
-    padding: scale(20),
-  },
-
-  modalContainer: {
-    width: "88%",
-    maxWidth: 340,
-    backgroundColor: "#FFFFFF",
-    borderRadius: 24,
-    paddingVertical: scale(26),
-    paddingHorizontal: scale(22),
-    alignItems: "center",
-
-    // soft shadow
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.12,
-    shadowRadius: 24,
-    elevation: 12,
-  },
-  modalTitle: {
-    fontWeight: "700",
-    fontSize: scale(18),
-    color: "#1d3c34",
-    textAlign: "center",
-    marginBottom: scale(6),
-  },
-  modalSubtitle: {
-    fontSize: scale(14),
-    color: "#555",
-    textAlign: "center",
-    marginBottom: scale(20),
-    lineHeight: scale(20),
-  },
-  modalButtons: {
-    flexDirection: "row",
-    width: "100%",
-    justifyContent: "space-between",
-    gap: scale(12),
-  },
-  modalButtonYes: {
-    flex: 1,
-    backgroundColor: "#1d3c34",
-    paddingVertical: scale(12),
-    borderRadius: 14,
-    alignItems: "center",
-  },
-
-  modalButtonCancel: {
-    flex: 1,
-    backgroundColor: "#E5E7EB",
-    paddingVertical: scale(12),
-    borderRadius: 14,
-    alignItems: "center",
-  },
-  modalButtonYesText: {
-    color: "#FFFFFF",
-    fontWeight: "700",
-    fontSize: scale(14),
-  },
-
-  modalButtonCancelText: {
-    color: "#333",
-    fontWeight: "700",
-    fontSize: scale(14),
-  },
-});
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: c.backDrop,
+      justifyContent: "center",
+      alignItems: "center",
+      padding: sp.md,
+    },
+    modalBox: {
+      width: "88%",
+      maxWidth: 580,
+      backgroundColor: c.background,
+      borderRadius: TABLET ? r.extraLarge : r.xxl,
+      borderColor: c.circle2,
+      borderWidth: 1,
+      paddingVertical: sp.lg + 4,
+      paddingHorizontal: sp.lg,
+      alignItems: "center",
+      shadowColor: c.shadow2,
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.12,
+      shadowRadius: 24,
+      elevation: 12,
+    },
+    modalH: {
+      fontSize: scale(18),
+      fontWeight: "700",
+      color: c.accent,
+      textAlign: "center",
+      marginBottom: scale(6),
+    },
+    modalP: {
+      fontSize: scale(14),
+      color: c.textSecondary,
+      textAlign: "center",
+      marginBottom: scale(20),
+      lineHeight: scale(20),
+    },
+    modalBtns: { flexDirection: "row", width: "100%", gap: scale(12) },
+    modalYes: {
+      flex: 1,
+      backgroundColor: c.accent,
+      paddingVertical: scale(12),
+      borderRadius: TABLET ? r.xxl : r.lg,
+      alignItems: "center",
+    },
+    modalCancel: {
+      flex: 1,
+      backgroundColor: c.surface,
+      paddingVertical: scale(12),
+      borderRadius: r.lg,
+      alignItems: "center",
+    },
+    modalYesTxt: {
+      fontWeight: "700",
+      fontSize: scale(14),
+      color: c.white,
+    },
+    modalCancelTxt: { color: c.textPrimary, fontWeight: "700", fontSize: scale(14) },
+  });
+};
 
 export default OtpScreen;
