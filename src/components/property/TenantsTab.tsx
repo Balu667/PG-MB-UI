@@ -1,5 +1,10 @@
 import React, { useState, useMemo } from "react";
-import { FlatList, useWindowDimensions, StyleSheet, Pressable } from "react-native";
+import {
+  FlatList,
+  useWindowDimensions,
+  StyleSheet,
+  Pressable,
+} from "react-native";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -9,6 +14,7 @@ import FilterSheet, { Section } from "@/src/components/FilterSheet";
 import { TenantFilter, emptyTenantFilter } from "@/src/constants/tenantFilter";
 import SearchBar from "@/src/components/SearchBar";
 import * as Haptics from "expo-haptics";
+import AddButton from "../Common/AddButton";
 
 const tenantSections: Section[] = [
   {
@@ -24,7 +30,10 @@ const tenantSections: Section[] = [
     key: "status",
     label: "Status",
     mode: "checkbox",
-    options: ["Active", "Dues", "Under Notice"].map((s) => ({ label: s, value: s })),
+    options: ["Active", "Dues", "Under Notice"].map((s) => ({
+      label: s,
+      value: s,
+    })),
   },
   {
     key: "joinDate",
@@ -51,7 +60,10 @@ export default function TenantsTab() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [filter, setFilter] = useState<TenantFilter>(emptyTenantFilter);
 
-  const cols = useMemo(() => (width >= 1000 ? 3 : width >= 740 ? 2 : 1), [width]);
+  const cols = useMemo(
+    () => (width >= 1000 ? 3 : width >= 740 ? 2 : 1),
+    [width]
+  );
 
   const tenants = useMemo(() => {
     let filtered = mockTenants;
@@ -63,13 +75,19 @@ export default function TenantsTab() {
 
     if (filter.sharing.length)
       filtered = filtered.filter((t) => filter.sharing.includes(t.sharing));
-    if (filter.status.length) filtered = filtered.filter((t) => filter.status.includes(t.status));
+    if (filter.status.length)
+      filtered = filtered.filter((t) => filter.status.includes(t.status));
     if (filter.downloadedApp.length)
-      filtered = filtered.filter((t) => filter.downloadedApp.includes(t.downloadedApp));
+      filtered = filtered.filter((t) =>
+        filter.downloadedApp.includes(t.downloadedApp)
+      );
 
     if (filter.fromDate)
-      filtered = filtered.filter((t) => new Date(t.joinedOn) >= filter.fromDate!);
-    if (filter.toDate) filtered = filtered.filter((t) => new Date(t.joinedOn) <= filter.toDate!);
+      filtered = filtered.filter(
+        (t) => new Date(t.joinedOn) >= filter.fromDate!
+      );
+    if (filter.toDate)
+      filtered = filtered.filter((t) => new Date(t.joinedOn) <= filter.toDate!);
 
     return filtered;
   }, [query, filter]);
@@ -121,36 +139,11 @@ export default function TenantsTab() {
         sections={tenantSections}
         resetValue={emptyTenantFilter}
       />
-      <Pressable
-        onPress={() => router.push("/protected/tenant/add")}
-        style={({ pressed }) => [
-          styles.fab,
-          { bottom: insets.bottom + 24 },
-          pressed && { transform: [{ scale: 0.96 }] },
-        ]}
-        android_ripple={{ color: "#ffffff55", borderless: true }}
-      >
-        <MaterialIcons name="add" size={28} color="#fff" />
-      </Pressable>
+      <AddButton onPress={() => router.push("/protected/tenant/add")} />
     </>
   );
 }
 
 const styles = StyleSheet.create({
   columnGap: { gap: 14 },
-  fab: {
-    position: "absolute",
-    right: 24,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: "#256D85",
-    justifyContent: "center",
-    alignItems: "center",
-    elevation: 6,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
-  },
 });

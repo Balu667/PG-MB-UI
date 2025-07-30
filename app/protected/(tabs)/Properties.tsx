@@ -1,20 +1,22 @@
+import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
-  Text,
-  StyleSheet,
   FlatList,
   KeyboardAvoidingView,
   Platform,
+  StyleSheet,
+  Text,
   useWindowDimensions,
 } from "react-native";
 import {
   SafeAreaView,
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
 
 import AppHeader from "@/src/components/AppHeader";
+import AddButton from "@/src/components/Common/AddButton";
 import PropertyCard from "@/src/components/PropertyCard";
+import { useTheme } from "react-native-paper";
 import { useSelector } from "react-redux";
 import { useGetPropertyDetailsList } from "@/src/hooks/propertyHook";
 
@@ -39,7 +41,7 @@ const Properties = () => {
   console.log("Property Data:", propertyData);
 
   const insets = useSafeAreaInsets();
-
+  const theme = useTheme(); // Assuming useTheme is defined in your context
   /* default to first property */
   const [selectedId, setSelectedId] = useState<string>(propertyData?.[0]?._id);
 
@@ -117,34 +119,40 @@ const Properties = () => {
           })}
         />
       </KeyboardAvoidingView>
+      {/* ---------- Floating Action Button ---------- */}
+      <AddButton onPress={() => router.push("/properties/add")} />
     </SafeAreaView>
   );
 };
 
 /* ---------------- styles ---------------- */
-const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#F7F8FA" },
+const usePropertiesStyles = () => {
+  const theme = useTheme();
+  return StyleSheet.create({
+    safeArea: { flex: 1, backgroundColor: "#F7F8FA" },
 
-  sectionTitle: {
-    fontSize: 22,
-    fontWeight: "700",
-    marginLeft: 18,
-    marginBottom: 4,
-    marginTop: 14,
-    color: "#1A2748",
-  },
+    sectionTitle: {
+      fontSize: 22,
+      fontWeight: "700",
+      marginLeft: 18,
+      marginBottom: 4,
+      marginTop: 14,
+      color: "#1A2748",
+    },
 
-  cardsContainer: {
-    paddingHorizontal: 10,
-    paddingVertical: 16,
-  },
+    cardsContainer: {
+      paddingHorizontal: 10,
+      paddingVertical: 16,
+    },
 
-  emptyText: {
-    textAlign: "center",
-    color: "#aab6c6",
-    fontSize: 17,
-    marginTop: 80,
-  },
-});
+    emptyText: {
+      textAlign: "center",
+      color: "#aab6c6",
+      fontSize: 17,
+      marginTop: 80,
+    },
+  });
+};
+const styles = usePropertiesStyles();
 
 export default Properties;

@@ -61,7 +61,7 @@ const TabBar: React.FC<BottomTabBarProps> = ({
   const getIcon = (name: any, focused: any) => {
     const color = focused ? ICON_COLOR : "#7A7A7A";
     const icons: any = {
-      index: "dashboard",
+      Dashboard: "dashboard",
       Rooms: "meeting-room",
       Properties: "apartment",
       Tenants: "groups",
