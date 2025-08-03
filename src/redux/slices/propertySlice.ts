@@ -1,15 +1,14 @@
-import { createSlice, PayloadAction } from '@reduxjs/toolkit';
+import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 
 interface PropertyState {
-  propertyData: Record<string, any> | null; // You can define a custom type here if needed
+  propertyData: { _id?: string } | null; // <- at least keep the id
 }
-
 const initialState: PropertyState = {
   propertyData: null,
 };
 
 const propertySlice = createSlice({
-  name: 'property',
+  name: "property",
   initialState,
   reducers: {
     setPropertyDetails: (state, action: PayloadAction<Record<string, any>>) => {

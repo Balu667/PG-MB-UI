@@ -2,15 +2,14 @@ import React, { useState } from "react";
 import { View, ScrollView, StyleSheet, Text, Pressable, Alert } from "react-native";
 import { useForm, Controller } from "react-hook-form";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import AppHeader from "@/src/components/AppHeader";
 import { TextInput, Button, Menu } from "react-native-paper";
 import Colors from "@/src/constants/Colors";
 import { Tenant, mockTenants } from "@/src/constants/mockTenants";
 import * as DocumentPicker from "expo-document-picker";
-import { useNavigation, useRoute } from "@react-navigation/native";
 import { useRouter } from "expo-router";
+import { useRoute } from "@react-navigation/native";
 const TenantProfileScreen = () => {
-  const { params } = useRoute();
+  const { params }: any = useRoute();
   const insets = useSafeAreaInsets();
   const tenant = mockTenants.find((t) => t.id === params.id) as Tenant;
   const [menuOpen, setMenuOpen] = useState(false);
@@ -22,12 +21,12 @@ const TenantProfileScreen = () => {
   });
 
   const pickDocument = async (field: keyof Tenant) => {
-    const result = await DocumentPicker.getDocumentAsync({
+    const result: any = await DocumentPicker.getDocumentAsync({
       type: ["image/*", "application/pdf"],
       copyToCacheDirectory: true,
     });
 
-    if (!result.canceled && result.assets[0].size < 5000000) {
+    if (!result.canceled && result?.assets[0].size < 5000000) {
       setValue(field, result.assets[0].uri);
     } else {
       Alert.alert("File too large or canceled.");
@@ -39,7 +38,7 @@ const TenantProfileScreen = () => {
     setEditMode(false);
     Alert.alert("Details saved");
   };
-  const actions = ["Send E‑KYC Link", "Approve KYC", "Give Notice", "Checkout Tenant"];
+  const actions = ["Send E-KYC Link", "Approve KYC", "Give Notice", "Checkout Tenant"];
 
   const onActionSelect = (label: string) => {
     setMenuOpen(false);
@@ -49,15 +48,6 @@ const TenantProfileScreen = () => {
   const router = useRouter();
   return (
     <View style={[styles.container, { paddingBottom: insets.bottom }]}>
-      <AppHeader
-        avatarUri={tenant.imageUri!}
-        propertyOptions={[]}
-        selectedId=""
-        onSelectProperty={() => {}}
-        showBack
-        onBackPress={() => router.back()}
-      />
-
       <ScrollView style={styles.body} showsVerticalScrollIndicator={false}>
         <View style={styles.section}>
           <Menu

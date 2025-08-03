@@ -14,7 +14,7 @@ import { useTheme } from "@/src/theme/ThemeContext";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
-
+import { hexToRgba } from "../theme";
 interface PropertyMetadata {
   totalBeds?: number;
   vacantBeds?: number;
@@ -80,6 +80,38 @@ const PropertyCard = ({ data, onPress }: PropertyCardProps) => {
     onPress && onPress();
     router.push(`/protected/property/${data._id}`);
   };
+  const statsConfig = [
+    {
+      icon: "bed",
+      color: theme.colors.totalBeds,
+      label: "Total Beds",
+      value: data?.metadata?.totalBeds || 0,
+    },
+    {
+      icon: "bed",
+      color: theme.colors.availableBeds,
+      label: "Available",
+      value: data?.metadata?.vacantBeds || 0,
+    },
+    {
+      icon: "bed",
+      color: theme.colors.filledBeds,
+      label: "Occupied",
+      value: data?.metadata?.occupiedBeds || 0,
+    },
+    {
+      icon: "calendar-check",
+      color: theme.colors.advBookedBeds,
+      label: "Adv. Booked",
+      value: data?.metadata?.advancedBookings || 0,
+    },
+    {
+      icon: "bell",
+      color: theme.colors.underNoticeBeds,
+      label: "Under Notice",
+      value: data?.metadata?.underNotice || 0,
+    },
+  ];
 
   return (
     <Animated.View
@@ -92,22 +124,10 @@ const PropertyCard = ({ data, onPress }: PropertyCardProps) => {
         styles.shadow,
       ]}
     >
-      <Pressable
-        android_ripple={{ color: "#D9F1FB" }}
-        onPress={handlePress}
-        style={({ pressed }) => [
-          styles.cardContainer,
-          {
-            backgroundColor: "#FFFFFF",
-            borderRadius: 20,
-            overflow: "hidden",
-            opacity: pressed ? 0.98 : 1,
-          },
-        ]}
-      >
+      <Pressable onPress={handlePress} style={styles.cardContainer(theme.colors)}>
         {/* Gradient Header */}
         <LinearGradient
-          colors={[theme.colors.primary, "#4FB5C9"]}
+          colors={theme.colors.enabledGradient}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.headerView}
@@ -147,75 +167,45 @@ const PropertyCard = ({ data, onPress }: PropertyCardProps) => {
 
         {/* Stats */}
         <View style={styles.statContainer}>
-          <StatItem
-            icon={<FontAwesome5 name="bed" size={19 * fontScale} color={theme.colors.totalBeds} />}
-            label="Total Beds"
-            value={data.metadata?.totalBeds || 0}
-          />
-          <StatItem
-            icon={
-              <FontAwesome5 name="bed" size={19 * fontScale} color={theme.colors.availableBeds} />
-            }
-            label="Available"
-            value={data.metadata?.vacantBeds || 0}
-          />
-          <StatItem
-            icon={<FontAwesome5 name="bed" size={19 * fontScale} color={theme.colors.filledBeds} />}
-            label="Occupied"
-            value={data.metadata?.occupiedBeds || 0}
-          />
-          <StatItem
-            icon={
-              <FontAwesome5
-                name="calendar-check"
-                size={19 * fontScale}
-                color={theme.colors.advBookedBeds}
-              />
-            }
-            label="Adv. Booked"
-            value={data.metadata?.advancedBookings || 0}
-          />
-          <StatItem
-            icon={
-              <FontAwesome5
-                name="bell"
-                size={19 * fontScale}
-                color={theme.colors.underNoticeBeds}
-              />
-            }
-            label="Under Notice"
-            value={data.metadata?.underNotice || 0}
-          />
+          {statsConfig.map((item, idx) => (
+            <StatItem
+              key={idx}
+              icon={<FontAwesome5 name={item.icon} size={19 * fontScale} color={item.color} />}
+              label={item.label}
+              value={item.value}
+              colors={theme.colors}
+            />
+          ))}
         </View>
 
         {/* Financials */}
-        <View style={styles.financialRow}>
+        <View style={styles.financialRow(theme.colors)}>
           <View style={styles.financialItem}>
             <FontAwesome5 name="arrow-down" size={16 * fontScale} color="#059669" />
             <Text style={[styles.financialLabel, { color: "#059669" }]}>
               ₹{data.metadata?.income || 0}
             </Text>
-            <Text style={styles.financialText}>Income</Text>
+            <Text style={styles.financialText(theme.colors)}>Income</Text>
           </View>
           <View style={styles.financialItem}>
             <FontAwesome5 name="arrow-up" size={16 * fontScale} color="#DC2626" />
             <Text style={[styles.financialLabel, { color: "#DC2626" }]}>
               ₹{data.metadata?.expenses || 0}
             </Text>
-            <Text style={styles.financialText}>Expenses</Text>
+            <Text style={styles.financialText(theme.colors)}>Expenses</Text>
           </View>
           <View style={styles.financialItem}>
             <MaterialIcons name="warning" size={16 * fontScale} color="#ED6C02" />
             <Text style={[styles.financialLabel, { color: "#ED6C02" }]}>
               ₹{data.metadata?.dues || 0}
             </Text>
-            <Text style={styles.financialText}>Dues</Text>
+            <Text style={styles.financialText(theme.colors)}>Dues</Text>
           </View>
         </View>
 
         {/* Footer */}
-        <View style={styles.footerRow}>
-          <Text style={styles.footerText}>
+        <View style={styles.footerRow(theme.colors)}>
+          <Text style={styles.footerText(theme.colors)}>
             Complaints:{" "}
             <Text style={{ fontWeight: "600", color: "#D97706" }}>
               {data.metadata?.complaints || 0}
@@ -227,14 +217,24 @@ const PropertyCard = ({ data, onPress }: PropertyCardProps) => {
   );
 };
 
-function StatItem({ icon, label, value }: { icon: React.ReactNode; label: string; value: number }) {
+function StatItem({
+  icon,
+  label,
+  value,
+  colors,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: number;
+  colors: any;
+}) {
   return (
-    <View style={statItemStyles.container}>
+    <View style={statItemStyles.container(colors)}>
       {icon}
-      <Text numberOfLines={1} style={statItemStyles.label}>
+      <Text numberOfLines={1} style={statItemStyles.label(colors)}>
         {label}
       </Text>
-      <Text style={statItemStyles.value}>{value}</Text>
+      <Text style={statItemStyles.value(colors)}>{value}</Text>
     </View>
   );
 }
@@ -245,19 +245,17 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.11,
     shadowRadius: 10,
-    // elevation: 7,
-    elevation: 12, // Stronger depth
-    backgroundColor: "#fff", // Needed to see elevation properly
+    elevation: 12,
     borderRadius: 16,
   },
-  cardContainer: {
+  cardContainer: (c: any) => ({
     flex: 1,
     minHeight: 245,
     justifyContent: "flex-start",
-    backgroundColor: "#fff",
+    backgroundColor: c.cardBackground,
     borderRadius: 20,
     overflow: "hidden",
-  },
+  }),
   headerView: {
     paddingVertical: 15,
     paddingHorizontal: 20,
@@ -277,16 +275,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     gap: 7,
   },
-  financialRow: {
+  financialRow: (c: any) => ({
     flexDirection: "row",
     justifyContent: "space-between",
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderTopWidth: 1,
-    borderColor: "#F1F3F6",
-    backgroundColor: "#F7F8FA",
+    borderColor: hexToRgba(c.textSecondary, 0.2),
+    backgroundColor: c.cardBackground,
     borderBottomWidth: 1,
-  },
+  }),
   financialItem: {
     alignItems: "center",
     gap: 2,
@@ -298,31 +296,31 @@ const styles = StyleSheet.create({
     fontSize: 15,
     marginTop: 1,
   },
-  financialText: {
+  financialText: (c: any) => ({
     fontSize: 12,
-    color: "#495057",
+    color: c.black,
     opacity: 0.9,
-  },
-  footerRow: {
+  }),
+  footerRow: (c: any) => ({
     paddingHorizontal: 18,
     paddingVertical: 10,
     alignItems: "flex-start",
-    backgroundColor: "#F1FAFE",
+    backgroundColor: c.cardBackground,
     borderBottomLeftRadius: 20,
     borderBottomRightRadius: 20,
-  },
-  footerText: {
+  }),
+  footerText: (c: any) => ({
     fontSize: 13,
-    color: "#256D85",
+    color: c.black,
     fontWeight: "600",
     opacity: 0.8,
-  },
+  }),
 });
 
 const statItemStyles = StyleSheet.create({
-  container: {
+  container: (c: any) => ({
     width: "48%",
-    backgroundColor: "#F6F8FC",
+    backgroundColor: c.cardSurface,
     borderRadius: 12,
     flexDirection: "row",
     alignItems: "center",
@@ -331,20 +329,20 @@ const statItemStyles = StyleSheet.create({
     marginBottom: 6,
     gap: 7,
     minWidth: 100,
-  },
-  label: {
+  }),
+  label: (c: any) => ({
     fontSize: 13,
-    color: "#283B51",
+    color: c.black,
     marginLeft: 1,
     flexShrink: 1,
     opacity: 0.85,
-  },
-  value: {
+  }),
+  value: (c: any) => ({
     fontWeight: "700",
-    color: "#1B3D6D",
+    color: c.black,
     marginLeft: "auto",
     fontSize: 14,
-  },
+  }),
 });
 
 export default PropertyCard;

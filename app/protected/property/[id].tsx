@@ -2,7 +2,6 @@ import React, { useMemo, useState } from "react";
 import { ScrollView, StyleSheet, Text, FlatList } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import AppHeader from "@/src/components/AppHeader";
 import TopInfo from "@/src/components/property/TopInfo";
 import SegmentBar from "@/src/components/property/SegmentBar";
 import InfoCard from "@/src/components/property/InfoCard";
@@ -34,39 +33,19 @@ export default function PropertyDetails() {
   const router = useRouter();
 
   /* ------------------------------------------------ data */
-  const property = useMemo(
-    () => pgProperties.find((p) => p._id === id) ?? pgProperties[0],
-    [id]
-  );
+  const property = useMemo(() => pgProperties.find((p) => p._id === id) ?? pgProperties[0], [id]);
 
   /* ------------------------------------------------ local state */
-  const [activeTab, setActiveTab] = useState<TabKey>(tab as TabKey);
+  const [activeTab, setActiveTab] = useState<any>(tab as TabKey);
 
   /* ------------------------------------------------ render */
   return (
     <SafeAreaView style={{ flex: 1 }} edges={["left", "right"]}>
-      <AppHeader
-        showBack
-        onBackPress={() => router.replace("/protected/(tabs)")}
-        avatarUri=""
-        propertyOptions={[]}
-        selectedId=""
-        onSelectProperty={() => {}}
-      />
-
       {/* hero / address */}
-      <TopInfo
-        name={property.propertyName}
-        area={property.area}
-        city={property.city}
-      />
+      <TopInfo name={property.propertyName} area={property.area} city={property.city} />
 
       {/* internal tabs */}
-      <SegmentBar
-        tabs={TABS}
-        value={activeTab}
-        onChange={(t) => setActiveTab(t as TabKey)}
-      />
+      <SegmentBar tabs={TABS} value={activeTab} onChange={(t) => setActiveTab(t as TabKey)} />
 
       {activeTab === "PG Layout" ? (
         <PGLayout />
@@ -83,7 +62,7 @@ export default function PropertyDetails() {
           contentContainerStyle={styles.bodyContent}
           showsVerticalScrollIndicator={false}
         >
-          {activeTab === "Property Details" && (
+          {activeTab === "Property Details" && (
             <InfoCard
               title="Total Beds"
               value={property.metadata.totalBeds}
@@ -97,12 +76,8 @@ export default function PropertyDetails() {
           )}
           {/* {activeTab === "Tenants" && <Placeholder l="Tenants list goes here…" />} */}
           {/* {activeTab === "Tenants" && <TenantsTab />} */}
-          {activeTab === "Expenses" && (
-            <Placeholder l="Expenses list goes here…" />
-          )}
-          {activeTab === "Facilities" && (
-            <Placeholder l="Facilities list goes here…" />
-          )}
+          {activeTab === "Expenses" && <Placeholder l="Expenses list goes here…" />}
+          {activeTab === "Facilities" && <Placeholder l="Facilities list goes here…" />}
           {activeTab === "Staff" && <Placeholder l="Staff list goes here…" />}
         </ScrollView>
       )}

@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   FlatList,
   KeyboardAvoidingView,
@@ -9,80 +9,147 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { useSelector } from "react-redux";
 
-import AppHeader from "@/src/components/AppHeader";
 import AddButton from "@/src/components/Common/AddButton";
 import PropertyCard from "@/src/components/PropertyCard";
-import { useTheme } from "react-native-paper";
-import { useSelector } from "react-redux";
 import { useGetPropertyDetailsList } from "@/src/hooks/propertyHook";
+import { useTheme } from "@/src/theme/ThemeContext"; // ← themed colours --
+import SkeletonCard from "@/src/components/SkeletonCard";
 
 const TAB_BAR_HEIGHT = 60;
+
 const Properties = () => {
   const router = useRouter();
   const { width: screenWidth } = useWindowDimensions();
-  // Import RootState from your store file if not already imported
-  // import { RootState } from "@/src/store"; // adjust the path as needed
+  const insets = useSafeAreaInsets();
+  const { colors, spacing, typography } = useTheme();
+
+  /* -------- data from store / API -------- */
   const { profileData } = useSelector((state: any) => state.profileDetails);
-  // For better type safety, replace 'any' with your actual RootState type if available:
-  // const { profileData } = useSelector((state: RootState) => state.profileDetails);
-
-  console.log("Profile Data:", profileData);
-
   const { isLoading, data: propertyData, isFetching } = useGetPropertyDetailsList(profileData);
 
-  console.log("Property Data:", propertyData);
+  /* -------- selected id (not used here yet) -------- */
+  const [selectedId, setSelectedId] = useState<string | undefined>();
 
-  const insets = useSafeAreaInsets();
-  const theme = useTheme(); // Assuming useTheme is defined in your context
-  /* default to first property */
-  const [selectedId, setSelectedId] = useState<string>(propertyData?.[0]?._id);
-
-  /* Placeholder API trigger */
   useEffect(() => {
-    // console.log(state, "redux state");
-    setSelectedId(propertyData?.[0]?._id);
-    console.log("Fetch dashboard data for property:", selectedId);
+    if (propertyData?.length) setSelectedId(propertyData[0]._id);
   }, [propertyData]);
 
-  /* responsive columns */
+  /* -------- responsive cols -------- */
   let numColumns = 2;
   if (screenWidth >= 900) numColumns = 3;
   else if (screenWidth >= 600) numColumns = 2;
   else numColumns = 1;
 
+  /* -------- theme-aware styles -------- */
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        safeArea: { flex: 1, backgroundColor: colors.background },
+
+        sectionTitle: {
+          fontSize: typography.fontSizeLg,
+          fontWeight: typography.weightBold as any,
+          marginLeft: spacing.md + 2,
+          marginBottom: 4,
+          marginTop: spacing.md - 2,
+          color: colors.textPrimary,
+        },
+
+        cardsContainer: {
+          paddingHorizontal: spacing.sm + 2,
+          paddingVertical: spacing.md,
+        },
+
+        emptyText: {
+          textAlign: "center",
+          color: colors.textMuted,
+          fontSize: typography.fontSizeMd + 1,
+          marginTop: 80,
+        },
+      }),
+    [colors, spacing, typography]
+  );
+
+  /* -------- loading state -------- */
   if (isLoading || isFetching) {
     return (
       <SafeAreaView style={styles.safeArea} edges={["left", "right"]}>
-        <Text>Loading...</Text>
+        <Text>Loading…</Text>
       </SafeAreaView>
     );
   }
-
-  console.log(propertyData, "propertyData");
-
+  const pgProperties = [
+    {
+      _id: "6801cc72e26fc33c842415e1",
+      metadata: {
+        totalRooms: 15,
+        totalBeds: 56,
+        vacantBeds: 48,
+        advancedBookings: 4,
+        occupiedBeds: 4,
+        underNotice: 0,
+        expenses: 0,
+        dues: 63000,
+        income: 0,
+      },
+      propertyId: "PG-00031",
+      propertyName: "Hanuman Gen's PG",
+      tenantType: "Male",
+      mealType: "Both",
+      doorNo: "900",
+      streetName: "100 Feet Road",
+      area: "Madhapur",
+      city: "Hyderabad",
+      state: "Telangana",
+      pincode: "500098",
+      country: "India",
+      landmark: "Near Tea shop",
+      facilities: ["Washing Machine", "Wifi", "Hot Water", "Table", "TV"],
+      notifications: { sms: true, whatsapp: true },
+      noticePeriod: "30",
+    },
+    {
+      _id: "6801ccbce26fc33c842415ec",
+      metadata: {
+        totalRooms: 1,
+        totalBeds: 1,
+        vacantBeds: 0,
+        advancedBookings: 0,
+        occupiedBeds: 1,
+        underNotice: 1,
+        expenses: 0,
+        dues: 4000,
+        income: 0,
+      },
+      propertyId: "PG-00032",
+      propertyName: "Hanuman Gen's PG",
+      tenantType: "Male",
+      mealType: "Both",
+      doorNo: "900",
+      streetName: "BTM Layout",
+      area: "BTM Layout",
+      city: "Bangalore Urban",
+      state: "Karnataka",
+      pincode: "524004",
+      country: "India",
+      landmark: "Near Water tank",
+      facilities: ["Washing Machine", "Wifi", "Hot Water", "Table", "TV", "AC"],
+      notifications: { sms: true, whatsapp: true },
+      noticePeriod: "30",
+    },
+  ];
   /* ==================================================================== */
   return (
     <SafeAreaView style={styles.safeArea} edges={["left", "right"]}>
-      {/* ---------- Header ---------- */}
-      <AppHeader
-        avatarUri="https://via.placeholder.com/40"
-        propertyOptions={propertyData?.map(({ _id, propertyName }) => ({
-          _id,
-          propertyName,
-        }))}
-        selectedId={selectedId}
-        onSelectProperty={setSelectedId}
-        onNotificationPress={() => console.log("bell")}
-      />
-
-      {/* ---------- List ---------- */}
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={{ flex: 1 }}
       >
         <FlatList
-          data={propertyData}
+          // data={propertyData}
+          data={pgProperties}
           keyExtractor={(item) => item._id}
           ListHeaderComponent={() => <Text style={styles.sectionTitle}>Your Properties</Text>}
           renderItem={({ item }) => (
@@ -94,7 +161,7 @@ const Properties = () => {
           numColumns={numColumns}
           contentContainerStyle={[
             styles.cardsContainer,
-            { paddingBottom: insets.bottom + TAB_BAR_HEIGHT + 12 }, // space for TabBar, no extra gap
+            { paddingBottom: insets.bottom + TAB_BAR_HEIGHT + 12 },
           ]}
           columnWrapperStyle={numColumns > 1 ? { justifyContent: "flex-start" } : undefined}
           showsVerticalScrollIndicator={false}
@@ -106,40 +173,11 @@ const Properties = () => {
           })}
         />
       </KeyboardAvoidingView>
-      {/* ---------- Floating Action Button ---------- */}
+
+      {/* FAB */}
       <AddButton onPress={() => router.push("/properties/add")} />
     </SafeAreaView>
   );
 };
-
-/* ---------------- styles ---------------- */
-const usePropertiesStyles = () => {
-  const theme = useTheme();
-  return StyleSheet.create({
-    safeArea: { flex: 1, backgroundColor: "#F7F8FA" },
-
-    sectionTitle: {
-      fontSize: 22,
-      fontWeight: "700",
-      marginLeft: 18,
-      marginBottom: 4,
-      marginTop: 14,
-      color: "#1A2748",
-    },
-
-    cardsContainer: {
-      paddingHorizontal: 10,
-      paddingVertical: 16,
-    },
-
-    emptyText: {
-      textAlign: "center",
-      color: "#aab6c6",
-      fontSize: 17,
-      marginTop: 80,
-    },
-  });
-};
-const styles = usePropertiesStyles();
 
 export default Properties;

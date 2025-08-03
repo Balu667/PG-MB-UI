@@ -36,7 +36,7 @@ import { useResendOtp, useVerifyOtp } from "@/src/hooks/login";
 import { JwtPayload } from "@/src/interfaces";
 import { setProfileDetails } from "@/src/redux/slices/profileSlice";
 import { RootStackParamList } from "@/types/navigation";
-
+import { hexToRgba } from "@/src/theme";
 const { width, height } = Dimensions.get("window");
 const clamp = (min: number, v: number, max: number) => Math.max(min, Math.min(v, max));
 const scale = (n: number) => Math.round((width / 375) * n);
@@ -226,7 +226,7 @@ const OtpScreen: React.FC = () => {
           </Animated.View>
 
           {/* card */}
-          <Animated.View style={st.card(cardA, contentPad, TABLET, cardW)}>
+          <Animated.View style={st.card(cardA, contentPad, TABLET, cardW, hexToRgba)}>
             <Text style={st.h1(TABLET)}>OTP Verification</Text>
             <Text style={st.sub(TABLET)}>We've sent a verification code to</Text>
 
@@ -237,7 +237,7 @@ const OtpScreen: React.FC = () => {
                 <Ionicons
                   name="create-outline"
                   size={scale(20)}
-                  color={colors.link}
+                  color={colors.primary}
                   style={{ marginLeft: scale(10) }}
                 />
               </TouchableOpacity>
@@ -392,14 +392,14 @@ const s = (
       transform: [{ translateY: a.interpolate({ inputRange: [0, 1], outputRange: [32, 0] }) }],
     }),
 
-    card: (a: Animated.Value, pad: number, tab: boolean, w: number | string) => ({
+    card: (a: Animated.Value, pad: number, tab: boolean, w: number | string, opacity: any) => ({
       width: w,
       alignSelf: "center",
-      backgroundColor: c.background2,
+      backgroundColor: hexToRgba(c.background2, 0.4),
       borderRadius: TABLET ? r.extremeLarge : r.extraLarge,
       padding: pad,
       borderWidth: 1,
-      borderColor: c.circle2,
+      borderColor: c.borderColor,
       opacity: a,
       transform: [{ translateY: a.interpolate({ inputRange: [0, 1], outputRange: [48, 0] }) }],
       alignItems: "center",
@@ -465,7 +465,7 @@ const s = (
       justifyContent: "center",
     },
     resendTxt: { color: c.textSecondary, fontSize: scale(14) },
-    resendLink: { color: c.link, fontSize: scale(14), fontWeight: "700" },
+    resendLink: { color: c.primary, fontSize: scale(14), fontWeight: "700" },
 
     modalOverlay: {
       flex: 1,
@@ -479,7 +479,7 @@ const s = (
       maxWidth: 580,
       backgroundColor: c.background,
       borderRadius: TABLET ? r.extraLarge : r.xxl,
-      borderColor: c.circle2,
+      borderColor: c.borderColor,
       borderWidth: 1,
       paddingVertical: sp.lg + 4,
       paddingHorizontal: sp.lg,

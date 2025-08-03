@@ -19,7 +19,7 @@ import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import * as Haptics from "expo-haptics";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-
+import { hexToRgba } from "@/src/theme";
 import PhoneInput from "@/src/components/PhoneInput";
 import DisableButton from "@/src/components/DisableButton";
 import { useGetLogin } from "@/src/hooks/login";
@@ -123,7 +123,7 @@ const LoginScreen = () => {
 
           <Animated.View
             style={[
-              styles.card(theme, pad),
+              styles.card(theme, pad, hexToRgba),
               {
                 width: cardWidth,
                 alignSelf: "center",
@@ -222,13 +222,13 @@ const styles = {
     paddingHorizontal: lightTheme.spacing.sm,
   } as const,
 
-  card: (t: AppTheme, pad: number) =>
+  card: (t: AppTheme, pad: number, opacity: any) =>
     ({
       borderRadius: t.radius.extraLarge,
       borderWidth: 1,
       padding: pad,
-      borderColor: t.colors.circle2,
-      backgroundColor: t.colors.background2,
+      borderColor: t.colors.borderColor,
+      backgroundColor: hexToRgba(t.colors.background2, 1),
     } as const),
 
   h1: (t: AppTheme) =>
