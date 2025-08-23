@@ -15,177 +15,220 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Entypo from "@expo/vector-icons/Entypo";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
-import { Button } from "react-native-paper";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router } from "expo-router";
 import { useDispatch } from "react-redux";
 
-interface PropertyOption {
-  _id: string;
-  propertyName: string;
-}
+import { useTheme } from "@/src/theme/ThemeContext";
+import { useProperty } from "@/src/context/PropertyContext";
 
 interface Props {
-  avatarUri: string;
-  propertyOptions: PropertyOption[];
-  selectedId: string;
-  onSelectProperty: (id: string) => void;
-  onNotificationPress?: () => void;
   showBack?: boolean;
   onBackPress?: () => void;
+  onNotificationPress?: () => void;
+  avatarUri?: string;
 }
 
 const AppHeader: React.FC<Props> = ({
-  avatarUri,
-  propertyOptions,
-  selectedId,
-  onSelectProperty,
-  onNotificationPress,
   showBack = false,
   onBackPress,
+  onNotificationPress,
+  avatarUri = "https://via.placeholder.com/40",
 }) => {
+  const { colors, spacing } = useTheme();
   const insets = useSafeAreaInsets();
+  const { properties, selectedId, setSelected, loading } = useProperty();
   const [showMenu, setShowMenu] = useState(false);
   const dispatch = useDispatch();
 
   const currentTitle =
-    propertyOptions.find((p) => p._id === selectedId)?.propertyName ??
-    "Select property";
-
-  /* =========================================================================
-     Render
-     ========================================================================= */
+    properties.find((p) => p._id === selectedId)?.propertyName ?? "Select property";
 
   const logout = async () => {
-    try {
-      await AsyncStorage.removeItem("userToken");
-
-      //Clearing the all redux state
-      dispatch({ type: "LOGOUT" });
-
-      // Navigate to login screen
-      router.replace("/public");
-    } catch (error) {
-      console.error("Failed to clear AsyncStorage:", error);
-    }
+    await AsyncStorage.removeItem("userToken");
+    dispatch({ type: "LOGOUT" });
+    router.replace("/public");
   };
+
+  const s = StyleSheet.create({
+    wrapper: {
+      backgroundColor: colors.primary,
+      paddingHorizontal: spacing.md,
+      paddingBottom: 20,
+      paddingTop: insets.top + 18,
+    },
+    row: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
+    leftRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+    },
+    actionRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+    },
+    avatar: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      backgroundColor: colors.white,
+    },
+    ddBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+      maxWidth: 220,
+    },
+    ddTxt: {
+      fontSize: 16,
+      color: colors.textWhite,
+      fontWeight: "600",
+    },
+    iconWrap: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      justifyContent: "center",
+      alignItems: "center",
+    },
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: "transparent",
+    },
+    menu: {
+      position: "absolute",
+      left: spacing.md,
+      right: spacing.md,
+      backgroundColor: colors.background,
+      borderRadius: 14,
+      paddingVertical: 6,
+      top: insets.top + 70,
+      maxHeight: Dimensions.get("window").height * 0.45,
+      shadowColor: colors.shadow,
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.15,
+      shadowRadius: 12,
+      elevation: 12,
+    },
+    item: {
+      paddingVertical: 12,
+      paddingHorizontal: 18,
+    },
+    itemTxt: {
+      fontSize: 16,
+      color: colors.textPrimary,
+    },
+    selTxt: {
+      color: colors.primary,
+      fontWeight: "700",
+    },
+    sep: {
+      height: 1,
+      backgroundColor: colors.surface,
+    },
+    backWrap: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      justifyContent: "center",
+      alignItems: "center",
+    },
+  });
+
   return (
     <>
-      {/* ===================== Top Bar ===================== */}
-      <View
-        style={[
-          styles.wrapper,
-          {
-            // marginTop: -insets.top, // keep BG behind status‑bar
-            // paddingTop:
-            //   insets.top +
-            //   10 + // push content down
-            //   Math.max(0, (insets.top - 44) / 2), // ⬅️ extra 6 px for Dynamic Island / tall punch‑holes
-            paddingTop: +insets.top + 20,
-          },
-        ]}
-      >
-        <StatusBar barStyle="light-content" backgroundColor="#256D85" />
+      <StatusBar barStyle="light-content" backgroundColor={colors.primary} />
 
-        <View style={styles.row}>
-          {/* Avatar + dropdown trigger */}
-          <View style={styles.leftRow}>
-            {/* <Image source={{ uri: avatarUri }} style={styles.avatar} /> */}
+      <View style={s.wrapper}>
+        <View style={s.row}>
+          <View style={s.leftRow}>
             {showBack ? (
               <Pressable
                 onPress={onBackPress}
                 android_ripple={{ color: "#ffffff44", borderless: true }}
-                style={styles.backWrapper}
+                style={s.backWrap}
                 accessibilityRole="button"
               >
                 <Entypo name="chevron-left" size={26} color="#fff" />
               </Pressable>
             ) : (
-              <Image source={{ uri: avatarUri }} style={styles.avatar} />
+              <Image source={{ uri: avatarUri }} style={s.avatar} />
             )}
 
-            <TouchableOpacity
-              style={styles.dropdownButton}
-              activeOpacity={0.7}
-              onPress={() => setShowMenu(true)}
-            >
-              <Text style={styles.dropdownText} numberOfLines={1}>
-                {currentTitle}
-              </Text>
-              <Entypo name="chevron-down" size={18} color="#fff" />
-            </TouchableOpacity>
+            {!loading && (
+              <TouchableOpacity
+                style={s.ddBtn}
+                activeOpacity={0.7}
+                onPress={() => setShowMenu(true)}
+              >
+                <Text style={s.ddTxt} numberOfLines={1}>
+                  {currentTitle}
+                </Text>
+                <Entypo name="chevron-down" size={18} color="#fff" />
+              </TouchableOpacity>
+            )}
           </View>
 
-          {/* Bell */}
-          <Pressable
-            onPress={onNotificationPress}
-            android_ripple={{ color: "#ffffff44", borderless: true }}
-            style={({ pressed }) => [
-              styles.iconWrapper,
-              pressed &&
-                Platform.OS === "ios" && { backgroundColor: "#ffffff22" },
-            ]}
-          >
-            <MaterialIcons name="notifications" size={24} color="#fff" />
-          </Pressable>
-          <Pressable
-            onPress={onNotificationPress}
-            android_ripple={{ color: "#ffffff44", borderless: true }}
-            style={({ pressed }) => [
-              styles.iconWrapper,
-              pressed &&
-                Platform.OS === "ios" && { backgroundColor: "#ffffff22" },
-            ]}
-          >
-            <Button onPress={logout}>Logout</Button>
-          </Pressable>
+          <View style={s.actionRow}>
+            <Pressable
+              onPress={onNotificationPress}
+              android_ripple={{ color: "#ffffff44", borderless: true }}
+              style={({ pressed }) => [
+                s.iconWrap,
+                pressed && Platform.OS === "ios" && { backgroundColor: "#ffffff22" },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Notifications"
+            >
+              <MaterialIcons name="notifications" size={24} color="#fff" />
+            </Pressable>
+
+            <Pressable
+              onPress={logout}
+              android_ripple={{ color: "#ffffff44", borderless: true }}
+              style={({ pressed }) => [
+                s.iconWrap,
+                pressed && Platform.OS === "ios" && { backgroundColor: "#ffffff22" },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Logout"
+            >
+              <MaterialIcons name="logout" size={24} color="#fff" />
+            </Pressable>
+          </View>
         </View>
       </View>
 
-      {/* ===================== Pop‑down Menu ===================== */}
       <Modal
         visible={showMenu}
         transparent
         animationType="fade"
         onRequestClose={() => setShowMenu(false)}
       >
-        <Pressable
-          style={styles.modalOverlay}
-          onPress={() => setShowMenu(false)}
-        >
-          <View
-            style={[
-              styles.menuPanel,
-              {
-                top: insets.top + 70,
-                maxHeight: Dimensions.get("window").height * 0.45,
-              },
-            ]}
-          >
+        <Pressable style={s.modalOverlay} onPress={() => setShowMenu(false)}>
+          <View style={s.menu}>
             <FlatList
-              data={propertyOptions}
-              keyExtractor={(item) => item._id}
+              data={properties}
+              keyExtractor={(i) => i._id}
               renderItem={({ item }) => (
                 <TouchableOpacity
-                  style={styles.menuItem}
+                  style={s.item}
                   onPress={() => {
-                    onSelectProperty(item._id);
+                    setSelected(item._id);
                     setShowMenu(false);
                   }}
                 >
-                  <Text
-                    style={[
-                      styles.menuText,
-                      selectedId === item._id && styles.selectedText,
-                    ]}
-                    numberOfLines={1}
-                  >
+                  <Text style={[s.itemTxt, selectedId === item._id && s.selTxt]} numberOfLines={1}>
                     {item.propertyName}
                   </Text>
                 </TouchableOpacity>
               )}
-              ItemSeparatorComponent={() => <View style={styles.separator} />}
-              nestedScrollEnabled
+              ItemSeparatorComponent={() => <View style={s.sep} />}
               showsVerticalScrollIndicator={false}
             />
           </View>
@@ -194,64 +237,5 @@ const AppHeader: React.FC<Props> = ({
     </>
   );
 };
-
-/* ---------------- styles ---------------- */
-const styles = StyleSheet.create({
-  wrapper: {
-    backgroundColor: "#256D85",
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-  },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  leftRow: { flexDirection: "row", alignItems: "center", gap: 10 },
-  avatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: "#fff" },
-
-  dropdownButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    maxWidth: 220,
-  },
-  dropdownText: { fontSize: 16, color: "#fff", fontWeight: "600" },
-
-  iconWrapper: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-
-  /* --- menu --- */
-  modalOverlay: { flex: 1, backgroundColor: "transparent" },
-  menuPanel: {
-    position: "absolute",
-    left: 20,
-    right: 20,
-    backgroundColor: "#fff",
-    borderRadius: 14,
-    paddingVertical: 6,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 12,
-  },
-  menuItem: { paddingVertical: 12, paddingHorizontal: 18 },
-  menuText: { fontSize: 16, color: "#333" },
-  selectedText: { color: "#256D85", fontWeight: "700" },
-  separator: { height: 1, backgroundColor: "#f1f1f1" },
-  backWrapper: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-});
 
 export default AppHeader;

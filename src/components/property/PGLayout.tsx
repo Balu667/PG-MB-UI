@@ -1,7 +1,4 @@
-/* ------------------------------------------------------------------
-   PGLayout – summary ▸ sticky legend ▸ compact floor layout
-------------------------------------------------------------------- */
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -10,16 +7,19 @@ import {
   useWindowDimensions,
   FlatList,
   Pressable,
+  Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-import StatsGrid, { Metric } from "@/src/components/StatsGrid";
-import { mockRooms } from "@/src/constants/mockRooms";
-import Colors from "@/src/constants/Colors";
 import * as Haptics from "expo-haptics";
 
+import StatsGrid, { Metric } from "@/src/components/StatsGrid";
+import { mockRooms } from "@/src/constants/mockRooms";
+import { useTheme } from "@/src/theme/ThemeContext";
+import { hexToRgba } from "@/src/theme";
+
 /* ────────────────────────────────────────────────────────────────
-   1 ▸  demo data
+   1 ▸  mock (demo) data for layout
    ──────────────────────────────────────────────────────────────── */
 type BedStatus = "vacant" | "filled" | "notice" | "advance";
 const ALL_STAT: BedStatus[] = ["vacant", "filled", "notice", "advance"];
@@ -38,7 +38,7 @@ const makeRooms = (sh: number, f: number): RoomInfo[] =>
     })),
   }));
 
-const floors: FloorInfo[] = ["1st Floor", "2nd Floor"].map((name, fIdx) => ({
+const floors: FloorInfo[] = ["1st Floor", "2nd Floor"].map((name, fIdx) => ({
   name,
   groups: Array.from({ length: 5 }, (_, i) => {
     const sh = i + 1 + fIdx * 5;
@@ -73,7 +73,7 @@ const metricsFromRooms = (): Metric[] => {
       iconColor: "#059669",
     },
     {
-      key: "occupied",
+      key: "occ",
       label: "Occupied",
       value: occupiedBeds,
       icon: "bed",
@@ -84,38 +84,233 @@ const metricsFromRooms = (): Metric[] => {
 };
 
 /* ────────────────────────────────────────────────────────────────
-   3 ▸  glyph helpers
+   3 ▸  glyph helper
    ──────────────────────────────────────────────────────────────── */
-const BED_COLOR: Record<BedStatus, string> = {
-  vacant: "#059669",
-  filled: "#B91C1C",
-  notice: "#7C3AED",
-  advance: "#EA580C",
-};
-const Bed = ({ status }: { status: BedStatus }) => (
-  <MaterialCommunityIcons name="bed" size={17} color={BED_COLOR[status]} style={{ margin: 1 }} />
+const Bed = ({ status, color }: { status: BedStatus; color: string }) => (
+  <MaterialCommunityIcons name="bed" size={17} color={color} style={{ margin: 1 }} />
 );
 
-/* ────────────────────────────────────────────────────────────────
-   4 ▸  main
-   ──────────────────────────────────────────────────────────────── */
+/* ------------------------------------------------------------------
+   4 ▸  main component
+------------------------------------------------------------------- */
 export default function PGLayout() {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const metrics = useMemo(metricsFromRooms, []);
+
+  const { colors, spacing, radius } = useTheme();
+  const isAndroid = Platform.OS === "android";
+
+  /* outer scroll disabling (Android only, during vertical drags) */
   const [outerScrollEnabled, setOuterScrollEnabled] = useState(true);
 
+  /* ---------- static colours ---------- */
+  const BED_COLOR: Record<BedStatus, string> = {
+    vacant: colors.availableBeds,
+    filled: colors.filledBeds,
+    notice: colors.underNoticeBeds,
+    advance: colors.advBookedBeds,
+  };
+
+  /* ---------- styles ---------- */
+  const s = useMemo(
+    () =>
+      StyleSheet.create({
+        body: { paddingHorizontal: spacing.md, paddingTop: spacing.lg + 4 },
+
+        legendCard: {
+          flexDirection: "row",
+          flexWrap: "wrap",
+          gap: 12,
+          padding: 12,
+          marginBottom: spacing.sm,
+          backgroundColor: colors.cardBackground,
+          borderRadius: radius.lg,
+          borderWidth: 0.8,
+          borderColor: hexToRgba(colors.textSecondary, 0.15),
+          shadowColor: colors.shadow,
+          shadowOffset: { width: 0, height: 3 },
+          shadowOpacity: 0.06,
+          shadowRadius: 5,
+          elevation: 4,
+        },
+        legendPill: {
+          flexDirection: "row",
+          alignItems: "center",
+          backgroundColor: colors.surface,
+          borderRadius: 16,
+          paddingVertical: 6,
+          paddingHorizontal: 12,
+        },
+        legendText: { fontSize: 13, color: colors.textSecondary },
+
+        floorTitle: {
+          fontSize: 16,
+          fontWeight: "700",
+          color: colors.textPrimary,
+          marginBottom: 12,
+        },
+
+        card: {
+          backgroundColor: colors.cardBackground,
+          borderRadius: radius.lg,
+          padding: 12,
+          borderWidth: 0.8,
+          borderColor: hexToRgba(colors.textSecondary, 0.15),
+          shadowColor: colors.shadow,
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.06,
+          shadowRadius: 7,
+          elevation: 4,
+        },
+        cardHeader: {
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 6,
+          paddingBottom: 6,
+          borderBottomWidth: StyleSheet.hairlineWidth,
+          borderColor: hexToRgba(colors.textSecondary, 0.2),
+          marginBottom: 6,
+        },
+        cardHeaderTxt: { fontWeight: "700", color: colors.accent, fontSize: 13 },
+
+        roomGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+
+        roomTile: {
+          flexBasis: "48%",
+          flexGrow: 1,
+          minWidth: 90,
+          marginBottom: 10,
+
+          borderWidth: 1,
+          borderColor: hexToRgba(colors.textSecondary, 0.3),
+          borderRadius: 12,
+          padding: 10,
+          backgroundColor: colors.surface,
+
+          shadowColor: colors.shadow,
+          shadowOffset: { width: 0, height: 1 },
+          shadowOpacity: 0.05,
+          shadowRadius: 2,
+          elevation: 1,
+        },
+        roomNo: {
+          alignSelf: "flex-start",
+          backgroundColor: hexToRgba(colors.primary, 0.1),
+          color: colors.textPrimary,
+          fontSize: 13,
+          fontWeight: "700",
+          paddingHorizontal: 6,
+          paddingVertical: 2,
+          borderRadius: 6,
+          marginBottom: 6,
+        },
+        bedRow: { flexDirection: "row", flexWrap: "wrap" },
+      }),
+    [colors, spacing, radius]
+  );
+
+  /* ---------- legend ---------- */
+  const LegendPill = useCallback(
+    ({ status, label }: { status: BedStatus; label: string }) => (
+      <View style={s.legendPill}>
+        <MaterialCommunityIcons
+          name="circle"
+          size={10}
+          color={BED_COLOR[status]}
+          style={{ marginRight: 6 }}
+        />
+        <Text style={s.legendText}>{label}</Text>
+      </View>
+    ),
+    [s.legendPill, s.legendText, BED_COLOR]
+  );
+
+  const LegendCard = () => (
+    <View style={s.legendCard}>
+      <LegendPill status="notice" label="Notice" />
+      <LegendPill status="vacant" label="Vacant" />
+      <LegendPill status="filled" label="Filled" />
+      <LegendPill status="advance" label="Adv. Book" />
+    </View>
+  );
+
+  /* ---------- floor block ---------- */
+  const FloorBlock = ({
+    floor,
+    setOuterScroll,
+  }: {
+    floor: FloorInfo;
+    setOuterScroll: (v: boolean) => void;
+  }) => {
+    const cardW = Math.max(160, width * (width >= 780 ? 0.33 : 0.4));
+
+    return (
+      <View>
+        <Text style={s.floorTitle}>{floor.name}</Text>
+
+        {/* horizontal list of sharing cards – never disables outer scroll */}
+        <FlatList
+          horizontal
+          nestedScrollEnabled
+          showsHorizontalScrollIndicator={false}
+          data={floor.groups}
+          keyExtractor={(g) => String(g.sharing)}
+          contentContainerStyle={{ gap: 14, paddingRight: 10 }}
+          renderItem={({ item }) => (
+            <View style={[s.card, { width: cardW }]}>
+              <View style={s.cardHeader}>
+                <MaterialCommunityIcons name="account-group" size={15} color={colors.accent} />
+                <Text style={s.cardHeaderTxt}>{item.sharing} Sharing</Text>
+              </View>
+
+              {/* vertical bed list – pause outer scroll only while dragging (Android) */}
+              <ScrollView
+                style={{ maxHeight: 210 }}
+                showsVerticalScrollIndicator={false}
+                nestedScrollEnabled
+                scrollEventThrottle={16}
+                onTouchStart={isAndroid ? () => setOuterScroll(false) : undefined}
+                onTouchEnd={isAndroid ? () => setOuterScroll(true) : undefined}
+                onMomentumScrollEnd={isAndroid ? () => setOuterScroll(true) : undefined}
+                contentContainerStyle={s.roomGrid}
+              >
+                {item.rooms.map((r) => (
+                  <Pressable
+                    key={r.roomNo}
+                    android_ripple={{ color: hexToRgba(colors.textSecondary, 0.15) }}
+                    onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
+                    style={s.roomTile}
+                  >
+                    <Text style={s.roomNo}>{r.roomNo}</Text>
+                    <View style={s.bedRow}>
+                      {r.beds.map((b) => (
+                        <Bed key={b.id} status={b.status} color={BED_COLOR[b.status]} />
+                      ))}
+                    </View>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </View>
+          )}
+        />
+      </View>
+    );
+  };
+
+  /* ---------- render ---------- */
   return (
     <ScrollView
       stickyHeaderIndices={[1]}
-      style={{ flex: 1, backgroundColor: Colors.surface }}
-      contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + 40 }]}
-      scrollEnabled={outerScrollEnabled}
+      style={{ flex: 1, backgroundColor: colors.background }}
+      contentContainerStyle={{
+        ...s.body,
+        paddingBottom: insets.bottom + spacing.lg * 2,
+      }}
+      scrollEnabled={isAndroid ? outerScrollEnabled : true}
       showsVerticalScrollIndicator={false}
     >
       <StatsGrid metrics={metrics} />
-
-      {/* sticky legend (wraps automatically) */}
       <LegendCard />
 
       <FlatList
@@ -125,190 +320,8 @@ export default function PGLayout() {
           <FloorBlock floor={item} setOuterScroll={setOuterScrollEnabled} />
         )}
         scrollEnabled={false}
-        contentContainerStyle={{ gap: 30 }}
+        contentContainerStyle={{ gap: spacing.lg + 6 }}
       />
     </ScrollView>
   );
 }
-
-/* ────────────────────────────────────────────────────────────────
-   5 ▸  Legend card (no horizontal scroll)
-   ──────────────────────────────────────────────────────────────── */
-const LegendPill = ({ status, label }: { status: BedStatus; label: string }) => (
-  <View style={styles.legendPill}>
-    <MaterialCommunityIcons
-      name="circle"
-      size={10}
-      color={BED_COLOR[status]}
-      style={{ marginRight: 6 }}
-    />
-    <Text style={styles.legendText}>{label}</Text>
-  </View>
-);
-
-const LegendCard = () => (
-  <View style={styles.legendCard}>
-    <LegendPill status="notice" label="Notice" />
-    <LegendPill status="vacant" label="Vacant" />
-    <LegendPill status="filled" label="Filled" />
-    <LegendPill status="advance" label="Adv. Book" />
-  </View>
-);
-
-/* ────────────────────────────────────────────────────────────────
-   6 ▸  Floor + Sharing card
-   ──────────────────────────────────────────────────────────────── */
-function FloorBlock({
-  floor,
-  setOuterScroll,
-}: {
-  floor: FloorInfo;
-  setOuterScroll: (v: boolean) => void;
-}) {
-  const { width } = useWindowDimensions();
-  const cardW = Math.max(160, width * (width >= 780 ? 0.33 : 0.4));
-
-  return (
-    <View>
-      <Text style={styles.floorTitle}>{floor.name}</Text>
-
-      <FlatList
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        data={floor.groups}
-        keyExtractor={(g) => String(g.sharing)}
-        contentContainerStyle={{ gap: 14, paddingRight: 10 }}
-        renderItem={({ item }) => (
-          <View style={[styles.card, { width: cardW }]}>
-            <View style={styles.cardHeader}>
-              <MaterialCommunityIcons name="account-group" size={15} color="#2563EB" />
-              <Text style={styles.cardHeaderTxt}>{item.sharing} Sharing</Text>
-            </View>
-
-            <ScrollView
-              style={{ maxHeight: 210 }}
-              showsVerticalScrollIndicator={false}
-              nestedScrollEnabled /* android needs this */
-              onScrollBeginDrag={() => setOuterScroll(false)}
-              onScrollEndDrag={() => setOuterScroll(true)}
-              onMomentumScrollEnd={() => setOuterScroll(true)}
-              contentContainerStyle={styles.roomGrid}
-            >
-              {item.rooms.map((r) => (
-                <Pressable
-                  key={r.roomNo}
-                  onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
-                  android_ripple={{ color: "#E2E8F0" }}
-                  style={styles.roomTile}
-                >
-                  <Text style={styles.roomNo}>{r.roomNo}</Text>
-                  <View style={styles.bedRow}>
-                    {r.beds.map((b) => (
-                      <Bed key={b.id} status={b.status} />
-                    ))}
-                  </View>
-                </Pressable>
-              ))}
-            </ScrollView>
-          </View>
-        )}
-      />
-    </View>
-  );
-}
-
-/* ────────────────────────────────────────────────────────────────
-   7 ▸  styles
-   ──────────────────────────────────────────────────────────────── */
-const styles = StyleSheet.create({
-  body: { paddingHorizontal: 16, paddingTop: 28 },
-
-  /* legend card */
-  legendCard: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
-    padding: 12,
-    marginBottom: 12,
-    backgroundColor: "#FFFFFFCC",
-    borderRadius: 16,
-    borderWidth: 0.8,
-    borderColor: "#EEF1F4",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.04,
-    shadowRadius: 5,
-    elevation: 2,
-  },
-  legendPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#F8FAFC",
-    borderRadius: 16,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-  },
-  legendText: { fontSize: 13, color: Colors.textMuted },
-
-  /* floor */
-  floorTitle: { fontSize: 16, fontWeight: "700", color: Colors.textMain, marginBottom: 12 },
-
-  /* sharing card */
-  card: {
-    backgroundColor: "#FFFFFFCC",
-    borderRadius: 16,
-    padding: 12,
-    borderWidth: 0.8,
-    borderColor: "#EEF1F4",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.06,
-    shadowRadius: 7,
-    elevation: 4,
-  },
-  cardHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingBottom: 6,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderColor: "#E5E7EB",
-    marginBottom: 6,
-  },
-  cardHeaderTxt: { fontWeight: "700", color: "#2563EB", fontSize: 13 },
-
-  /* room grid */
-  roomGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  roomTile: {
-    flexBasis: "48%",
-    flexGrow: 1,
-    minWidth: 90,
-    marginBottom: 10,
-
-    borderWidth: 1, // a hair bolder
-    borderColor: "#CBD5E1", // slate‑300
-    borderRadius: 12,
-    padding: 10,
-    backgroundColor: "#F9FAFB", // very subtle surface tint
-
-    /* slight shadow on iOS / elevation on Android */
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  roomNo: {
-    alignSelf: "flex-start",
-    backgroundColor: "#EEF2FF", // indigo‑50
-    color: Colors.textAccent,
-
-    fontSize: 13,
-    fontWeight: "700",
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-    marginBottom: 6,
-  },
-  bedRow: { flexDirection: "row", flexWrap: "wrap" },
-});

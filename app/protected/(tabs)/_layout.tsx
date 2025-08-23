@@ -3,11 +3,8 @@ import TabBar from "@/src/components/TabBar";
 
 export default function Layout() {
   return (
-    <Tabs
-      screenOptions={{ headerShown: false }}
-      tabBar={(props) => <TabBar {...props} />}
-    >
-      <Tabs.Screen name="index" options={{ title: "Dashboard" }} />
+    <Tabs screenOptions={{ headerShown: false }} tabBar={(p) => <TabBar {...p} />}>
+      <Tabs.Screen name="Dashboard" options={{ title: "Dashboard" }} />
       <Tabs.Screen name="Rooms" options={{ title: "Rooms" }} />
       <Tabs.Screen name="Properties" options={{ title: "Properties" }} />
       <Tabs.Screen name="Tenants" options={{ title: "Tenants" }} />

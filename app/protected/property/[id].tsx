@@ -1,18 +1,22 @@
 import React, { useMemo, useState } from "react";
-import { ScrollView, StyleSheet, Text, FlatList } from "react-native";
+import { ScrollView, StyleSheet, Text } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import AppHeader from "@/src/components/AppHeader";
+
 import TopInfo from "@/src/components/property/TopInfo";
 import SegmentBar from "@/src/components/property/SegmentBar";
 import InfoCard from "@/src/components/property/InfoCard";
-import { pgProperties } from "@/src/constants/mockData";
-import { useWindowDimensions } from "react-native";
+import PGLayout from "@/src/components/property/PGLayout";
 import RoomsTab from "@/src/components/property/RoomsTab";
 import TenantsTab from "@/src/components/property/TenantsTab";
 import ExpensesTab from "@/src/components/property/ExpensesTab";
-import PGLayout from "@/src/components/property/PGLayout";
 
+import { pgProperties } from "@/src/constants/mockData";
+import { useTheme } from "@/src/theme/ThemeContext";
+
+/* ------------------------------------------------------------------ */
+/*  TAB SETUP                                                          */
+/* ------------------------------------------------------------------ */
 const TABS = [
   "Property Details",
   "PG Layout",
@@ -22,52 +26,60 @@ const TABS = [
   "Facilities",
   "Staff",
 ] as const;
+
 type TabKey = (typeof TABS)[number];
 
+/* ------------------------------------------------------------------ */
+/*  COMPONENT                                                          */
+/* ------------------------------------------------------------------ */
 export default function PropertyDetails() {
-  const { width } = useWindowDimensions();
-  /* ------------------------------------------------ props */
-  const { id, tab = TABS[0] } = useLocalSearchParams<{
-    id: string;
-    tab?: TabKey;
-  }>();
+  /* ---------------- hooks & params ---------------------------------- */
+  const { id, tab = TABS[0] } = useLocalSearchParams<{ id: string; tab?: TabKey }>();
   const router = useRouter();
+  const { colors, spacing, typography } = useTheme();
 
-  /* ------------------------------------------------ data */
-  const property = useMemo(
+  /* ---------------- memoised styles (theme-aware) ------------------- */
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        safeArea: {
+          flex: 1,
+          backgroundColor: colors.background,
+        },
+        bodyContent: {
+          padding: spacing.md,
+          gap: spacing.md,
+          paddingBottom: spacing.lg * 2, // bottom breathing room
+        },
+        placeholder: {
+          textAlign: "center",
+          marginTop: 60,
+          color: colors.textMuted,
+          fontSize: typography.fontSizeMd,
+        },
+      }),
+    [colors, spacing, typography]
+  );
+
+  /* ---------------- data -------------------------------------------- */
+  const property = React.useMemo(
     () => pgProperties.find((p) => p._id === id) ?? pgProperties[0],
     [id]
   );
 
-  /* ------------------------------------------------ local state */
+  /* ---------------- tab state --------------------------------------- */
   const [activeTab, setActiveTab] = useState<TabKey>(tab as TabKey);
 
-  /* ------------------------------------------------ render */
+  /* ---------------- render ------------------------------------------ */
   return (
-    <SafeAreaView style={{ flex: 1 }} edges={["left", "right"]}>
-      <AppHeader
-        showBack
-        onBackPress={() => router.replace("/protected/(tabs)")}
-        avatarUri=""
-        propertyOptions={[]}
-        selectedId=""
-        onSelectProperty={() => {}}
-      />
+    <SafeAreaView style={styles.safeArea} edges={["left", "right"]}>
+      {/* ---- Hero header with name & address ---- */}
+      <TopInfo name={property.propertyName} area={property.area} city={property.city} />
 
-      {/* hero / address */}
-      <TopInfo
-        name={property.propertyName}
-        area={property.area}
-        city={property.city}
-      />
+      {/* ---- Internal segment bar ---- */}
+      <SegmentBar tabs={TABS} value={activeTab} onChange={(t) => setActiveTab(t as TabKey)} />
 
-      {/* internal tabs */}
-      <SegmentBar
-        tabs={TABS}
-        value={activeTab}
-        onChange={(t) => setActiveTab(t as TabKey)}
-      />
-
+      {/* ---- Conditional tab bodies ---- */}
       {activeTab === "PG Layout" ? (
         <PGLayout />
       ) : activeTab === "Rooms" ? (
@@ -77,15 +89,15 @@ export default function PropertyDetails() {
       ) : activeTab === "Expenses" ? (
         <ExpensesTab />
       ) : (
-        /* other tabs keep the ScrollView */
+        /* All remaining tabs share the simple ScrollView wrapper */
         <ScrollView
           style={{ flex: 1 }}
           contentContainerStyle={styles.bodyContent}
           showsVerticalScrollIndicator={false}
         >
-          {activeTab === "Property Details" && (
+          {activeTab === "Property Details" && (
             <InfoCard
-              title="Total Beds"
+              title="Total Beds"
               value={property.metadata.totalBeds}
               sub={{
                 Vacant: property.metadata.vacantBeds,
@@ -95,34 +107,22 @@ export default function PropertyDetails() {
               }}
             />
           )}
-          {/* {activeTab === "Tenants" && <Placeholder l="Tenants list goes here…" />} */}
-          {/* {activeTab === "Tenants" && <TenantsTab />} */}
-          {activeTab === "Expenses" && (
-            <Placeholder l="Expenses list goes here…" />
-          )}
+
           {activeTab === "Facilities" && (
-            <Placeholder l="Facilities list goes here…" />
+            <Placeholder label="Facilities list goes here…" style={styles.placeholder} />
           )}
-          {activeTab === "Staff" && <Placeholder l="Staff list goes here…" />}
+          {activeTab === "Staff" && (
+            <Placeholder label="Staff list goes here…" style={styles.placeholder} />
+          )}
         </ScrollView>
       )}
     </SafeAreaView>
   );
 }
 
-const Placeholder = ({ l }: { l: string }) => (
-  <Text
-    style={{
-      textAlign: "center",
-      marginTop: 60,
-      color: "#9CA3AF",
-      fontSize: 16,
-    }}
-  >
-    {l}
-  </Text>
-);
-
-const styles: any = StyleSheet.create({
-  body: { padding: 16, gap: 14, paddingBottom: 50 },
-});
+/* ------------------------------------------------------------------ */
+/*  SMALL UTILITY                                                      */
+/* ------------------------------------------------------------------ */
+function Placeholder({ label, style }: { label: string; style: any }) {
+  return <Text style={style}>{label}</Text>;
+}

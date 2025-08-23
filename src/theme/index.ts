@@ -1,20 +1,59 @@
+export const hexToRgba = (hex: string, opacity: number = 1): string => {
+  let cleanedHex = hex.replace("#", "");
+
+  if (cleanedHex.length === 3) {
+    cleanedHex = cleanedHex
+      .split("")
+      .map((char) => char + char)
+      .join("");
+  }
+
+  const r = parseInt(cleanedHex.slice(0, 2), 16);
+  const g = parseInt(cleanedHex.slice(2, 4), 16);
+  const b = parseInt(cleanedHex.slice(4, 6), 16);
+
+  return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+};
+
 export const lightTheme = {
   colors: {
-    primary: "#256D85",
+    primary: "#6c3fc0",
+    circle1: "#c0ebc9",
+    circle2: "#6c3fc0",
+    background2: "#f8f6fcff",
+    borderColor: "#d9c8f8ff",
+    tabActiveBg: "#E3F2FD",
+    tabInactive: "#7A7A7A",
+    accent: "#6c3fc0",
+    tabSurface: "#e0d7f0ff",
+
     background: "#FFFFFF",
+    surface: "#F8F9FA",
+    cardBackground: "#f8f6fcff",
+    cardSurface: "#F8F9FA",
     textPrimary: "#212529",
     textSecondary: "#6C757D",
-    textMuted: "#B3a9a3",
-    surface: "#F8F9FA",
+    textMuted: "#9CA3AF",
+    link: "#4A86F7",
+    moreTabBackground: "#dae9f9ff",
+    error: "#EF4444",
+    success: "#28a745",
+    disabled: "#CCCCCC",
+    disabledGradient: ["#848383ff", "#545353ff"],
+    enabledGradient: ["#6c3fc0", "#8b6cc5ff"],
+    backDrop: "rgba(0,0,0,0.8)",
+    shadow: "rgba(0,0,0,0.12)",
+    shadow2: "rgba(0,0,0,0.72)",
     white: "#FFFFFF",
-    error: "red", // Included for validation or error messages
-    success: "#28a745", // (Optional)
-    totalBeds: "#00f",
+    black: "#1c1c1cff",
+    textWhite: "#FFFFFF",
+    totalBeds: "#0000FF",
     availableBeds: "#0a892e",
     advBookedBeds: "#ed6d10",
     filledBeds: "#c80b0b",
     underNoticeBeds: "#6c3fc0",
   },
+
   spacing: {
     xs: 4,
     sm: 8,
@@ -22,52 +61,70 @@ export const lightTheme = {
     lg: 24,
     xl: 32,
   },
-  typography: {
-    fontSizeSmall: 14,
-    fontSizeMedium: 16,
-    fontSizeLarge: 22,
-    fontWeightLight: "300",
-    fontWeightRegular: "400",
-    fontWeightBold: "700",
+
+  radius: {
+    sm: 4,
+    md: 8,
+    lg: 12,
+    xl: 16,
+    xxl: 20,
+    extraLarge: 30,
+    extremeLarge: 55,
+    full: 999,
   },
+
+  typography: {
+    fontSizeSm: 14,
+    fontSizeMd: 16,
+    fontSizeLg: 22,
+    weightLight: "300",
+    weightNormal: "400",
+    weightBold: "700",
+  },
+
   button: {
     primary: {
-      backgroundColor: "#007BFF",
-      color: "#FFFFFF",
-      padding: 16,
-      borderRadius: 8,
-      fontSize: 16,
-      fontWeight: "600",
+      bg: "#007BFF",
+      fg: "#FFFFFF",
+      pad: 16,
+      rad: 8,
+      largeRad: 12,
+      fSize: 16,
+      weight: "600",
     },
   },
-  borderRadius: {
-    small: 4,
-    medium: 8,
-    large: 12,
-  },
-};
+} as const;
 
 export const darkTheme: typeof lightTheme = {
+  ...lightTheme,
   colors: {
-    primary: "#256D85",
-    background: "#121212",
+    ...lightTheme.colors,
+    borderColor: "#412674ff",
+    background2: "#261641ff",
+    tabSurface: "#1a0f2eff",
+    background: "#0e0d0dff",
+
+    surface: "#1F1F1F",
+
+    cardBackground: "#260c56ff",
+    cardSurface: "#130b22ff",
+
     textPrimary: "#FFFFFF",
     textSecondary: "#B0B0B0",
-    textMuted: "#8a8a8a",
-    surface: "#1F1F1F",
-    white: "#000000", // ⚠️ This is a bit confusing — black is not "white". Consider renaming.
-    error: "red", // ✅ Add this for parity
-    success: "#28a745", // ✅ Optional
-    totalBeds: "#00f",
-    availableBeds: "#0a892e",
-    advBookedBeds: "#ed6d10",
-    filledBeds: "#c80b0b",
-    underNoticeBeds: "#6c3fc0",
+    textMuted: "#8A8A8A",
+    tabBackground: "#112621ff",
+    moreTabBackground: "#1f1f20ff",
+
+    circle1: "#368070ff",
+    circle2: "#6c3fc0",
+    white: "#1c1c1cff",
+    black: "#FFFFFF",
+
+    accent: "#834de7ff",
+    tabActiveBg: "#204d57ff",
+    tabInactive: "#9CA3AF",
+    disabledGradient: ["#e0dedeff", "#abababff"],
   },
-  spacing: lightTheme.spacing,
-  typography: lightTheme.typography,
-  button: lightTheme.button,
-  borderRadius: lightTheme.borderRadius,
 };
 
 export type AppTheme = typeof lightTheme;

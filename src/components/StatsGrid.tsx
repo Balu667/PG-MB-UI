@@ -1,6 +1,4 @@
-// src/components/StatsGrid/StatsGrid.tsx
-//------------------------------------------------------------
-import React from "react";
+import React, { useMemo } from "react";
 import {
   View,
   Text,
@@ -11,7 +9,9 @@ import {
   ViewStyle,
 } from "react-native";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-import Colors from "@/src/constants/Colors";
+
+import { useTheme } from "@/src/theme/ThemeContext";
+import { hexToRgba } from "@/src/theme";
 
 /* ------------------------------------------------------------------ */
 export interface Metric {
@@ -25,8 +25,10 @@ export interface Metric {
 
 export interface StatsGridProps {
   metrics: Metric[];
-  minVisible?: 2 | 3 | 4; // default 2
-  cardHeight?: number; // default now 88
+  /** guarantee at least this many cards are visible without horizontal scroll */
+  minVisible?: 2 | 3 | 4;
+  /** fixed card height (defaults to 88) */
+  cardHeight?: number;
   style?: ViewStyle;
 }
 
@@ -38,22 +40,65 @@ const StatsGrid: React.FC<StatsGridProps> = ({
   style,
 }) => {
   const { width } = useWindowDimensions();
+  const { colors, spacing, radius } = useTheme();
 
-  /* --------------- sizing ---------------------------------------- */
-  const GAP = 14;
-  const SIDE_PADDING = 32;
-  const MIN_CARD_W = 116; // ← smaller
+  /* ---------- sizing ------------------------------------------------ */
+  const GAP = spacing.md - 2; // 14 with default spacing
+  const SIDE_PADDING = spacing.lg + 8; // keeps first/last card visible
+  const MIN_CARD_W = 116;
+
   const targetCols = Math.max(minVisible, Math.floor(width / 140));
   const cardW = React.useMemo(
     () => Math.max(MIN_CARD_W, (width - SIDE_PADDING - GAP * (targetCols - 1)) / targetCols),
     [width, targetCols]
   );
 
-  /* --------------- font helper ----------------------------------- */
+  /* ---------- font clamp helper ------------------------------------ */
   const clamp = (min: number, v: number, max: number) =>
     Math.max(min, Math.min(v, max)) / PixelRatio.getFontScale();
 
-  /* --------------- render ---------------------------------------- */
+  /* ---------- themed styles (memo) --------------------------------- */
+  const s = useMemo(
+    () =>
+      StyleSheet.create({
+        card: {
+          borderColor: colors.borderColor,
+          borderWidth: 1,
+          backgroundColor: colors.cardBackground,
+          borderRadius: radius.lg,
+          paddingVertical: spacing.md - 2,
+          paddingHorizontal: spacing.md - 2,
+          justifyContent: "space-between",
+
+          shadowColor: colors.shadow,
+          shadowOffset: { width: 0, height: 5 },
+          shadowOpacity: 0.07,
+          shadowRadius: 10,
+          elevation: 4,
+        },
+        iconBubble: {
+          width: 34,
+          height: 34,
+          borderRadius: 17,
+          alignItems: "center",
+          justifyContent: "center",
+          alignSelf: "flex-end",
+          marginBottom: 4,
+        },
+        value: {
+          fontWeight: "700",
+          color: colors.textPrimary,
+        },
+        label: {
+          color: colors.textSecondary,
+          lineHeight: 18,
+          fontWeight: "600",
+        },
+      }),
+    [colors, spacing, radius]
+  );
+
+  /* ---------- render ------------------------------------------------ */
   return (
     <FlatList
       horizontal
@@ -64,81 +109,51 @@ const StatsGrid: React.FC<StatsGridProps> = ({
       decelerationRate="fast"
       contentContainerStyle={[
         {
-          paddingLeft: 16,
-          paddingRight: 16 - GAP,
-          paddingVertical: 14,
+          paddingLeft: spacing.md,
+          paddingRight: spacing.md - GAP,
+          paddingVertical: spacing.md - 2,
           gap: GAP,
         },
         style,
       ]}
       renderItem={({ item }) => (
-        <View style={[styles.card, { width: cardW, minHeight: cardHeight }]}>
+        <View style={[s.card, { width: cardW, minHeight: cardHeight }]}>
           {item.icon && (
-            <View style={[styles.iconBubble, { backgroundColor: item.iconBg ?? "#E5F0FF" }]}>
+            <View
+              style={[
+                s.iconBubble,
+                {
+                  backgroundColor: item.iconBg ?? hexToRgba(colors.primary, 0.12),
+                },
+              ]}
+            >
               <MaterialCommunityIcons
                 name={item.icon}
                 size={17}
-                color={item.iconColor ?? Colors.primary}
+                color={item.iconColor ?? colors.primary}
               />
             </View>
           )}
 
           <Text
-            style={[styles.value, { fontSize: clamp(18, cardW * 0.16, 30) }]}
+            style={[s.value, { fontSize: clamp(18, cardW * 0.16, 30) }]}
             numberOfLines={1}
             adjustsFontSizeToFit
           >
             {item.value}
           </Text>
 
-          <Text
-            style={[styles.label, { fontSize: clamp(11, cardW * 0.095, 15) }]}
-            numberOfLines={2}
-          >
+          <Text style={[s.label, { fontSize: clamp(11, cardW * 0.095, 15) }]} numberOfLines={2}>
             {item.label}
           </Text>
         </View>
       )}
-      /* enable wrap on big screens */
+      /* filler to keep last card fully visible */
       ListFooterComponent={() => <View style={{ width: SIDE_PADDING }} />}
+      /* allow wrapping on tablets / web */
       numColumns={width >= 780 ? Math.min(metrics.length, targetCols) : 1}
     />
   );
 };
-
-/* ------------------------------------------------------------------ */
-const styles = StyleSheet.create({
-  card: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16, // slightly tighter radius
-    paddingVertical: 14,
-    paddingHorizontal: 14,
-    justifyContent: "space-between",
-
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.07,
-    shadowRadius: 10,
-    elevation: 4,
-  },
-  iconBubble: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    alignItems: "center",
-    justifyContent: "center",
-    alignSelf: "flex-end",
-    marginBottom: 4,
-  },
-  value: {
-    fontWeight: "700",
-    color: "#111827",
-  },
-  label: {
-    color: "#4B5563",
-    lineHeight: 18,
-    fontWeight: "600",
-  },
-});
 
 export default StatsGrid;
