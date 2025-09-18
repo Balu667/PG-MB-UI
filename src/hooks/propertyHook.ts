@@ -19,8 +19,7 @@ interface FetchResponse {
 
 const useGetPropertyList = (profileData: ProfileData) => {
   const { userId: id, role } = profileData;
-  const url =
-    role === 1 ? `properties/owner/${id}` : `employees/properties/${id}`;
+  const url = role === 1 ? `properties/owner/${id}` : `employees/properties/${id}`;
 
   return useQuery({
     queryKey: ["propertyList", id],
@@ -44,29 +43,22 @@ const useGetPropertyData = (id: string) => {
 const useGetPropertyDetailsList = (profileData: any) => {
   const id = profileData?.userId;
   const url =
-    profileData?.role === 1
-      ? `propertiesDetails/${id}`
-      : `employees/propertiesDetails/${id}`;
+    profileData?.role === 1 ? `propertiesDetails/${id}` : `employees/propertiesDetails/${id}`;
 
   return useQuery({
     queryKey: ["propertyDetailsList", id],
     queryFn: async () => {
       const response = await fetchData({ url });
-      console.log("Property Details Response:", response);
       return response?.data;
     },
     enabled: !!id,
   });
 };
 
-const useInsertProperty = (
-  onSuccessFunctions: (data: FetchResponse) => void,
-  id: string
-) => {
+const useInsertProperty = (onSuccessFunctions: (data: FetchResponse) => void, id: string) => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data: FormData) =>
-      fetchData({ url: "properties", method: "POST", body: data }),
+    mutationFn: (data: FormData) => fetchData({ url: "properties", method: "POST", body: data }),
     onError: (error: Error) => {
       Alert.alert("Error", error.message);
     },
@@ -79,19 +71,10 @@ const useInsertProperty = (
   });
 };
 
-const useUpdateProperty = (
-  onSuccessFunctions: (data: FetchResponse) => void,
-  id: string
-) => {
+const useUpdateProperty = (onSuccessFunctions: (data: FetchResponse) => void, id: string) => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({
-      formData,
-      propertyId,
-    }: {
-      formData: FormData;
-      propertyId: string;
-    }) =>
+    mutationFn: ({ formData, propertyId }: { formData: FormData; propertyId: string }) =>
       fetchData({
         url: `properties/${propertyId}`,
         method: "PUT",
@@ -109,18 +92,10 @@ const useUpdateProperty = (
   });
 };
 
-const useDeletePropertyImage = (
-  onSuccessFunctions: (data: FetchResponse) => void
-) => {
+const useDeletePropertyImage = (onSuccessFunctions: (data: FetchResponse) => void) => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({
-      payload,
-      propertyId,
-    }: {
-      payload: any;
-      propertyId: string;
-    }) =>
+    mutationFn: ({ payload, propertyId }: { payload: any; propertyId: string }) =>
       fetchData({
         url: `properties/${propertyId}/images`,
         method: "DELETE",
@@ -160,8 +135,7 @@ const useGetPropertyMertics = (onSuccessFunctions: (data: any) => void) => {
 
 const useGetStateCityList = (onSuccessFunctions: (data: any) => void) => {
   return useMutation({
-    mutationFn: (stateCode: string) =>
-      fetchData({ url: `cities/${stateCode}`, method: "GET" }),
+    mutationFn: (stateCode: string) => fetchData({ url: `cities/${stateCode}`, method: "GET" }),
     onError: (error: Error) => {
       Alert.alert("Error", error.message);
     },

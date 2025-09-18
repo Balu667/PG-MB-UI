@@ -62,8 +62,6 @@ export default function RootLayout() {
         <QueryClientProvider client={queryClient}>
           <ThemeProvider>
             <PaperProvider>
-              {" "}
-              {/* ✅ Wrap your app here */}
               <GestureHandlerRootView style={styles.container}>
                 <StatusBar style="auto" />
                 <Toast />
