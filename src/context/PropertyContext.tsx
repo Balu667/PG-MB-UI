@@ -12,7 +12,7 @@ type Property = {
 type Ctx = {
   properties: Property[];
   selectedId: string | undefined;
-  setSelected: (id: string) => void;
+  setSelected: any;
   loading: boolean;
 };
 
@@ -22,7 +22,7 @@ export const PropertyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const { profileData } = useSelector((state: any) => state.profileDetails);
   const { isLoading, data: propertyData = [] } = useGetPropertyDetailsList(profileData);
 
-  const [selectedId, setSelectedId] = useState<string | undefined>();
+  const [selectedId, setSelectedId] = useState<any>();
 
   // pick first property by default
   useEffect(() => {

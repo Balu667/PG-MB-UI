@@ -17,6 +17,7 @@ import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { hexToRgba } from "../theme";
 import { Menu, Portal, Dialog, Button } from "react-native-paper";
+import { useProperty } from "@/src/context/PropertyContext";
 
 interface PropertyMetadata {
   totalBeds?: number;
@@ -58,7 +59,7 @@ const PropertyCard = ({ data, onPress, onDelete }: PropertyCardProps) => {
   const theme = useTheme();
   const { width: screenWidth, fontScale } = useWindowDimensions();
   const router = useRouter();
-
+  const { setSelected } = useProperty();
   const scale = React.useRef(new Animated.Value(1)).current;
   let numColumns = 2;
   if (screenWidth >= 900) numColumns = 3;
@@ -77,8 +78,19 @@ const PropertyCard = ({ data, onPress, onDelete }: PropertyCardProps) => {
     ]).start();
 
     if (Platform.OS !== "web") Haptics.selectionAsync();
-    onPress && onPress();
-    router.push(`/protected/property/${data._id}`);
+
+    // ✅ Keep the global selection in sync with the card the user tapped
+    try {
+      // this comes from your PropertyContext
+      // import { useProperty } from "@/src/context/PropertyContext";
+      // const { setSelected } = useProperty();
+      setMenuOpen(false);
+      setConfirmOpen(false);
+      setSelected?.(data._id);
+    } catch {}
+
+    if (onPress) onPress();
+    else router.push(`/protected/property/${data._id}`);
   };
 
   const statsConfig = [

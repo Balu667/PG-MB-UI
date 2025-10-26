@@ -1,7 +1,8 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { ScrollView, StyleSheet, Text } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { useProperty } from "@/src/context/PropertyContext";
 
 import TopInfo from "@/src/components/property/TopInfo";
 import SegmentBar from "@/src/components/property/SegmentBar";
@@ -35,8 +36,10 @@ type TabKey = (typeof TABS)[number];
 export default function PropertyDetails() {
   /* ---------------- hooks & params ---------------------------------- */
   const { id, tab = TABS[0] } = useLocalSearchParams<{ id: string; tab?: TabKey }>();
+  console.log(id, "---------");
   const router = useRouter();
   const { colors, spacing, typography } = useTheme();
+  const { selectedId } = useProperty();
 
   /* ---------------- memoised styles (theme-aware) ------------------- */
   const styles = useMemo(
@@ -69,6 +72,15 @@ export default function PropertyDetails() {
 
   /* ---------------- tab state --------------------------------------- */
   const [activeTab, setActiveTab] = useState<TabKey>(tab as TabKey);
+  useEffect(() => {
+    if (!selectedId) return;
+    if (selectedId !== id) {
+      router.replace({
+        pathname: `/protected/property/${selectedId}`,
+        params: { tab: activeTab },
+      });
+    }
+  }, [selectedId]);
 
   /* ---------------- render ------------------------------------------ */
   return (
@@ -120,9 +132,6 @@ export default function PropertyDetails() {
   );
 }
 
-/* ------------------------------------------------------------------ */
-/*  SMALL UTILITY                                                      */
-/* ------------------------------------------------------------------ */
 function Placeholder({ label, style }: { label: string; style: any }) {
   return <Text style={style}>{label}</Text>;
 }

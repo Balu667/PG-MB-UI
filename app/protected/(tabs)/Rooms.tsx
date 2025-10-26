@@ -1,16 +1,29 @@
+// app/protected/(tabs)/Rooms.tsx
 import { useRouter } from "expo-router";
-import { useEffect } from "react";
-// import { pgProperties } from "@/src/constants/mockData"; // same dummy list
-import { pgProperties } from "@/src/constants/mockData";
+import { useEffect, useRef } from "react";
+import { useProperty } from "@/src/context/PropertyContext";
 
 export default function RedirectRooms() {
   const router = useRouter();
+  const { selectedId, loading, properties } = useProperty();
+  const navigated = useRef(false);
+
   useEffect(() => {
-    const firstId = pgProperties[0]._id; // later: use selectedId in redux
-    router.replace({
-      pathname: `/protected/property/${firstId}`,
-      params: { tab: "Rooms" }, // or "Tenants"
-    });
-  }, []);
+    if (navigated.current) return; // prevent duplicate replace()
+    if (loading) return; // wait for context data
+
+    if (selectedId) {
+      navigated.current = true;
+      router.replace({
+        pathname: `/protected/property/${selectedId}`,
+        params: { tab: "Rooms" },
+      });
+    } else {
+      // No properties available -> send user to list
+      navigated.current = true;
+      router.replace("/protected/(tabs)/Properties");
+    }
+  }, [selectedId, loading, router, properties?.length]);
+
   return null;
 }
