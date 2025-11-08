@@ -12,12 +12,15 @@ import PGLayout from "@/src/components/property/PGLayout";
 import RoomsTab from "@/src/components/property/RoomsTab";
 import TenantsTab from "@/src/components/property/TenantsTab";
 import ExpensesTab from "@/src/components/property/ExpensesTab";
+import AdvanceBookingTab from "@/src/components/property/AdvanceBookingTab";
+import DuesTab from "@/src/components/property/DuesTab";
+import CollectionsTab from "@/src/components/property/CollectionsTab";
 
 import { useTheme } from "@/src/theme/ThemeContext";
 import { useGetAllRooms } from "@/src/hooks/room";
 import { useGetAllTenants } from "@/src/hooks/tenants";
 import { useGetDailyExpensesList } from "@/src/hooks/dailyExpenses";
-import { useGetPropertyDetails } from "@/src/hooks/bookingHook"; // ⬅️ NEW
+import { useGetPropertyDetails } from "@/src/hooks/bookingHook";
 
 import type { Metric } from "@/src/components/StatsGrid";
 
@@ -25,10 +28,12 @@ import type { Metric } from "@/src/components/StatsGrid";
 const TABS = [
   "Property Details",
   "PG Layout",
+  "Advance Booking",
   "Rooms",
   "Tenants",
   "Expenses",
-  "Facilities",
+  "Dues",
+  "Collections",
   "Staff",
 ] as const;
 type TabKey = (typeof TABS)[number];
@@ -56,7 +61,7 @@ type TenantsMeta = {
 const num = (v: any, fallback = 0) => (typeof v === "number" ? v : Number(v ?? fallback)) || 0;
 const str = (v: any, fallback = "") => (v == null ? fallback : String(v));
 
-/* ---------- Rooms + Tenants parsing (existing, unchanged) ---------- */
+/* ---------- Rooms parsing ---------- */
 const computeRoomsMetaFromList = (rooms: any[]): RoomsMeta => {
   let totalBeds = 0,
     vacantBeds = 0,
@@ -150,7 +155,7 @@ const parseRoomsResponse = (raw: any): { rooms: any[]; meta: RoomsMeta } => {
   return { rooms: [], meta: computeRoomsMetaFromList([]) };
 };
 
-/** Robust tenants parser (existing) */
+/** Robust tenants parser (shared) */
 const parseTenantsResponse = (raw: any): { tenants: any[]; meta: TenantsMeta } => {
   const emptyMeta: TenantsMeta = {
     totalTenants: 0,
@@ -230,9 +235,9 @@ const parseTenantsResponse = (raw: any): { tenants: any[]; meta: TenantsMeta } =
 type BedStatus = "vacant" | "filled" | "notice" | "advance";
 type UILayout = {
   floors: Array<{
-    name: string; // "1st Floor"
+    name: string;
     groups: Array<{
-      sharing: number; // beds count
+      sharing: number;
       rooms: Array<{
         roomNo: string;
         beds: Array<{ id: string; status: BedStatus }>;
@@ -264,7 +269,6 @@ const toOrdinal = (n?: number) => {
 };
 
 const statusFromTenantCodes = (codes: number[]): BedStatus => {
-  // precedence: notice > advance > filled > vacant
   if (codes.some((c) => c === 2)) return "notice";
   if (codes.some((c) => c === 3)) return "advance";
   if (codes.some((c) => c === 1)) return "filled";
@@ -277,7 +281,6 @@ const parsePropertyLayout = (raw: any): UILayout => {
     const roomsByFloor: any[] = Array.isArray(root?.roomsByFloor) ? root.roomsByFloor : [];
     const md = root?.metaData ?? {};
 
-    // Build metrics from metaData (fallback to 0s)
     const metrics: Metric[] = [
       {
         key: "rooms",
@@ -311,21 +314,16 @@ const parsePropertyLayout = (raw: any): UILayout => {
       },
     ];
 
-    // Build floors → groups (by sharing) → rooms → beds(status)
     const floors = roomsByFloor.map((floor) => {
       const floorName = toOrdinal(num(floor?._id));
       const rooms: any[] = Array.isArray(floor?.rooms) ? floor.rooms : [];
-
       const bySharing = new Map<number, { sharing: number; rooms: any[] }>();
 
       rooms.forEach((r) => {
         const sharing = num(r?.beds);
         if (!sharing) return;
 
-        // initialize vacancies for N beds
         const statuses: BedStatus[] = Array.from({ length: sharing }, () => "vacant");
-
-        // map bedsPerRoom → status
         const bpr: any[] = Array.isArray(r?.bedsPerRoom) ? r.bedsPerRoom : [];
         bpr.forEach((b) => {
           const idx = bedIndexFromLetter(b?.bedNumber);
@@ -337,7 +335,6 @@ const parsePropertyLayout = (raw: any): UILayout => {
           statuses[idx] = st;
         });
 
-        // produce UI room entry
         const uiRoom = {
           roomNo: String(r?.roomNo ?? ""),
           beds: statuses.map((s, i) => ({ id: BED_LETTERS[i] ?? String(i + 1), status: s })),
@@ -348,7 +345,6 @@ const parsePropertyLayout = (raw: any): UILayout => {
         bySharing.set(sharing, g);
       });
 
-      // sort groups by sharing asc; sort rooms by roomNo asc (string)
       const groups = Array.from(bySharing.values())
         .sort((a, b) => a.sharing - b.sharing)
         .map((g) => ({
@@ -363,7 +359,6 @@ const parsePropertyLayout = (raw: any): UILayout => {
 
     return { floors, metrics };
   } catch {
-    // fail safe
     return { floors: [], metrics: [] };
   }
 };
@@ -386,12 +381,7 @@ export default function PropertyDetails() {
           color: colors.textMuted,
           fontSize: typography.fontSizeMd,
         },
-        topLoading: {
-          padding: spacing.md,
-          flexDirection: "row",
-          alignItems: "center",
-          gap: 10,
-        },
+        topLoading: { padding: spacing.md, flexDirection: "row", alignItems: "center", gap: 10 },
       }),
     [colors, spacing, typography]
   );
@@ -409,17 +399,25 @@ export default function PropertyDetails() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
 
-  /* ------------------------ existing data hooks ------------------------ */
+  /* ------------------------ data hooks ------------------------ */
   const roomsQuery = useGetAllRooms(id as string);
   const { rooms, meta: roomsMeta } = useMemo(
     () => parseRoomsResponse(roomsQuery?.data),
     [roomsQuery?.data]
   );
 
-  const tenantsQuery = useGetAllTenants(id as string, "");
-  const { tenants, meta: tenantsMeta } = useMemo(
-    () => parseTenantsResponse(tenantsQuery?.data),
-    [tenantsQuery?.data]
+  // IMPORTANT: Two separate tenant queries with params (matches web)
+  const tenantsActiveQuery = useGetAllTenants(id as string, "?status=1,2");
+  const tenantsAdvanceQuery = useGetAllTenants(id as string, "?status=3,5,6");
+
+  const { tenants: tenantsActive, meta: tenantsMeta } = useMemo(
+    () => parseTenantsResponse(tenantsActiveQuery?.data),
+    [tenantsActiveQuery?.data]
+  );
+
+  const { tenants: tenantsAdvance } = useMemo(
+    () => parseTenantsResponse(tenantsAdvanceQuery?.data),
+    [tenantsAdvanceQuery?.data]
   );
 
   const expensesQuery = useGetDailyExpensesList(id as string);
@@ -428,9 +426,20 @@ export default function PropertyDetails() {
     [expensesQuery?.data]
   );
 
-  /* ------------------------- NEW: layout hook -------------------------- */
   const layoutQuery = useGetPropertyDetails(id as string);
   const layout = useMemo(() => parsePropertyLayout(layoutQuery?.data), [layoutQuery?.data]);
+
+  // Dues should consider both active & advance lists (dedupe by _id/id)
+  const dueTenants = useMemo(() => {
+    const all = [...(tenantsActive ?? []), ...(tenantsAdvance ?? [])];
+    const seen = new Set<string>();
+    return all.filter((t: any) => {
+      const key = String(t?._id ?? t?.id ?? "");
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return num(t?.due) > 0;
+    });
+  }, [tenantsActive, tenantsAdvance]);
 
   /* --------------------------- header info ----------------------------- */
   const currentProperty = useMemo(() => properties?.find?.((p) => p?._id === id), [properties, id]);
@@ -458,6 +467,12 @@ export default function PropertyDetails() {
           refreshing={!!layoutQuery?.isFetching}
           onRefresh={layoutQuery?.refetch}
         />
+      ) : activeTab === "Advance Booking" ? (
+        <AdvanceBookingTab
+          data={tenantsAdvance ?? []}
+          refreshing={!!tenantsAdvanceQuery?.isFetching}
+          onRefresh={tenantsAdvanceQuery?.refetch}
+        />
       ) : activeTab === "Rooms" ? (
         <RoomsTab
           data={rooms}
@@ -467,16 +482,31 @@ export default function PropertyDetails() {
         />
       ) : activeTab === "Tenants" ? (
         <TenantsTab
-          data={tenants}
+          data={tenantsActive ?? []}
           meta={tenantsMeta}
-          refreshing={!!tenantsQuery?.isFetching}
-          onRefresh={tenantsQuery?.refetch}
+          refreshing={!!tenantsActiveQuery?.isFetching}
+          onRefresh={tenantsActiveQuery?.refetch}
         />
       ) : activeTab === "Expenses" ? (
         <ExpensesTab
           data={expenses}
           refreshing={!!expensesQuery?.isFetching}
           onRefresh={expensesQuery?.refetch}
+        />
+      ) : activeTab === "Dues" ? (
+        <DuesTab
+          data={dueTenants}
+          refreshing={!!tenantsActiveQuery?.isFetching || !!tenantsAdvanceQuery?.isFetching}
+          onRefresh={() => {
+            tenantsActiveQuery?.refetch?.();
+            tenantsAdvanceQuery?.refetch?.();
+          }}
+        />
+      ) : activeTab === "Collections" ? (
+        <CollectionsTab
+          data={[]} // plug in API later
+          refreshing={false}
+          onRefresh={() => {}}
         />
       ) : (
         <ScrollView
@@ -495,9 +525,6 @@ export default function PropertyDetails() {
                 Notice: roomsMeta.underNoticeBeds,
               }}
             />
-          )}
-          {activeTab === "Facilities" && (
-            <Placeholder label="Facilities list goes here…" style={styles.placeholder} />
           )}
           {activeTab === "Staff" && (
             <Placeholder label="Staff list goes here…" style={styles.placeholder} />

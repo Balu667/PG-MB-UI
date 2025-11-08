@@ -42,6 +42,18 @@ const sections: Section[] = [{ key: "dateRange", label: "Date Range", mode: "dat
 const toDDMMYYYY = (d: Date) =>
   d.toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" });
 
+const startOfDayLocal = (d: Date) =>
+  new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+const endOfDayLocal = (d: Date) =>
+  new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
+
+const normalizeRange = (from?: Date, to?: Date) => {
+  if (from && to && to.getTime() < from.getTime()) {
+    return { from: to, to: from };
+  }
+  return { from, to };
+};
+
 /* ---------- Component ---------- */
 export default function ExpensesTab({ data, refreshing, onRefresh }: Props) {
   const { width } = useWindowDimensions();
@@ -50,17 +62,23 @@ export default function ExpensesTab({ data, refreshing, onRefresh }: Props) {
 
   const columns = width >= 1000 ? 3 : width >= 740 ? 2 : 1;
 
-  // normalize API → UI items (stable reference when data changes)
+  // normalize API → UI items; **only include status: 1**
   const baseList: ExpenseItem[] = useMemo(() => {
     if (!Array.isArray(data)) return [];
     return data
       .map((e) => {
-        const dateObj = e?.date ? new Date(e.date) : null;
+        // ignore everything where status !== 1
+        const statusNum = Number(e?.status ?? 0);
+        if (statusNum !== 1) return null;
+
+        const dateIso = e?.date as string | undefined;
+        const dateObj = dateIso ? new Date(dateIso) : null;
         if (!dateObj || isNaN(dateObj.getTime())) return null;
+
         return {
           id: String(e?._id ?? e?.id ?? ""),
           date: toDDMMYYYY(dateObj),
-          amount: Number(e?.amount ?? 0),
+          amount: Number(e?.amount ?? 0) || 0,
           category: String(e?.category ?? "Other"),
           description: String(e?.description ?? ""),
           _dateObj: dateObj,
@@ -73,30 +91,36 @@ export default function ExpensesTab({ data, refreshing, onRefresh }: Props) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [filter, setFilter] = useState<ExpenseFilter>(emptyExpenseFilter);
 
-  // apply search + date filters
+  // apply search + inclusive date filters
   const expenses = useMemo(() => {
     let list = baseList;
 
     if (query.trim()) {
       const q = query.trim().toLowerCase();
       list = list.filter(
-        (e) => e.category.toLowerCase().includes(q) || e.description.toLowerCase().includes(q)
+        (e) => e.category?.toLowerCase?.().includes(q) || e.description?.toLowerCase?.().includes(q)
       );
     }
 
-    const { from, to } = filter.dateRange;
-    if (from) list = list.filter((e) => e._dateObj >= from);
-    if (to) list = list.filter((e) => e._dateObj <= to);
+    const { from, to } = normalizeRange(filter?.dateRange?.from, filter?.dateRange?.to);
+    const F = from ? startOfDayLocal(from) : undefined;
+    const T = to ? endOfDayLocal(to) : undefined;
+
+    if (F || T) {
+      list = list.filter((e) => {
+        const d = e?._dateObj;
+        if (!(d instanceof Date) || isNaN(d.getTime())) return false;
+        if (F && d < F) return false;
+        if (T && d > T) return false;
+        return true;
+      });
+    }
 
     return list;
   }, [query, filter, baseList]);
 
-  // today’s total (computed from filtered list, same as before)
-  const todayKey = toDDMMYYYY(new Date());
-  const totalToday = useMemo(
-    () => expenses.filter((e) => e.date === todayKey).reduce((sum, e) => sum + e.amount, 0),
-    [expenses, todayKey]
-  );
+  // total from the current (filtered) list
+  const totalAll = useMemo(() => expenses.reduce((sum, e) => sum + e.amount, 0), [expenses]);
 
   const s = useMemo(
     () =>
@@ -134,7 +158,7 @@ export default function ExpensesTab({ data, refreshing, onRefresh }: Props) {
     <ExpenseCard data={item} onEdit={() => {}} onDelete={() => {}} />
   );
 
-  const filterIsActive = !!filter.dateRange.from || !!filter.dateRange.to;
+  const filterIsActive = !!filter?.dateRange?.from || !!filter?.dateRange?.to;
 
   return (
     <>
@@ -149,8 +173,8 @@ export default function ExpensesTab({ data, refreshing, onRefresh }: Props) {
         ListHeaderComponent={
           <>
             <View style={s.summaryWrap}>
-              <Text style={s.summaryLabel}>Today’s Expense</Text>
-              <Text style={s.summaryVal}>₹{totalToday.toLocaleString()}</Text>
+              <Text style={s.summaryLabel}>Today's Expense</Text>
+              <Text style={s.summaryVal}>₹{totalAll.toLocaleString("en-IN")}</Text>
             </View>
 
             <SearchBar
@@ -174,7 +198,7 @@ export default function ExpensesTab({ data, refreshing, onRefresh }: Props) {
         windowSize={10}
       />
 
-      <FilterSheet
+      <FilterSheet<ExpenseFilter>
         visible={sheetOpen}
         value={filter}
         onChange={setFilter}

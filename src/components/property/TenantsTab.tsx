@@ -47,6 +47,7 @@ const tenantSections: Section[] = [
     key: "status",
     label: "Status",
     mode: "checkbox",
+    // includes "Dues" as a pseudo-status (due > 0)
     options: ["Active", "Under Notice", "Dues"].map((s) => ({ label: s, value: s })),
   },
   { key: "joinDate", label: "Joining Date", mode: "date" },
@@ -85,18 +86,19 @@ const statusFromCode = (code: any): string => {
 };
 const getStatus = (t: any) => statusFromCode(t?.status);
 const getJoinedOn = (t: any) => {
-  const s = str(t?.joiningDate ?? t?.joinedOn ?? t?.joinDate ?? "", "");
+  // Prefer the correct field; only fall back to bookingDate if needed
+  const s = str(t?.joiningDate ?? t?.joinedOn ?? t?.joinDate ?? t?.bookingDate ?? "", "");
   try {
     return s ? new Date(s) : null;
   } catch {
     return null;
   }
 };
+
 const getDownloaded = (t: any) =>
   num(t?.downloaded) === 1 ? "App Downloaded" : "App Not Downloaded";
 
-// Normalize any of: "App Downloaded", "Downloaded" → "downloaded"
-//                    "App Not Downloaded", "Not Downloaded" → "not downloaded"
+// normalize "App Downloaded"/"Downloaded" and "App Not Downloaded"/"Not Downloaded"
 const normalizeDownloadLabel = (v: string) =>
   str(v, "")
     .replace(/^app\s+/i, "")
@@ -107,9 +109,10 @@ const normalizeDownloadLabel = (v: string) =>
 // due amount
 const getDue = (t: any) => num(t?.due);
 
-// day-bounds helpers (local time)
+// ---- robust day helpers (local time) ----
 const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
-const endOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
+const addDays = (d: Date, days: number) =>
+  new Date(d.getFullYear(), d.getMonth(), d.getDate() + days, 0, 0, 0, 0);
 
 export default function TenantsTab({ data, meta, refreshing, onRefresh }: Props) {
   const { width } = useWindowDimensions();
@@ -157,7 +160,7 @@ export default function TenantsTab({ data, meta, refreshing, onRefresh }: Props)
 
     // ---- download status (support both filter keys: downloadedApp & downloadStatus) ----
     const fromDownloadedApp = Array.isArray(filter.downloadedApp) ? filter.downloadedApp : [];
-    const fromDownloadStatus = Array.isArray((filter as any).downloadStatus)
+    const fromDownloadStatus = Array.isArray((filter as any)?.downloadStatus)
       ? (filter as any).downloadStatus
       : [];
     const selectedDownload = [...fromDownloadedApp, ...fromDownloadStatus]
@@ -174,7 +177,6 @@ export default function TenantsTab({ data, meta, refreshing, onRefresh }: Props)
         ? (filter as any).joinDate
         : {};
 
-    // Accept Date or ISO string (defensive)
     const coerceDate = (d?: Date | string) => {
       if (!d) return undefined;
       if (d instanceof Date) return d;
@@ -185,20 +187,25 @@ export default function TenantsTab({ data, meta, refreshing, onRefresh }: Props)
     const rawFrom = filter.fromDate ?? coerceDate(joinDateRange.from);
     const rawTo = filter.toDate ?? coerceDate(joinDateRange.to);
 
-    const fromDate = rawFrom ? startOfDay(rawFrom) : undefined;
-    const toDate = rawTo ? endOfDay(rawTo) : undefined;
+    // NEW: use [fromStart, toNextStart) for inclusive end-day
+    const fromStart = rawFrom ? startOfDay(rawFrom) : undefined;
+    const toNextStart = rawTo ? addDays(startOfDay(rawTo), 1) : undefined;
 
-    if (fromDate)
+    if (fromStart) {
+      const fromMs = fromStart.getTime();
       out = out.filter((t) => {
         const j = getJoinedOn(t);
-        return j ? j >= fromDate : false;
+        return j ? j.getTime() >= fromMs : false;
       });
+    }
 
-    if (toDate)
+    if (toNextStart) {
+      const toMs = toNextStart.getTime();
       out = out.filter((t) => {
         const j = getJoinedOn(t);
-        return j ? j <= toDate : false;
+        return j ? j.getTime() < toMs : false; // exclusive next-day start
       });
+    }
 
     return out;
   }, [query, filter, list]);
@@ -227,10 +234,9 @@ export default function TenantsTab({ data, meta, refreshing, onRefresh }: Props)
     (Array.isArray(filter.sharing) && filter.sharing.length > 0) ||
     (Array.isArray(filter.status) && filter.status.length > 0) ||
     (Array.isArray(filter.downloadedApp) && filter.downloadedApp.length > 0) ||
-    (Array.isArray((filter as any).downloadStatus) && (filter as any).downloadStatus.length > 0) ||
+    (Array.isArray((filter as any)?.downloadStatus) && (filter as any).downloadStatus.length > 0) ||
     !!filter.fromDate ||
     !!filter.toDate ||
-    // support when FilterSheet stores date under joinDate
     !!(filter as any)?.joinDate?.from ||
     !!(filter as any)?.joinDate?.to;
 
