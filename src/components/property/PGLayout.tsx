@@ -630,6 +630,7 @@ export default function PGLayout({ floors, metrics, refreshing, onRefresh }: Pro
         /* sharing card */
         sharingCard: {
           width: Math.max(180, width * (width >= 900 ? 0.28 : width >= 640 ? 0.42 : 0.87)),
+          flex: 1,
           height: GROUP_ZONE_H - 2,
           backgroundColor: colors.surface,
           borderRadius: radius.md,

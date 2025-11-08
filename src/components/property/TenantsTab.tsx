@@ -47,9 +47,7 @@ const tenantSections: Section[] = [
     key: "status",
     label: "Status",
     mode: "checkbox",
-    options: ["Active", "Under Notice", "Adv Booking", "Expired Booking", "Canceled Booking"].map(
-      (s) => ({ label: s, value: s })
-    ),
+    options: ["Active", "Under Notice", "Dues"].map((s) => ({ label: s, value: s })),
   },
   { key: "joinDate", label: "Joining Date", mode: "date" },
   {
@@ -88,10 +86,30 @@ const statusFromCode = (code: any): string => {
 const getStatus = (t: any) => statusFromCode(t?.status);
 const getJoinedOn = (t: any) => {
   const s = str(t?.joiningDate ?? t?.joinedOn ?? t?.joinDate ?? "", "");
-  return s ? new Date(s) : null;
+  try {
+    return s ? new Date(s) : null;
+  } catch {
+    return null;
+  }
 };
 const getDownloaded = (t: any) =>
   num(t?.downloaded) === 1 ? "App Downloaded" : "App Not Downloaded";
+
+// Normalize any of: "App Downloaded", "Downloaded" → "downloaded"
+//                    "App Not Downloaded", "Not Downloaded" → "not downloaded"
+const normalizeDownloadLabel = (v: string) =>
+  str(v, "")
+    .replace(/^app\s+/i, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+
+// due amount
+const getDue = (t: any) => num(t?.due);
+
+// day-bounds helpers (local time)
+const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+const endOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
 
 export default function TenantsTab({ data, meta, refreshing, onRefresh }: Props) {
   const { width } = useWindowDimensions();
@@ -114,32 +132,72 @@ export default function TenantsTab({ data, meta, refreshing, onRefresh }: Props)
   const tenants = useMemo(() => {
     let out = list;
 
+    // ---- search by name ----
     if (query.trim()) {
       const q = query.trim().toLowerCase();
       out = out.filter((t) => getName(t).toLowerCase().includes(q));
     }
 
-    if (filter.sharing.length) {
+    // ---- sharing filter ----
+    if (Array.isArray(filter.sharing) && filter.sharing.length) {
       out = out.filter((t) => filter.sharing.includes(getSharing(t)));
     }
 
-    if (filter.status.length) {
-      out = out.filter((t) => filter.status.includes(getStatus(t)));
-    }
-
-    if (filter.downloadedApp.length) {
-      out = out.filter((t) => filter.downloadedApp.includes(getDownloaded(t)));
-    }
-
-    if (filter.fromDate)
+    // ---- status + dues union filter ----
+    if (Array.isArray(filter.status) && filter.status.length) {
+      const wantsDues = filter.status.includes("Dues" as any);
+      const realStatuses = filter.status.filter((s) => s !== ("Dues" as any));
       out = out.filter((t) => {
-        const j = getJoinedOn(t);
-        return j ? j >= filter.fromDate! : false;
+        const statusLabel = getStatus(t);
+        const statusMatch = realStatuses.length ? realStatuses.includes(statusLabel as any) : false;
+        const duesMatch = wantsDues ? getDue(t) > 0 : false;
+        return statusMatch || duesMatch;
       });
-    if (filter.toDate)
+    }
+
+    // ---- download status (support both filter keys: downloadedApp & downloadStatus) ----
+    const fromDownloadedApp = Array.isArray(filter.downloadedApp) ? filter.downloadedApp : [];
+    const fromDownloadStatus = Array.isArray((filter as any).downloadStatus)
+      ? (filter as any).downloadStatus
+      : [];
+    const selectedDownload = [...fromDownloadedApp, ...fromDownloadStatus]
+      .filter(Boolean)
+      .map(normalizeDownloadLabel);
+
+    if (selectedDownload.length) {
+      out = out.filter((t) => selectedDownload.includes(normalizeDownloadLabel(getDownloaded(t))));
+    }
+
+    // ---- join date range (support both fromDate/toDate and joinDate.{from,to}) ----
+    const joinDateRange: { from?: Date | string; to?: Date | string } =
+      (filter as any)?.joinDate && typeof (filter as any).joinDate === "object"
+        ? (filter as any).joinDate
+        : {};
+
+    // Accept Date or ISO string (defensive)
+    const coerceDate = (d?: Date | string) => {
+      if (!d) return undefined;
+      if (d instanceof Date) return d;
+      const parsed = new Date(d);
+      return isNaN(parsed.getTime()) ? undefined : parsed;
+    };
+
+    const rawFrom = filter.fromDate ?? coerceDate(joinDateRange.from);
+    const rawTo = filter.toDate ?? coerceDate(joinDateRange.to);
+
+    const fromDate = rawFrom ? startOfDay(rawFrom) : undefined;
+    const toDate = rawTo ? endOfDay(rawTo) : undefined;
+
+    if (fromDate)
       out = out.filter((t) => {
         const j = getJoinedOn(t);
-        return j ? j <= filter.toDate! : false;
+        return j ? j >= fromDate : false;
+      });
+
+    if (toDate)
+      out = out.filter((t) => {
+        const j = getJoinedOn(t);
+        return j ? j <= toDate : false;
       });
 
     return out;
@@ -165,10 +223,21 @@ export default function TenantsTab({ data, meta, refreshing, onRefresh }: Props)
     setList((prev) => prev.filter((t: any) => (t?._id ?? t?.id) !== id));
   }, []);
 
+  const filterActive =
+    (Array.isArray(filter.sharing) && filter.sharing.length > 0) ||
+    (Array.isArray(filter.status) && filter.status.length > 0) ||
+    (Array.isArray(filter.downloadedApp) && filter.downloadedApp.length > 0) ||
+    (Array.isArray((filter as any).downloadStatus) && (filter as any).downloadStatus.length > 0) ||
+    !!filter.fromDate ||
+    !!filter.toDate ||
+    // support when FilterSheet stores date under joinDate
+    !!(filter as any)?.joinDate?.from ||
+    !!(filter as any)?.joinDate?.to;
+
   return (
     <>
       <FlatList
-        data={tenants}
+        data={tenants?.filter((item) => item?.status === 1 || item?.status === 2)}
         keyExtractor={(t: any, i) => String(t?._id ?? t?.id ?? i)}
         renderItem={({ item }) => <TenantCard tenant={item} onDelete={handleDelete} />}
         numColumns={cols}
@@ -180,13 +249,7 @@ export default function TenantsTab({ data, meta, refreshing, onRefresh }: Props)
             placeholder="Search tenant name"
             onSearch={setQuery}
             onFilter={() => setSheetOpen(true)}
-            filterActive={
-              filter.sharing.length > 0 ||
-              filter.status.length > 0 ||
-              filter.downloadedApp.length > 0 ||
-              !!filter.fromDate ||
-              !!filter.toDate
-            }
+            filterActive={filterActive}
           />
         }
         ListEmptyComponent={

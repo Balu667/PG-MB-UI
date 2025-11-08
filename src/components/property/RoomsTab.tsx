@@ -18,20 +18,63 @@ import RoomCard from "./RoomCard";
 import { RoomFilter, emptyFilter } from "@/src/constants/roomFilter";
 import { useTheme } from "@/src/theme/ThemeContext";
 
-type Props = {
-  data: any[];
-  meta: {
-    totalBeds: number;
-    vacantBeds: number;
-    occupiedBeds: number;
-    advanceBookingBeds: number;
-    underNoticeBeds: number;
-    roomsTotal: number;
-  };
-  refreshing: boolean;
-  onRefresh: () => void;
+/* -------------------------- helpers / utils -------------------------- */
+const num = (v: any, fallback = 0) => (typeof v === "number" ? v : Number(v ?? fallback)) || 0;
+const str = (v: any, fallback = "") => (v == null ? fallback : String(v));
+
+type DerivedStatus = "Available" | "Partial" | "Filled";
+
+/** Compute room status exactly like RoomCard */
+const deriveStatus = (room: any): DerivedStatus => {
+  const totalBeds =
+    num(room?.totalBeds) ||
+    num(room?.bedsTotal) ||
+    num(room?.bedCount) ||
+    num(room?.capacity) ||
+    num(room?.beds) ||
+    0;
+
+  const occupiedBeds = num(room?.occupiedBeds);
+  const underNotice = num(room?.underNotice);
+  const advanceBookings = num(room?.advancedBookings) || num(room?.advanceBookingBeds);
+
+  const hasVacantField = room?.vacantBeds !== undefined && room?.vacantBeds !== null;
+  const vacantBeds = hasVacantField
+    ? num(room?.vacantBeds)
+    : Math.max(totalBeds - (occupiedBeds + underNotice + advanceBookings), 0);
+
+  if (totalBeds <= 0) return "Available";
+  if (vacantBeds <= 0) return "Filled";
+  if (vacantBeds >= totalBeds) return "Available";
+  return "Partial";
 };
 
+/** Floor label helpers: UI uses GF / 1F / 2F... while API sends numeric floors */
+const toFloorLabel = (floor?: number | string) => {
+  const f = num(floor, NaN);
+  if (Number.isNaN(f)) return "";
+  return f === 0 ? "GF" : `${f}F`;
+};
+const floorLabelToNumber = (label: string) => {
+  if (!label) return NaN;
+  if (label === "GF") return 0;
+  const n = Number(label.replace(/F$/i, ""));
+  return Number.isFinite(n) ? n : NaN;
+};
+
+/** Facilities canonical keys (match API) with pretty labels for UI */
+const FACILITY_OPTIONS: { label: string; value: string }[] = [
+  { label: "Washing Machine", value: "washingMachine" },
+  { label: "Hot Water", value: "hotWater" },
+  { label: "Table", value: "table" },
+  { label: "WiFi", value: "wifi" },
+  { label: "TV", value: "tv" },
+  { label: "AC", value: "ac" },
+  { label: "Gym", value: "gym" },
+  { label: "Fridge", value: "fridge" },
+];
+
+/* --------------------------- filter sections ------------------------- */
 const roomSections: Section[] = [
   {
     key: "status",
@@ -58,14 +101,23 @@ const roomSections: Section[] = [
     key: "facilities",
     label: "Facilities",
     mode: "checkbox",
-    options: ["AC", "Geyser", "WM", "WiFi", "TV", "Furnished"].map((f) => ({
-      label: f,
-      value: f,
-    })),
+    options: FACILITY_OPTIONS,
   },
 ];
 
-const num = (v: any, fallback = 0) => (typeof v === "number" ? v : Number(v ?? fallback)) || 0;
+type Props = {
+  data: any[];
+  meta: {
+    totalBeds: number;
+    vacantBeds: number;
+    occupiedBeds: number;
+    advanceBookingBeds: number;
+    underNoticeBeds: number;
+    roomsTotal: number;
+  };
+  refreshing: boolean;
+  onRefresh: () => void;
+};
 
 export default function RoomsTab({ data, meta, refreshing, onRefresh }: Props) {
   const { width } = useWindowDimensions();
@@ -131,12 +183,56 @@ export default function RoomsTab({ data, meta, refreshing, onRefresh }: Props) {
     [colors, spacing, insets.bottom]
   );
 
+  /** ------------------------- FILTERING CORE ------------------------- */
+  const filteredData = useMemo(() => {
+    const q = query.trim().toLowerCase();
+
+    // Pre-build lookups for faster comparisons
+    const statusSet = new Set(filter.status);
+    const sharingSet = new Set(filter.sharing);
+    const floorSet = new Set(filter.floor); // values like "GF", "1F"
+    const facilitiesSet = new Set(filter.facilities); // canonical API keys
+
+    return (data ?? []).filter((room) => {
+      // 1) Search by room number
+      const roomNo = str(room?.roomNo ?? room?.roomNumber ?? room?.name ?? room?.code, "");
+      if (q && !roomNo.toLowerCase().includes(q)) return false;
+
+      // 2) Status
+      if (statusSet.size) {
+        const st = deriveStatus(room);
+        if (!statusSet.has(st)) return false;
+      }
+
+      // 3) Sharing (beds count)
+      if (sharingSet.size) {
+        const sh = num(room?.beds);
+        if (!sharingSet.has(sh)) return false;
+      }
+
+      // 4) Floor (map numeric to GF/1F… and compare against selected values)
+      if (floorSet.size) {
+        const floorLabel = toFloorLabel(room?.floor);
+        if (!floorSet.has(floorLabel)) return false;
+      }
+
+      // 5) Facilities (room must have ANY of the selected facilities)
+      if (facilitiesSet.size) {
+        const facArr: string[] = Array.isArray(room?.facilities) ? room.facilities : [];
+        const hasAny = facArr.some((f) => facilitiesSet.has(f));
+        if (!hasAny) return false;
+      }
+
+      return true;
+    });
+  }, [data, query, filter]);
+
   const renderRoom = ({ item }: ListRenderItemInfo<any>) => <RoomCard room={item} />;
 
   return (
     <SafeAreaView style={s.safeArea} edges={["left", "right"]}>
       <FlatList
-        data={data}
+        data={filteredData}
         keyExtractor={(r: any, index) =>
           String(r?._id ?? r?.id ?? r?.roomNo ?? r?.roomNumber ?? index)
         }
@@ -147,10 +243,10 @@ export default function RoomsTab({ data, meta, refreshing, onRefresh }: Props) {
           <View>
             <StatsGrid metrics={metrics} />
             <SearchBar
-              placeholder="Search by room / floor"
+              placeholder="Search by room number"
               onSearch={setQuery}
               onFilter={() => setSheetOpen(true)}
-              filterActive={Object.values(filter).some((a) => a.length)}
+              filterActive={Object.values(filter).some((a) => Array.isArray(a) && a.length)}
             />
           </View>
         }
