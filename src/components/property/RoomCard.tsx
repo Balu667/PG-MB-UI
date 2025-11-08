@@ -22,7 +22,6 @@ if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-/* colour helpers */
 const chipTint = (colors: any) => ({
   Available: colors.availableBeds,
   Partial: colors.advBookedBeds,
@@ -49,20 +48,18 @@ const num = (v: any, fallback = 0) => (typeof v === "number" ? v : Number(v ?? f
 const str = (v: any, fallback = "") => (v == null ? fallback : String(v));
 
 interface Props {
-  room: any; // API-driven
+  room: any;
 }
 
 const RoomCard: React.FC<Props> = ({ room }) => {
   const { width } = useWindowDimensions();
   const { colors, spacing, radius, shadow } = useTheme();
 
-  /* responsive cols */
   const COLS = width >= 1000 ? 3 : width >= 740 ? 2 : 1;
   const GAP = spacing.md - 2;
   const SIDE = spacing.md * 2;
   const cardW = (width - SIDE - GAP * (COLS - 1)) / COLS;
 
-  /* animated press */
   const [open, setOpen] = useState(false);
   const scale = useRef(new Animated.Value(1)).current;
 
@@ -76,44 +73,68 @@ const RoomCard: React.FC<Props> = ({ room }) => {
     ]).start();
   };
 
-  /* normalize API fields safely */
-  const roomNo = str(room?.roomNo ?? room?.roomNumber ?? room?.name ?? room?.code, "—");
+  // ---- Normalized fields (include `beds`, `bedPrice`, and status math) ----
+  const roomNoRaw = str(room?.roomNo ?? room?.roomNumber ?? room?.name ?? room?.code, "—");
+  const roomNo = roomNoRaw.toString().toUpperCase(); // keeps your style consistent (e.g., co-102)
+
   const floor = str(room?.floor ?? room?.floorLabel ?? room?.floorNo, "—");
   const totalBeds =
-    num(room?.totalBeds) || num(room?.bedsTotal) || num(room?.bedCount) || num(room?.capacity) || 0;
-  const vacantBeds = num(room?.vacantBeds) || num(room?.availableBeds) || 0;
-  const occupiedBeds =
-    num(room?.occupiedBeds) || num(room?.filledBeds) || Math.max(totalBeds - vacantBeds, 0);
-  const noticeBeds = num(room?.noticeBeds) || num(room?.underNotice) || 0;
-  const bookingBeds = num(room?.bookingBeds) || num(room?.advancedBookings) || 0;
-  const status = str(
-    room?.status ??
-      (totalBeds === 0
-        ? "Available"
-        : occupiedBeds >= totalBeds
-        ? "Filled"
-        : vacantBeds >= totalBeds
-        ? "Available"
-        : "Partial"),
-    "Available"
-  );
-  const deposit = num(room?.deposit ?? room?.securityDeposit ?? 0);
+    num(room?.totalBeds) ||
+    num(room?.bedsTotal) ||
+    num(room?.bedCount) ||
+    num(room?.capacity) ||
+    num(room?.beds) || // <— include `beds`
+    0;
+
+  const occupiedBeds = num(room?.occupiedBeds);
+  const underNotice = num(room?.underNotice);
+  const advanceBookings = num(room?.advancedBookings) || num(room?.advanceBookingBeds);
+  const hasVacantField = room?.vacantBeds !== undefined && room?.vacantBeds !== null;
+  const vacantBeds = hasVacantField
+    ? num(room?.vacantBeds)
+    : Math.max(totalBeds - (occupiedBeds + underNotice + advanceBookings), 0);
+
+  // Rent and deposit
+  const bedPrice = num(room?.bedPrice ?? room?.rentAmount ?? 0);
+  const deposit = num(room?.securityDeposit ?? room?.deposit ?? 0);
+
+  // Status from your rules:
+  // - If no vacant beds (including adv + underNotice), it's Filled
+  // - If some vacant beds and some used -> Partial
+  // - If everything vacant -> Available
+  const usedCount = Math.min(occupiedBeds + underNotice + advanceBookings, totalBeds);
+  const derivedStatus =
+    totalBeds <= 0
+      ? "Available"
+      : vacantBeds <= 0
+      ? "Filled"
+      : vacantBeds >= totalBeds
+      ? "Available"
+      : "Partial";
+
+  // Progress bar shows fill progress based on usedCount
+  const utilisation = totalBeds ? Math.min(usedCount / totalBeds, 1) : 0;
 
   const CHIP = useMemo(() => chipTint(colors), [colors]);
   const BED_COLORS = useMemo(() => bedTint(colors), [colors]);
 
   const extraBeds = Math.max(totalBeds - 2, 0);
-  const utilisation = totalBeds ? Math.min(occupiedBeds / totalBeds, 1) : 0;
 
   const bedBreakdown = {
     totalBeds,
     vacantBeds,
     occupiedBeds,
-    noticeBeds,
-    bookingBeds,
+    noticeBeds: underNotice,
+    bookingBeds: advanceBookings,
   };
 
-  /* styles */
+  const progressColor =
+    derivedStatus === "Filled"
+      ? colors.filledBeds
+      : derivedStatus === "Partial"
+      ? colors.advBookedBeds
+      : colors.availableBeds;
+
   const s = useMemo(
     () =>
       StyleSheet.create({
@@ -134,14 +155,13 @@ const RoomCard: React.FC<Props> = ({ room }) => {
           overflow: "hidden",
         },
 
-        rowBetween: {
-          flexDirection: "row",
-          justifyContent: "space-between",
-          alignItems: "center",
-        },
+        rowBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
 
-        roomNo: { fontSize: 18, fontWeight: "700", color: colors.accent },
+        /* A.3 — header: "Room - 102" with styled number */
+        roomLabel: { fontSize: 18, fontWeight: "600", color: colors.textPrimary },
+        roomNo: { fontSize: 18, fontWeight: "800", color: colors.accent },
 
+        /* status chip */
         statusChip: (bg: string) => ({
           backgroundColor: bg,
           borderRadius: 12,
@@ -160,11 +180,11 @@ const RoomCard: React.FC<Props> = ({ room }) => {
           textTransform: "uppercase",
         },
 
-        floorWrap: { flexDirection: "row", alignItems: "center", gap: 4 },
+        /* A.1 — floor label */
+        floorWrap: { flexDirection: "row", alignItems: "center", gap: 6 },
         floorTxt: { fontSize: 14, color: colors.textSecondary },
 
         bedsWrap: { flexDirection: "row", alignItems: "center", gap: 2 },
-
         moreBadge: {
           backgroundColor: hexToRgba(colors.primary, 0.15),
           borderRadius: 8,
@@ -173,16 +193,23 @@ const RoomCard: React.FC<Props> = ({ room }) => {
         },
         moreBadgeTxt: { fontSize: 11, color: colors.accent, fontWeight: "600" },
 
-        depositTxt: { marginTop: 8, fontSize: 13, color: colors.textSecondary },
+        /* A.2 — rent line */
+        rentTxt: { marginTop: 6, fontSize: 13, color: colors.textSecondary },
+        rentBold: { fontWeight: "700", color: colors.textPrimary },
 
+        /* A.4 — deposit line text & bold value */
+        depositTxt: { marginTop: 4, fontSize: 13, color: colors.textSecondary },
+        depositBold: { fontWeight: "800", color: colors.textPrimary },
+
+        /* A.7 — progress bar colored by status & width by utilisation */
         utilBarWrap: {
-          height: 5,
+          height: 6,
           backgroundColor: hexToRgba(colors.textSecondary, 0.25),
           borderRadius: 3,
           marginTop: 10,
           overflow: "hidden",
         },
-        utilBarFill: { height: 5, backgroundColor: colors.accent },
+        utilBarFill: { height: 6 },
 
         infoBox: {
           marginTop: spacing.md - 2,
@@ -191,7 +218,6 @@ const RoomCard: React.FC<Props> = ({ room }) => {
           paddingTop: spacing.sm,
           gap: 8,
         },
-
         infoRow: { flexDirection: "row", alignItems: "center" },
         infoLabel: { flex: 1, fontSize: 14, color: colors.textSecondary, fontWeight: "600" },
         infoValue: { fontSize: 14, color: colors.accent, fontWeight: "700" },
@@ -206,12 +232,14 @@ const RoomCard: React.FC<Props> = ({ room }) => {
         onPress={handlePress}
         android_ripple={{ color: hexToRgba(colors.primary, 0.07) }}
       >
-        {/* row 1 – room & status */}
+        {/* row 1 – header & status chip */}
         <View style={s.rowBetween}>
-          <Text style={s.roomNo}>Room {roomNo}</Text>
+          <Text style={s.roomLabel}>
+            Room - <Text style={s.roomNo}>{roomNo}</Text>
+          </Text>
 
-          <View style={s.statusChip(CHIP[status as keyof typeof CHIP] ?? colors.accent)}>
-            <Text style={s.statusTxt}>{status}</Text>
+          <View style={s.statusChip(CHIP[derivedStatus as keyof typeof CHIP] ?? colors.accent)}>
+            <Text style={s.statusTxt}>{derivedStatus}</Text>
           </View>
         </View>
 
@@ -219,7 +247,7 @@ const RoomCard: React.FC<Props> = ({ room }) => {
         <View style={[s.rowBetween, { marginTop: 6 }]}>
           <View style={s.floorWrap}>
             <MaterialIcons name="stairs" size={16} color={colors.accent} />
-            <Text style={s.floorTxt}>{floor}</Text>
+            <Text style={s.floorTxt}>Floor {floor}</Text>
           </View>
 
           <View style={s.bedsWrap}>
@@ -233,15 +261,31 @@ const RoomCard: React.FC<Props> = ({ room }) => {
           </View>
         </View>
 
-        {/* row 3 – deposit */}
-        <Text style={s.depositTxt}>₹{deposit.toLocaleString()} deposit</Text>
+        {/* A.2 — rent (bedPrice) */}
+        {!!bedPrice && (
+          <Text style={s.rentTxt}>
+            <Text style={s.rentBold}>₹{bedPrice.toLocaleString()}</Text> - Rent
+          </Text>
+        )}
 
-        {/* utilisation bar */}
+        {/* A.4 — deposit label + bold value */}
+        {!!deposit && (
+          <Text style={s.depositTxt}>
+            <Text style={s.depositBold}>₹{deposit.toLocaleString()}</Text> - Security Deposit
+          </Text>
+        )}
+
+        {/* A.7 — utilisation bar reflects occupancy (occupied + underNotice + advancedBookings) */}
         <View style={s.utilBarWrap}>
-          <View style={[s.utilBarFill, { width: `${utilisation * 100}%` }]} />
+          <View
+            style={[
+              s.utilBarFill,
+              { width: `${utilisation * 100}%`, backgroundColor: progressColor },
+            ]}
+          />
         </View>
 
-        {/* expandable panel */}
+        {/* expandable panel (dropdown) — A.5 "Total Beds" pulls from `beds` fallback too */}
         {open && (
           <View style={s.infoBox}>
             {Object.entries(bedBreakdown).map(([k, v]) => (

@@ -1,158 +1,59 @@
-// import React, { useMemo } from "react";
-// import { View, Text, StyleSheet, Image, Pressable, useWindowDimensions } from "react-native";
-// import * as Haptics from "expo-haptics";
-// import { Tenant } from "@/src/constants/mockTenants";
-// import { useTheme } from "@/src/theme/ThemeContext";
-// import { hexToRgba } from "@/src/theme";
-
-// /* ------------------------------------------------------------------ */
-// /*  STATUS → COLOUR MAP (theme-aware)                                  */
-// /* ------------------------------------------------------------------ */
-// const statusTint = (colors: any) => ({
-//   Active: colors.success,
-//   Dues: colors.error,
-//   "Under Notice": colors.advBookedBeds,
-// });
-
-// /* ------------------------------------------------------------------ */
-// /*  COMPONENT                                                          */
-// /* ------------------------------------------------------------------ */
-// interface Props {
-//   tenant: Tenant;
-//   onPress?: () => void;
-// }
-
-// const TenantCard: React.FC<Props> = ({ tenant, onPress }) => {
-//   const { width } = useWindowDimensions();
-//   const { colors, spacing, radius, shadow } = useTheme();
-
-//   /* responsive width (same calculation used elsewhere) */
-//   const COLS = width >= 1000 ? 3 : width >= 740 ? 2 : 1;
-//   const GAP = spacing.md - 2;
-//   const SIDE = spacing.md * 2;
-//   const cardW = (width - SIDE - GAP * (COLS - 1)) / COLS;
-
-//   const STATUS_COLORS = useMemo(() => statusTint(colors), [colors]);
-
-//   /* ---------- styles (memo) ---------- */
-//   const s = useMemo(
-//     () =>
-//       StyleSheet.create({
-//         wrap: {
-//           width: cardW,
-//           borderRadius: radius.lg,
-//           backgroundColor: colors.cardBackground,
-//           padding: spacing.md,
-//           shadowColor: shadow,
-//           shadowOffset: { width: 0, height: 6 },
-//           shadowOpacity: 0.08,
-//           shadowRadius: 8,
-//           borderWidth: 1,
-//           borderColor: colors.borderColor,
-//         },
-
-//         /* top row */
-//         topRow: { flexDirection: "row", alignItems: "center" },
-//         avatar: {
-//           width: 54,
-//           height: 54,
-//           borderRadius: 27,
-//           backgroundColor: colors.surface,
-//         },
-//         info: { marginLeft: spacing.sm, flex: 1 },
-//         name: { fontSize: 16, fontWeight: "600", color: colors.textPrimary },
-//         phone: { fontSize: 13, color: colors.textSecondary },
-
-//         rentBlock: { alignItems: "flex-end" },
-//         rent: { fontSize: 16, fontWeight: "700", color: colors.textPrimary },
-//         dues: { fontSize: 13, color: colors.error, marginTop: 2 },
-
-//         /* bottom row */
-//         bottomRow: {
-//           flexDirection: "row",
-//           flexWrap: "wrap",
-//           gap: 8,
-//           marginTop: spacing.md - 2,
-//         },
-//         badge: {
-//           backgroundColor: colors.surface,
-//           borderRadius: radius.md,
-//           paddingHorizontal: spacing.sm,
-//           paddingVertical: 3,
-//         },
-//         badgeTxt: { fontSize: 12, color: colors.textSecondary },
-
-//         statusBadge: (bg: string) => ({
-//           backgroundColor: bg,
-//           borderRadius: radius.md,
-//           paddingHorizontal: spacing.sm,
-//           paddingVertical: 3,
-//         }),
-//         statusTxt: { fontSize: 12, color: colors.white, fontWeight: "600" },
-//       }),
-//     [colors, spacing, radius, cardW, shadow]
-//   );
-
-//   /* ---------- render ---------- */
-//   return (
-//     <Pressable
-//       onPress={() => {
-//         Haptics.selectionAsync();
-//         onPress?.();
-//       }}
-//       android_ripple={{ color: hexToRgba(colors.primary, 0.07) }}
-//       style={s.wrap}
-//     >
-//       {/* -- top row */}
-//       <View style={s.topRow}>
-//         <Image source={{ uri: tenant.imageUri }} style={s.avatar} />
-//         <View style={s.info}>
-//           <Text style={s.name}>{tenant.name}</Text>
-//           <Text style={s.phone}>{tenant.phone}</Text>
-//         </View>
-//         <View style={s.rentBlock}>
-//           <Text style={s.rent}>₹{tenant.rent.toLocaleString()}</Text>
-//           {tenant.dues > 0 && <Text style={s.dues}>Due: ₹{tenant.dues.toLocaleString()}</Text>}
-//         </View>
-//       </View>
-
-//       {/* -- bottom row */}
-//       <View style={s.bottomRow}>
-//         <View style={s.badge}>
-//           <Text style={s.badgeTxt}>Room: {tenant.room}</Text>
-//         </View>
-//         <View style={s.badge}>
-//           <Text style={s.badgeTxt}>{tenant.sharing} Sharing</Text>
-//         </View>
-//         <View style={s.statusBadge(STATUS_COLORS[tenant.status])}>
-//           <Text style={s.statusTxt}>{tenant.status}</Text>
-//         </View>
-//       </View>
-//     </Pressable>
-//   );
-// };
-
-// export default TenantCard;
 // src/components/property/TenantCard.tsx
 import React, { useMemo, useState } from "react";
 import { View, Text, StyleSheet, Image, Pressable } from "react-native";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 import { Menu, IconButton, Portal, Dialog, Button, Snackbar } from "react-native-paper";
-import { Tenant } from "@/src/constants/mockTenants";
 import { useTheme } from "@/src/theme/ThemeContext";
 import { hexToRgba } from "@/src/theme";
 
-/* status tint */
+/* status tint using your palette */
 const statusTint = (colors: any) => ({
   Active: colors.success,
-  Dues: colors.error,
-  "Under Notice": colors.advBookedBeds,
+  "Under Notice": colors.underNoticeBeds ?? colors.advBookedBeds,
+  "Adv Booking": colors.advBookedBeds,
+  "Expired Booking": colors.error,
+  "Canceled Booking": colors.error, // reuse error for visibility
 });
 
+const num = (v: any, fallback = 0) => (typeof v === "number" ? v : Number(v ?? fallback)) || 0;
+const str = (v: any, fallback = "") => (v == null ? fallback : String(v));
+
+/** Minimal, resilient normalization for fields we show */
+const tId = (t: any) => str(t?._id ?? t?.id, "");
+const tName = (t: any) => str(t?.tenantName ?? t?.name, "—");
+const tPhone = (t: any) => str(t?.phoneNumber ?? t?.phone, "—");
+const tRoom = (t: any) => str(t?.roomNumber ?? t?.room, "—");
+const tBed = (t: any) => str(t?.bedNumber ?? t?.bedNo ?? "", "");
+const tRent = (t: any) => num(t?.rentAmount ?? t?.rent, 0);
+const tDues = (t: any) => num(t?.due ?? t?.dues, 0);
+const tSharingType = (t: any) => num(t?.sharingType ?? t?.sharing ?? 0);
+const tImage = (t: any) => {
+  const arr = Array.isArray(t?.profilePic) ? t.profilePic : [];
+  const fp = arr[0]?.filePath ? String(arr[0]?.filePath) : null;
+  return fp || t?.imageUri || "https://via.placeholder.com/54";
+};
+
+const statusFromCode = (code: any): string => {
+  switch (num(code)) {
+    case 1:
+      return "Active";
+    case 2:
+      return "Under Notice";
+    case 3:
+      return "Adv Booking";
+    case 5:
+      return "Expired Booking";
+    case 6:
+      return "Canceled Booking";
+    default:
+      return "";
+  }
+};
+
 interface Props {
-  tenant: Tenant;
-  onDelete?: (id: string) => void; // provided by list screen
+  tenant: any;
+  onDelete?: (id: string) => void;
 }
 
 const TenantCard: React.FC<Props> = ({ tenant, onDelete }) => {
@@ -205,6 +106,9 @@ const TenantCard: React.FC<Props> = ({ tenant, onDelete }) => {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [snack, setSnack] = useState(false);
 
+  const id = tId(tenant);
+  const statusLabel = statusFromCode(tenant?.status);
+
   return (
     <View style={s.wrap}>
       {/* top row with 3-dot menu */}
@@ -214,20 +118,22 @@ const TenantCard: React.FC<Props> = ({ tenant, onDelete }) => {
             Haptics.selectionAsync();
             router.push({
               pathname: "/protected/tenant/TenantProfileDetails",
-              params: { id: tenant.id },
+              params: { id },
             });
           }}
           style={[s.row, { flex: 1 }]}
           android_ripple={{ color: hexToRgba(colors.primary, 0.07) }}
         >
-          <Image source={{ uri: tenant.imageUri }} style={s.avatar} />
+          <Image source={{ uri: tImage(tenant) }} style={s.avatar} />
           <View style={s.info}>
-            <Text style={s.name}>{tenant.name}</Text>
-            <Text style={s.phone}>{tenant.phone}</Text>
+            <Text style={s.name}>{tName(tenant)}</Text>
+            <Text style={s.phone}>{tPhone(tenant)}</Text>
           </View>
           <View style={s.rentBlock}>
-            <Text style={s.rent}>₹{tenant.rent.toLocaleString()}</Text>
-            {tenant.dues > 0 && <Text style={s.dues}>Due: ₹{tenant.dues.toLocaleString()}</Text>}
+            <Text style={s.rent}>₹{tRent(tenant).toLocaleString()}</Text>
+            {tDues(tenant) > 0 && (
+              <Text style={s.dues}>Due: ₹{tDues(tenant).toLocaleString()}</Text>
+            )}
           </View>
         </Pressable>
 
@@ -240,7 +146,7 @@ const TenantCard: React.FC<Props> = ({ tenant, onDelete }) => {
             onPress={() => {
               setMenuVisible(false);
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              router.push({ pathname: "/protected/tenant/[id]", params: { id: tenant.id } });
+              router.push({ pathname: "/protected/tenant/[id]", params: { id } });
             }}
             title="Edit"
             leadingIcon="pencil"
@@ -259,14 +165,23 @@ const TenantCard: React.FC<Props> = ({ tenant, onDelete }) => {
       {/* bottom row */}
       <View style={s.bottomRow}>
         <View style={s.badge}>
-          <Text style={s.badgeTxt}>Room: {tenant.room}</Text>
+          <Text style={s.badgeTxt}>Room: {tRoom(tenant)}</Text>
         </View>
-        <View style={s.badge}>
-          <Text style={s.badgeTxt}>{tenant.sharing} Sharing</Text>
-        </View>
-        <View style={s.statusBadge(STATUS_COLORS[tenant.status])}>
-          <Text style={s.statusTxt}>{tenant.status}</Text>
-        </View>
+        {tBed(tenant) ? (
+          <View style={s.badge}>
+            <Text style={s.badgeTxt}>Bed: {tBed(tenant)}</Text>
+          </View>
+        ) : null}
+        {tSharingType(tenant) ? (
+          <View style={s.badge}>
+            <Text style={s.badgeTxt}>Sharing: {tSharingType(tenant)}</Text>
+          </View>
+        ) : null}
+        {!!statusLabel && (
+          <View style={s.statusBadge(STATUS_COLORS[statusLabel] ?? colors.accent)}>
+            <Text style={s.statusTxt}>{statusLabel}</Text>
+          </View>
+        )}
       </View>
 
       {/* Delete confirm */}
@@ -285,7 +200,7 @@ const TenantCard: React.FC<Props> = ({ tenant, onDelete }) => {
               buttonColor={colors.error}
               onPress={() => {
                 setConfirmOpen(false);
-                onDelete?.(tenant.id);
+                onDelete?.(id);
                 setSnack(true);
               }}
             >
