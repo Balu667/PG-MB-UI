@@ -1,5 +1,5 @@
 // src/components/property/ExpensesTab.tsx
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useCallback } from "react";
 import {
   FlatList,
   StyleSheet,
@@ -10,16 +10,24 @@ import {
   RefreshControl,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { router } from "expo-router";
 
 import SearchBar from "@/src/components/SearchBar";
 import FilterSheet, { Section } from "@/src/components/FilterSheet";
 import ExpenseCard from "./ExpenseCard";
+import AddButton from "@/src/components/Common/AddButton";
+import * as Haptics from "expo-haptics";
 
 import { ExpenseFilter, emptyExpenseFilter } from "@/src/constants/expenseFilter";
 import { useTheme } from "@/src/theme/ThemeContext";
 import { hexToRgba } from "@/src/theme";
 
-/* ---------- Types used internally ---------- */
+// ⬇️ NEW: dialog & buttons
+import { Portal, Dialog, Button } from "react-native-paper";
+
+// ⬇️ NEW: update hook to reuse for delete
+import { useUpdateDailyExpenses } from "@/src/hooks/dailyExpenses";
+
 export type ExpenseItem = {
   id: string;
   date: string; // dd/MM/yyyy for display
@@ -33,12 +41,11 @@ type Props = {
   data: any[]; // raw API rows
   refreshing: boolean;
   onRefresh: () => void;
+  propertyId: string; // <-- passed by parent
 };
 
-/* ---------- Filter config ---------- */
 const sections: Section[] = [{ key: "dateRange", label: "Date Range", mode: "date" }];
 
-/* ---------- Helpers ---------- */
 const toDDMMYYYY = (d: Date) =>
   d.toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" });
 
@@ -54,20 +61,17 @@ const normalizeRange = (from?: Date, to?: Date) => {
   return { from, to };
 };
 
-/* ---------- Component ---------- */
-export default function ExpensesTab({ data, refreshing, onRefresh }: Props) {
+export default function ExpensesTab({ data, refreshing, onRefresh, propertyId }: Props) {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const { colors, spacing, radius } = useTheme();
 
   const columns = width >= 1000 ? 3 : width >= 740 ? 2 : 1;
 
-  // normalize API → UI items; **only include status: 1**
   const baseList: ExpenseItem[] = useMemo(() => {
     if (!Array.isArray(data)) return [];
     return data
       .map((e) => {
-        // ignore everything where status !== 1
         const statusNum = Number(e?.status ?? 0);
         if (statusNum !== 1) return null;
 
@@ -91,7 +95,49 @@ export default function ExpensesTab({ data, refreshing, onRefresh }: Props) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [filter, setFilter] = useState<ExpenseFilter>(emptyExpenseFilter);
 
-  // apply search + inclusive date filters
+  // ⬇️ NEW: delete confirmation dialog state
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  // ⬇️ NEW: reuse update hook for delete
+  const updateExpense = useUpdateDailyExpenses(() => {
+    // success callback
+    setConfirmOpen(false);
+    setDeleteId(null);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    onRefresh(); // refresh the Expenses tab data
+  });
+
+  const askDelete = useCallback((id: string) => {
+    setDeleteId(id);
+    setConfirmOpen(true);
+    if (typeof Haptics?.selectionAsync === "function") {
+      Haptics.selectionAsync();
+    }
+  }, []);
+
+  const handleConfirmDelete = useCallback(() => {
+    if (!deleteId) return;
+
+    const fd = new FormData();
+    // Backend screenshot shows lowercase "status".
+    // If your backend expects "Status" (capital S), change the key below.
+    fd.append("status", "0");
+
+    updateExpense.mutate(
+      { formData: fd, expenseId: deleteId },
+      {
+        onError: () => {
+          setConfirmOpen(false);
+          setDeleteId(null);
+          // keep UX minimal – avoid extra libs
+          // eslint-disable-next-line no-alert
+          console.log("Delete failed: updateDailyExpenses(status=0)"); // leave console for debug
+        },
+      }
+    );
+  }, [deleteId, updateExpense]);
+
   const expenses = useMemo(() => {
     let list = baseList;
 
@@ -119,7 +165,6 @@ export default function ExpensesTab({ data, refreshing, onRefresh }: Props) {
     return list;
   }, [query, filter, baseList]);
 
-  // total from the current (filtered) list
   const totalAll = useMemo(() => expenses.reduce((sum, e) => sum + e.amount, 0), [expenses]);
 
   const s = useMemo(
@@ -155,7 +200,11 @@ export default function ExpensesTab({ data, refreshing, onRefresh }: Props) {
   );
 
   const renderExpense = ({ item }: ListRenderItemInfo<ExpenseItem>) => (
-    <ExpenseCard data={item} onEdit={() => {}} onDelete={() => {}} />
+    <ExpenseCard
+      data={item}
+      onEdit={(expId) => router.push(`/protected/expenses/${propertyId}?expenseId=${expId}`)}
+      onDelete={(expId) => askDelete(expId)} // ⬅️ wire delete
+    />
   );
 
   const filterIsActive = !!filter?.dateRange?.from || !!filter?.dateRange?.to;
@@ -198,6 +247,14 @@ export default function ExpensesTab({ data, refreshing, onRefresh }: Props) {
         windowSize={10}
       />
 
+      {/* FAB to add expense */}
+      <AddButton
+        onPress={() => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          router.push(`/protected/expenses/${propertyId}`);
+        }}
+      />
+
       <FilterSheet<ExpenseFilter>
         visible={sheetOpen}
         value={filter}
@@ -206,6 +263,35 @@ export default function ExpensesTab({ data, refreshing, onRefresh }: Props) {
         sections={sections}
         resetValue={emptyExpenseFilter}
       />
+
+      {/* ⬇️ NEW: Delete confirmation dialog */}
+      <Portal>
+        <Dialog
+          visible={confirmOpen}
+          onDismiss={() => setConfirmOpen(false)}
+          style={{ backgroundColor: colors.cardBackground }}
+        >
+          <Dialog.Title style={{ color: colors.textPrimary }}>Delete expense?</Dialog.Title>
+          <Dialog.Content>
+            <Text style={{ color: colors.textSecondary }}>
+              This will mark the expense as deleted.
+            </Text>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setConfirmOpen(false)} textColor={colors.textPrimary}>
+              Cancel
+            </Button>
+            <Button
+              onPress={handleConfirmDelete}
+              textColor={colors.error}
+              loading={updateExpense.isPending}
+              disabled={updateExpense.isPending}
+            >
+              Delete
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
     </>
   );
 }

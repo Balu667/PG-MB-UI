@@ -39,14 +39,10 @@ interface AddEditPropertyScreenProps {
 }
 const facilitiesList = ["WiFi", "Laundry", "TV", "Fridge", "Parking", "CCTV"];
 
-export default function AddEditPropertyScreen({
-  propertyData,
-}: AddEditPropertyScreenProps) {
+export default function AddEditPropertyScreen({ propertyData }: AddEditPropertyScreenProps) {
   const router = useRouter();
   const [images, setImages] = useState<string[]>(propertyData?.images ?? []);
-  const [facilities, setFacilities] = useState<string[]>(
-    propertyData?.facilities ?? []
-  );
+  const [facilities, setFacilities] = useState<string[]>(propertyData?.facilities ?? []);
   const [isTouched, setIsTouched] = useState(false);
 
   const {
@@ -78,14 +74,10 @@ export default function AddEditPropertyScreen({
 
   const handleBackPress = () => {
     if (isTouched || Object.values(formValues).some(Boolean)) {
-      Alert.alert(
-        "Unsaved Changes",
-        "Form data might be lost. Are you sure you want to go back?",
-        [
-          { text: "Cancel", style: "cancel" },
-          { text: "Yes", onPress: () => router.back() },
-        ]
-      );
+      Alert.alert("Unsaved Changes", "Form data might be lost. Are you sure you want to go back?", [
+        { text: "Cancel", style: "cancel" },
+        { text: "Yes", onPress: () => router.back() },
+      ]);
       return true;
     } else {
       router.back();
@@ -94,10 +86,7 @@ export default function AddEditPropertyScreen({
   };
 
   useEffect(() => {
-    const sub = BackHandler.addEventListener(
-      "hardwareBackPress",
-      handleBackPress
-    );
+    const sub = BackHandler.addEventListener("hardwareBackPress", handleBackPress);
     return () => sub.remove();
   }, [formValues]);
 
@@ -247,11 +236,7 @@ export default function AddEditPropertyScreen({
             ))}
           </View>
 
-          <Button
-            mode="outlined"
-            onPress={pickImages}
-            style={{ marginVertical: 12 }}
-          >
+          <Button mode="outlined" onPress={pickImages} style={{ marginVertical: 12 }}>
             Upload Property Images
           </Button>
           <ScrollView horizontal>
@@ -269,11 +254,7 @@ export default function AddEditPropertyScreen({
             ))}
           </ScrollView>
 
-          <Button
-            mode="contained"
-            onPress={handleSubmit(onSubmit)}
-            style={styles.saveButton}
-          >
+          <Button mode="contained" onPress={handleSubmit(onSubmit)} style={styles.saveButton}>
             Save Property
           </Button>
         </ScrollView>

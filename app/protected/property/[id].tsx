@@ -492,6 +492,7 @@ export default function PropertyDetails() {
           data={expenses}
           refreshing={!!expensesQuery?.isFetching}
           onRefresh={expensesQuery?.refetch}
+          propertyId={id as string} // <-- pass id for Add button route
         />
       ) : activeTab === "Dues" ? (
         <DuesTab
