@@ -1,5 +1,12 @@
 import React, { useState } from "react";
-import { View, Text, TextInput, StyleSheet, Platform } from "react-native";
+import {
+  View,
+  Text,
+  TextInput,
+  StyleSheet,
+  Platform,
+  Keyboard,
+} from "react-native";
 import { useTheme } from "@/src/theme/ThemeContext";
 
 interface Props {
@@ -12,10 +19,30 @@ const PhoneInput: React.FC<Props> = ({ value, onChangeText }) => {
   const { colors, radius } = useTheme();
 
   const handleChange = (text: string) => {
-    const digits = text.replace(/\D/g, "").slice(0, 10);
+    let digits = text.replace(/\D/g, ""); // remove all non-digit characters
+
+    // 🧩 Handle paste cases
+    if (text.includes("+91")) {
+      // If pasted with +91, strip the prefix
+      digits = digits.slice(-10);
+    } else if (digits.startsWith("91") && digits.length === 12) {
+      // If pasted starts with 91 and has 12 digits (like 919502196307)
+      digits = digits.slice(2);
+    } else if (digits.startsWith("0") && digits.length > 10) {
+      // If pasted starts with 0 and has extra digits (like 09502196307)
+      digits = digits.slice(-10);
+    } else {
+      // 🧠 Manual typing — restrict to max 10 digits
+      digits = digits.slice(0, 10);
+    }
+
     onChangeText(digits);
 
-    if (digits.length === 10) setError("");
+    // ✅ Auto clear error and dismiss keyboard when complete
+    if (digits.length === 10) {
+      setError("");
+      Keyboard.dismiss();
+    }
   };
 
   const handleBlur = () => {
@@ -82,9 +109,10 @@ const PhoneInput: React.FC<Props> = ({ value, onChangeText }) => {
           placeholder="Enter Mobile Number"
           placeholderTextColor={colors.textMuted}
           keyboardType="phone-pad"
-          maxLength={10}
+          maxLength={14}
           value={value}
           onChangeText={handleChange}
+          onEndEditing={(e) => handleChange(e.nativeEvent.text)}
           onBlur={handleBlur}
           returnKeyType="done"
           textContentType={Platform.OS === "ios" ? "telephoneNumber" : "none"}
