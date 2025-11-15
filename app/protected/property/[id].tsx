@@ -15,14 +15,19 @@ import ExpensesTab from "@/src/components/property/ExpensesTab";
 import AdvanceBookingTab from "@/src/components/property/AdvanceBookingTab";
 import DuesTab from "@/src/components/property/DuesTab";
 import CollectionsTab from "@/src/components/property/CollectionsTab";
+// ⬇️ NEW
+import StaffTab from "@/src/components/property/StaffTab";
 
 import { useTheme } from "@/src/theme/ThemeContext";
 import { useGetAllRooms } from "@/src/hooks/room";
 import { useGetAllTenants } from "@/src/hooks/tenants";
 import { useGetDailyExpensesList } from "@/src/hooks/dailyExpenses";
 import { useGetPropertyDetails } from "@/src/hooks/bookingHook";
+import { useGetAllEmployees } from "@/src/hooks/employee"; // ⬅️ your employees hook
 
 import type { Metric } from "@/src/components/StatsGrid";
+// ⬇️ NEW
+import { useSelector } from "react-redux";
 
 /* ---------------------------------- tabs ---------------------------------- */
 const TABS = [
@@ -369,6 +374,8 @@ export default function PropertyDetails() {
   const router = useRouter();
   const { colors, spacing, typography } = useTheme();
   const { selectedId, properties, loading: propsLoading } = useProperty();
+  // ⬇️ NEW: read owner info to fetch employees
+  const { profileData } = useSelector((state: any) => state.profileDetails);
 
   const styles = useMemo(
     () =>
@@ -406,7 +413,6 @@ export default function PropertyDetails() {
     [roomsQuery?.data]
   );
 
-  // IMPORTANT: Two separate tenant queries with params (matches web)
   const tenantsActiveQuery = useGetAllTenants(id as string, "?status=1,2");
   const tenantsAdvanceQuery = useGetAllTenants(id as string, "?status=3,5,6");
 
@@ -428,6 +434,25 @@ export default function PropertyDetails() {
 
   const layoutQuery = useGetPropertyDetails(id as string);
   const layout = useMemo(() => parsePropertyLayout(layoutQuery?.data), [layoutQuery?.data]);
+
+  // ⬇️ NEW: employees list (owner-scoped), then filter to this property
+  const ownerId =
+    String(profileData?.ownerId || profileData?.userId || profileData?._id || "") || "";
+  const employeesQuery = useGetAllEmployees(ownerId);
+
+  const staffForProperty = useMemo(() => {
+    const rows = Array.isArray(employeesQuery?.data)
+      ? employeesQuery?.data
+      : Array.isArray(employeesQuery?.data?.data)
+      ? employeesQuery?.data?.data
+      : [];
+    if (!id) return rows;
+    // show employees assigned to this property id (fallback to all if field missing)
+    return rows.filter((e: any) => {
+      const props = Array.isArray(e?.assignedProperties) ? e.assignedProperties : [];
+      return !props.length || props.some((p) => String(p) === String(id));
+    });
+  }, [employeesQuery?.data, id]);
 
   // Dues should consider both active & advance lists (dedupe by _id/id)
   const dueTenants = useMemo(() => {
@@ -492,7 +517,7 @@ export default function PropertyDetails() {
           data={expenses}
           refreshing={!!expensesQuery?.isFetching}
           onRefresh={expensesQuery?.refetch}
-          propertyId={id as string} // <-- pass id for Add button route
+          propertyId={id as string}
         />
       ) : activeTab === "Dues" ? (
         <DuesTab
@@ -504,10 +529,12 @@ export default function PropertyDetails() {
           }}
         />
       ) : activeTab === "Collections" ? (
-        <CollectionsTab
-          data={[]} // plug in API later
-          refreshing={false}
-          onRefresh={() => {}}
+        <CollectionsTab data={[]} refreshing={false} onRefresh={() => {}} />
+      ) : activeTab === "Staff" ? (
+        <StaffTab
+          data={staffForProperty}
+          refreshing={!!employeesQuery?.isFetching}
+          onRefresh={employeesQuery?.refetch}
         />
       ) : (
         <ScrollView
@@ -527,15 +554,8 @@ export default function PropertyDetails() {
               }}
             />
           )}
-          {activeTab === "Staff" && (
-            <Placeholder label="Staff list goes here…" style={styles.placeholder} />
-          )}
         </ScrollView>
       )}
     </SafeAreaView>
   );
-}
-
-function Placeholder({ label, style }: { label: string; style: any }) {
-  return <Text style={style}>{label}</Text>;
 }
