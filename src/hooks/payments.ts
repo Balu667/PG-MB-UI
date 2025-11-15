@@ -1,19 +1,19 @@
+// src/hooks/payments.ts
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert } from "react-native";
 import { fetchData } from "@/helper";
 
-// ✅ Unified response interface
 interface FetchResponse {
-  message: string;
+  message?: string;
   data?: any;
 }
 
-/**
- * 🧾 Get payments for a specific entity
- */
-const useGetAllPayments = (id: string) => {
+// ─────────────────────────────────────────────
+// GET ALL PAYMENTS (single payment group)
+// ─────────────────────────────────────────────
+const useGetAllPayment = (id: string) => {
   return useQuery({
-    queryKey: ["paymentsList", id],
+    queryKey: ["paymentList", id],
     queryFn: async () => {
       const response = await fetchData({
         url: `payments/${id}`,
@@ -25,87 +25,99 @@ const useGetAllPayments = (id: string) => {
   });
 };
 
-/**
- * 🧾 Get all tenant payments
- */
-const useGetAllTenantPayments = (id: string) => {
+// ─────────────────────────────────────────────
+// GET TENANT PAYMENTS
+// ─────────────────────────────────────────────
+const useGetAllTenantPayments = (tenantId: string) => {
   return useQuery({
-    queryKey: ["tenantPaymentList", id],
+    queryKey: ["tenantPaymentList", tenantId],
     queryFn: async () => {
       const response = await fetchData({
-        url: `payments/tenant/${id}`,
+        url: `payments/tenant/${tenantId}`,
         method: "GET",
       });
       return response?.data;
     },
-    enabled: !!id,
+    enabled: !!tenantId,
   });
 };
 
-/**
- * 🧾 Get all property payments
- */
-const useGetAllPropertyPayments = (id: string) => {
+// ─────────────────────────────────────────────
+// GET PROPERTY PAYMENTS
+// ─────────────────────────────────────────────
+const useGetAllPropertyPayments = (propertyId: string) => {
   return useQuery({
-    queryKey: ["propertyPaymentList", id],
+    queryKey: ["propertyPaymentList", propertyId],
     queryFn: async () => {
       const response = await fetchData({
-        url: `payments/properties/${id}`,
+        url: `payments/properties/${propertyId}`,
         method: "GET",
       });
       return response?.data;
     },
-    enabled: !!id,
+    enabled: !!propertyId,
+    refetchOnMount: "always",
   });
 };
 
-/**
- * 💰 Insert new payment
- */
-const useInsertPayment = (
-  onSuccessFunctions: (data: FetchResponse) => void
-) => {
+// ─────────────────────────────────────────────
+// INSERT PAYMENT
+// ─────────────────────────────────────────────
+const useInsertPayment = (onSuccessFunctions: (data: FetchResponse) => void) => {
   const queryClient = useQueryClient();
+
   return useMutation({
-    mutationFn: (data: FormData) =>
+    mutationFn: (data: any) =>
       fetchData({
         url: `payments`,
         method: "POST",
-        body: data,
+        body: JSON.stringify(data),
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
       }),
+
     onError: (error: Error) => {
-      Alert.alert(error.message || "Failed to add payment.");
+      Alert.alert("Error", error.message);
     },
+
     onSuccess: (data: FetchResponse) => {
-      Alert.alert(data.message || "Payment added successfully.");
       onSuccessFunctions(data);
+      Alert.alert("Success", data?.message || "Payment added successfully");
+
       queryClient.invalidateQueries({ queryKey: ["tenantdetails"] });
       queryClient.invalidateQueries({ queryKey: ["tenantPaymentList"] });
-      queryClient.invalidateQueries({ queryKey: ["propertyPaymentList"] });
     },
   });
 };
 
-/**
- * ✏️ Update existing payment
- */
-const useUpdatePayment = (
-  onSuccessFunctions: (data: FetchResponse) => void
-) => {
+// ─────────────────────────────────────────────
+// UPDATE PAYMENT
+// ─────────────────────────────────────────────
+const useUpdatePayment = (onSuccessFunctions: (data: FetchResponse) => void) => {
   const queryClient = useQueryClient();
+
   return useMutation({
-    mutationFn: ({ data, paymentId }: { data: FormData; paymentId: string }) =>
+    mutationFn: ({ data, paymentId }: { data: any; paymentId: string }) =>
       fetchData({
         url: `payments/${paymentId}`,
         method: "PUT",
-        body: data,
+        body: JSON.stringify(data),
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
       }),
+
     onError: (error: Error) => {
-      Alert.alert(error.message || "Failed to update payment.");
+      Alert.alert("Error", error.message);
     },
+
     onSuccess: (data: FetchResponse) => {
-      Alert.alert(data.message || "Payment updated successfully.");
       onSuccessFunctions(data);
+      Alert.alert("Success", data?.message || "Payment updated");
+
       queryClient.invalidateQueries({ queryKey: ["tenantdetails"] });
       queryClient.invalidateQueries({ queryKey: ["tenantPaymentList"] });
       queryClient.invalidateQueries({ queryKey: ["propertyPaymentList"] });
@@ -113,34 +125,10 @@ const useUpdatePayment = (
   });
 };
 
-/**
-
-//  */
-// const useDeletePayment = (
-//   onSuccessFunctions: (data: FetchResponse) => void
-// ) => {
-//   const queryClient = useQueryClient();
-//   return useMutation({
-//     mutationFn: (paymentId: string) =>
-//       fetchData({
-//         url: `payments/${paymentId}`,
-//         method: "DELETE",
-//       }),
-//     onError: (error: Error) => {
-//       Alert.alert(error.message || "Failed to delete payment.");
-//     },
-//     onSuccess: (data: FetchResponse) => {
-//       Alert.alert(data.message || "Payment deleted successfully.");
-//       onSuccessFunctions(data);
-//       queryClient.invalidateQueries({ queryKey: ["paymentsList"] });
-//     },
-//   });
-// };
-
 export {
-  useGetAllPayments,
-  useInsertPayment,
-  useUpdatePayment,
+  useGetAllPayment,
   useGetAllTenantPayments,
   useGetAllPropertyPayments,
+  useInsertPayment,
+  useUpdatePayment,
 };
