@@ -24,7 +24,7 @@ import { useGetAllTenants } from "@/src/hooks/tenants";
 import { useGetDailyExpensesList } from "@/src/hooks/dailyExpenses";
 import { useGetPropertyDetails } from "@/src/hooks/bookingHook";
 import { useGetAllEmployees } from "@/src/hooks/employee"; // ⬅️ your employees hook
-
+import { useGetAllPropertyPayments } from "@/src/hooks/payments";
 import type { Metric } from "@/src/components/StatsGrid";
 // ⬇️ NEW
 import { useSelector } from "react-redux";
@@ -65,6 +65,10 @@ type TenantsMeta = {
 
 const num = (v: any, fallback = 0) => (typeof v === "number" ? v : Number(v ?? fallback)) || 0;
 const str = (v: any, fallback = "") => (v == null ? fallback : String(v));
+const inr = (n: any) => {
+  const x = typeof n === "number" ? n : Number(n ?? 0) || 0;
+  return `₹ ${x.toLocaleString("en-IN")}`;
+};
 
 /* ---------- Rooms parsing ---------- */
 const computeRoomsMetaFromList = (rooms: any[]): RoomsMeta => {
@@ -161,6 +165,128 @@ const parseRoomsResponse = (raw: any): { rooms: any[]; meta: RoomsMeta } => {
 };
 
 /** Robust tenants parser (shared) */
+
+const parseCollectionsResponse = (
+  raw: any
+): {
+  payments: any[];
+  metrics: Metric[];
+} => {
+  try {
+    const collections = raw?.data?.collections ?? raw?.collections ?? {};
+    const payments: any[] = Array.isArray(collections?.payments) ? collections.payments : [];
+
+    const totalCollection = Number(collections?.totalCollection ?? 0) || 0;
+    const rentCollection = Number(collections?.rentCollection ?? 0) || 0;
+    const currentMonthCollection = Number(collections?.currentMonthCollection ?? 0) || 0;
+    const otherCollection = Number(collections?.otherCollection ?? 0) || 0;
+
+    const metrics: Metric[] = [
+      {
+        key: "total",
+        label: "Total Collection",
+        value: inr(totalCollection),
+        icon: "cash",
+        iconBg: "#DCFCE7",
+        iconColor: "#16A34A",
+      },
+      {
+        key: "rent",
+        label: "Rent Collection",
+        value: inr(rentCollection),
+        icon: "home-city",
+        iconBg: "#DBEAFE",
+      },
+      {
+        key: "current",
+        label: "Current Month",
+        value: inr(currentMonthCollection),
+        icon: "calendar-month",
+        iconBg: "#EDE9FE",
+        iconColor: "#6D28D9",
+      },
+      {
+        key: "other",
+        label: "Other Collection",
+        value: inr(otherCollection),
+        icon: "cash-multiple",
+        iconBg: "#FEF3C7",
+        iconColor: "#B45309",
+      },
+    ];
+
+    return { payments, metrics };
+  } catch {
+    return { payments: [], metrics: [] };
+  }
+};
+
+/** Dues parser */
+const parseDuesResponse = (
+  raw: any
+): {
+  payments: any[];
+  metrics: Metric[];
+} => {
+  try {
+    const dues = raw?.dues ?? {};
+    const payments: any[] = Array.isArray(dues?.payments) ? dues.payments : [];
+    const totalDues = Number(dues?.totalDues ?? 0) || 0;
+    const rentDues = Number(dues?.rentDues ?? 0) || 0;
+    const currentMonthDues = Number(dues?.currentMonthDues ?? 0) || 0;
+    const lateDues = Number(dues?.lateDues ?? 0) || 0;
+    const futureDues = Number(dues?.futureDues ?? 0) || 0;
+
+    const inrFmt = (x: number) => `₹ ${x.toLocaleString("en-IN")}`;
+
+    const metrics: Metric[] = [
+      {
+        key: "totalDues",
+        label: "Total Dues",
+        value: inrFmt(totalDues),
+        icon: "cash-remove",
+        iconBg: "#FEE2E2",
+        iconColor: "#B91C1C",
+      },
+      {
+        key: "rentDues",
+        label: "Rent Dues",
+        value: inrFmt(rentDues),
+        icon: "home-city",
+        iconBg: "#DBEAFE",
+      },
+      {
+        key: "currentMonthDues",
+        label: "Current Month",
+        value: inrFmt(currentMonthDues),
+        icon: "calendar-month",
+        iconBg: "#EDE9FE",
+        iconColor: "#6D28D9",
+      },
+      {
+        key: "lateDues",
+        label: "Late Dues",
+        value: inrFmt(lateDues),
+        icon: "cash-clock",
+        iconBg: "#FEF3C7",
+        iconColor: "#B45309",
+      },
+      {
+        key: "futureDues",
+        label: "Future Dues",
+        value: inrFmt(futureDues),
+        icon: "calendar-arrow-right",
+        iconBg: "#DCFCE7",
+        iconColor: "#15803D",
+      },
+    ];
+
+    return { payments, metrics };
+  } catch {
+    return { payments: [], metrics: [] };
+  }
+};
+
 const parseTenantsResponse = (raw: any): { tenants: any[]; meta: TenantsMeta } => {
   const emptyMeta: TenantsMeta = {
     totalTenants: 0,
@@ -412,6 +538,18 @@ export default function PropertyDetails() {
     () => parseRoomsResponse(roomsQuery?.data),
     [roomsQuery?.data]
   );
+  const paymentsQuery = useGetAllPropertyPayments(`${id}?status=1`);
+  const { payments: collectionsData, metrics: collectionsMetrics } = useMemo(
+    () => parseCollectionsResponse(paymentsQuery?.data),
+    [paymentsQuery?.data]
+  );
+
+  // dues via payments API
+  const duesQuery = useGetAllPropertyPayments(`${id}?status=2&tenantStatus=1,2,3`);
+  const { payments: duesData, metrics: duesMetrics } = useMemo(
+    () => parseDuesResponse(duesQuery?.data),
+    [duesQuery?.data]
+  );
 
   const tenantsActiveQuery = useGetAllTenants(id as string, "?status=1,2");
   const tenantsAdvanceQuery = useGetAllTenants(id as string, "?status=3,5,6");
@@ -521,15 +659,18 @@ export default function PropertyDetails() {
         />
       ) : activeTab === "Dues" ? (
         <DuesTab
-          data={dueTenants}
-          refreshing={!!tenantsActiveQuery?.isFetching || !!tenantsAdvanceQuery?.isFetching}
-          onRefresh={() => {
-            tenantsActiveQuery?.refetch?.();
-            tenantsAdvanceQuery?.refetch?.();
-          }}
+          data={duesData}
+          metrics={duesMetrics}
+          refreshing={!!duesQuery?.isFetching}
+          onRefresh={duesQuery?.refetch}
         />
       ) : activeTab === "Collections" ? (
-        <CollectionsTab data={[]} refreshing={false} onRefresh={() => {}} />
+        <CollectionsTab
+          data={collectionsData}
+          metrics={collectionsMetrics}
+          refreshing={!!paymentsQuery?.isFetching}
+          onRefresh={paymentsQuery?.refetch}
+        />
       ) : activeTab === "Staff" ? (
         <StaffTab
           data={staffForProperty}
