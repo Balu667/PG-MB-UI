@@ -535,6 +535,7 @@ export default function PropertyDetails() {
           data={staffForProperty}
           refreshing={!!employeesQuery?.isFetching}
           onRefresh={employeesQuery?.refetch}
+          propertyId={id as string}
         />
       ) : (
         <ScrollView

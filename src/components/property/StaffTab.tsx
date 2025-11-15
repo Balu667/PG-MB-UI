@@ -18,9 +18,11 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Switch } from "react-native-paper";
 import * as Haptics from "expo-haptics";
+import { router, useLocalSearchParams } from "expo-router";
 
 import SearchBar from "@/src/components/SearchBar";
 import StatsGrid, { type Metric } from "@/src/components/StatsGrid";
+import AddButton from "@/src/components/Common/AddButton";
 import { useTheme } from "@/src/theme/ThemeContext";
 import { hexToRgba } from "@/src/theme";
 import { useUpdateEmployee } from "@/src/hooks/employee";
@@ -33,7 +35,7 @@ if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental
 type RawEmployee = {
   _id?: string;
   id?: string;
-  status?: number; // 1=Active, 2=Inactive
+  status?: number; // 1=Active, 2=Inactive, 0=Deleted
   empName?: string;
   empContactNumber?: string;
   role?: number; // 2=Admin, 3=Partner, others: Staff
@@ -60,6 +62,8 @@ type Props = {
   data: RawEmployee[];
   refreshing: boolean;
   onRefresh: () => void; // programmatic refetch
+  /** current propertyId to route Add/Edit properly */
+  propertyId: string;
 };
 
 const roleLabel = (r?: number) => {
@@ -75,7 +79,7 @@ const toInitials = (name?: string) => {
   return (parts[0][0] + parts[1][0]).toUpperCase();
 };
 
-/** ✅ Include status 1 & 2 — do not filter them out */
+/** ✅ Include status 1 & 2; do not filter them out. (status 0 is soft-deleted and server-side) */
 const normalize = (rows: RawEmployee[]): StaffCardItem[] =>
   (rows || [])
     .map((e) => {
@@ -98,10 +102,14 @@ const normalize = (rows: RawEmployee[]): StaffCardItem[] =>
 const StaffCard = ({
   item,
   onToggle,
+  onEdit,
+  onDelete,
   disabled,
 }: {
   item: StaffCardItem;
   onToggle: (emp: StaffCardItem, next: 1 | 2) => void;
+  onEdit: (emp: StaffCardItem) => void;
+  onDelete: (emp: StaffCardItem) => void;
   disabled: boolean;
 }) => {
   const { colors, spacing, radius, shadow } = useTheme();
@@ -153,7 +161,8 @@ const StaffCard = ({
         roleTxt: { color: colors.accent, fontSize: 12, fontWeight: "700" },
         right: { alignItems: "flex-end", justifyContent: "center" },
         statusTxt: { fontSize: 12, color: colors.textSecondary, marginTop: 4 },
-        actionsRow: { flexDirection: "row", gap: spacing.sm, marginTop: 6 },
+
+        actionsRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, marginTop: 8 },
         actionBtn: {
           paddingHorizontal: spacing.sm,
           paddingVertical: 8,
@@ -162,7 +171,16 @@ const StaffCard = ({
           borderWidth: 1,
           borderColor: hexToRgba(colors.textSecondary, 0.12),
         },
+        callBtn: {
+          paddingHorizontal: spacing.sm,
+          paddingVertical: 8,
+          backgroundColor: colors.surface,
+          borderRadius: radius.lg,
+          borderWidth: 1,
+          borderColor: hexToRgba(colors.textSecondary, 0.12),
+        },
         actionTxt: { fontSize: 12, fontWeight: "600", color: colors.link },
+        dangerTxt: { fontSize: 12, fontWeight: "700", color: colors.error },
       }),
     [colors, spacing, radius, shadow]
   );
@@ -194,8 +212,24 @@ const StaffCard = ({
           </View>
 
           <View style={s.actionsRow}>
-            <Pressable style={s.actionBtn} onPress={onCall} accessibilityLabel="Call employee">
+            <Pressable style={s.callBtn} onPress={onCall} accessibilityLabel="Call employee">
               <Text style={s.actionTxt}>Call</Text>
+            </Pressable>
+
+            <Pressable
+              style={s.actionBtn}
+              onPress={() => onEdit(item)}
+              accessibilityLabel="Edit employee"
+            >
+              <Text style={s.actionTxt}>Edit</Text>
+            </Pressable>
+
+            <Pressable
+              style={s.actionBtn}
+              onPress={() => onDelete(item)}
+              accessibilityLabel="Delete employee"
+            >
+              <Text style={s.dangerTxt}>Delete</Text>
             </Pressable>
           </View>
         </View>
@@ -218,7 +252,7 @@ const StaffCard = ({
   );
 };
 
-export default function StaffTab({ data, refreshing, onRefresh }: Props) {
+export default function StaffTab({ data, refreshing, onRefresh, propertyId }: Props) {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const { colors, spacing, radius } = useTheme();
@@ -289,7 +323,7 @@ export default function StaffTab({ data, refreshing, onRefresh }: Props) {
     ];
   }, [base]);
 
-  /** Mutation: update employee status and refresh list on success */
+  /** Mutation: update employee status / delete and refresh list on success */
   const updateEmployee = useUpdateEmployee(() => {
     setPendingId(null);
     onRefresh(); // programmatic refetch like pull-to-refresh
@@ -341,13 +375,13 @@ export default function StaffTab({ data, refreshing, onRefresh }: Props) {
       setPendingId(emp.id);
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
 
-      // Payload per your requirement:
       const payload = {
         ...emp.raw,
         _id: emp.id,
         status: nextStatus,
         staffRole: emp.roleLabel,
-        staffStatus: nextStatus === 1 ? "Active" : "Inactive",
+        // keep staffStatus stable (server likely ignores it; sample shows "Active")
+        staffStatus: emp.raw?.staffStatus ?? (nextStatus === 1 ? "Active" : "Inactive"),
       };
 
       updateEmployee.mutate(
@@ -366,8 +400,69 @@ export default function StaffTab({ data, refreshing, onRefresh }: Props) {
     [updateEmployee]
   );
 
+  const handleEdit = useCallback(
+    (emp: StaffCardItem) => {
+      Haptics.selectionAsync();
+      router.push({
+        pathname: `/protected/employees/${propertyId}`,
+        params: { employeeId: emp.id },
+      });
+    },
+    [propertyId]
+  );
+
+  const handleDelete = useCallback(
+    (emp: StaffCardItem) => {
+      Alert.alert(
+        "Delete employee?",
+        `This will mark ${emp.name} as deleted.`,
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Delete",
+            style: "destructive",
+            onPress: () => {
+              setPendingId(emp.id);
+              LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+
+              const payload = {
+                ...emp.raw,
+                _id: emp.id,
+                status: 0, // soft delete
+                staffRole: emp.roleLabel,
+                // match sample payload's staffStatus; keep existing or fallback to "Active"
+                staffStatus: emp.raw?.staffStatus ?? "Active",
+              };
+
+              updateEmployee.mutate(
+                { data: payload, employeeId: emp.id },
+                {
+                  onSuccess: () => {
+                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                  },
+                  onError: () => {
+                    setPendingId(null);
+                    Alert.alert("Delete failed", "Could not delete employee. Please try again.");
+                  },
+                }
+              );
+            },
+          },
+        ],
+        { cancelable: true }
+      );
+    },
+    [updateEmployee]
+  );
+
   const renderItem = ({ item }: ListRenderItemInfo<StaffCardItem>) => (
-    <StaffCard item={item} onToggle={handleToggle} disabled={pendingId === item.id} />
+    <StaffCard
+      item={item}
+      onToggle={handleToggle}
+      onEdit={handleEdit}
+      onDelete={handleDelete}
+      disabled={pendingId === item.id}
+    />
   );
 
   return (
@@ -382,10 +477,7 @@ export default function StaffTab({ data, refreshing, onRefresh }: Props) {
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={
           <View>
-            {/* 🔹 New: Staff metrics */}
             <StatsGrid metrics={metrics} />
-
-            {/* Existing search (no filters for staff) */}
             <View style={s.searchWrap}>
               <Text style={s.searchTitle}>Search Staff</Text>
               <SearchBar placeholder="Search by name, phone, role" onSearch={setQuery} />
@@ -403,6 +495,14 @@ export default function StaffTab({ data, refreshing, onRefresh }: Props) {
         removeClippedSubviews
         initialNumToRender={10}
         windowSize={10}
+      />
+
+      {/* FAB to add employee */}
+      <AddButton
+        onPress={() => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          router.push(`/protected/employees/${propertyId}`);
+        }}
       />
     </>
   );
