@@ -10,13 +10,15 @@ import {
   RefreshControl,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-
+import * as Haptics from "expo-haptics";
+import { useRouter } from "expo-router";
 import StatsGrid, { Metric } from "@/src/components/StatsGrid";
 import SearchBar from "@/src/components/SearchBar";
 import FilterSheet, { Section } from "@/src/components/FilterSheet";
 import RoomCard from "./RoomCard";
 import { RoomFilter, emptyFilter } from "@/src/constants/roomFilter";
 import { useTheme } from "@/src/theme/ThemeContext";
+import AddButton from "@/src/components/Common/AddButton";
 
 /* -------------------------- helpers / utils -------------------------- */
 const num = (v: any, fallback = 0) => (typeof v === "number" ? v : Number(v ?? fallback)) || 0;
@@ -120,6 +122,7 @@ type Props = {
 };
 
 export default function RoomsTab({ data, meta, refreshing, onRefresh }: Props) {
+  const router = useRouter();
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const { colors, spacing } = useTheme();
@@ -267,6 +270,14 @@ export default function RoomsTab({ data, meta, refreshing, onRefresh }: Props) {
         removeClippedSubviews
         initialNumToRender={10}
         windowSize={10}
+      />
+
+      {/* Floating Add */}
+      <AddButton
+        onPress={() => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          router.push("/protected/rooms/add");
+        }}
       />
 
       <FilterSheet

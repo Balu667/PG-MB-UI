@@ -14,7 +14,8 @@ import {
 import * as Haptics from "expo-haptics";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-
+import { useRouter } from "expo-router";
+import { useProperty } from "@/src/context/PropertyContext";
 import { useTheme } from "@/src/theme/ThemeContext";
 import { hexToRgba } from "@/src/theme";
 
@@ -52,9 +53,10 @@ interface Props {
 }
 
 const RoomCard: React.FC<Props> = ({ room }) => {
+  const router = useRouter();
   const { width } = useWindowDimensions();
   const { colors, spacing, radius, shadow } = useTheme();
-
+  const { selectedId } = useProperty();
   const COLS = width >= 1000 ? 3 : width >= 740 ? 2 : 1;
   const GAP = spacing.md - 2;
   const SIDE = spacing.md * 2;
@@ -73,17 +75,17 @@ const RoomCard: React.FC<Props> = ({ room }) => {
     ]).start();
   };
 
-  // ---- Normalized fields (include `beds`, `bedPrice`, and status math) ----
+  // ---- Normalized fields ----
   const roomNoRaw = str(room?.roomNo ?? room?.roomNumber ?? room?.name ?? room?.code, "—");
-  const roomNo = roomNoRaw.toString().toUpperCase(); // keeps your style consistent (e.g., co-102)
-
+  const roomNo = roomNoRaw.toString().toUpperCase();
   const floor = str(room?.floor ?? room?.floorLabel ?? room?.floorNo, "—");
+
   const totalBeds =
     num(room?.totalBeds) ||
     num(room?.bedsTotal) ||
     num(room?.bedCount) ||
     num(room?.capacity) ||
-    num(room?.beds) || // <— include `beds`
+    num(room?.beds) ||
     0;
 
   const occupiedBeds = num(room?.occupiedBeds);
@@ -94,14 +96,9 @@ const RoomCard: React.FC<Props> = ({ room }) => {
     ? num(room?.vacantBeds)
     : Math.max(totalBeds - (occupiedBeds + underNotice + advanceBookings), 0);
 
-  // Rent and deposit
   const bedPrice = num(room?.bedPrice ?? room?.rentAmount ?? 0);
   const deposit = num(room?.securityDeposit ?? room?.deposit ?? 0);
 
-  // Status from your rules:
-  // - If no vacant beds (including adv + underNotice), it's Filled
-  // - If some vacant beds and some used -> Partial
-  // - If everything vacant -> Available
   const usedCount = Math.min(occupiedBeds + underNotice + advanceBookings, totalBeds);
   const derivedStatus =
     totalBeds <= 0
@@ -112,7 +109,6 @@ const RoomCard: React.FC<Props> = ({ room }) => {
       ? "Available"
       : "Partial";
 
-  // Progress bar shows fill progress based on usedCount
   const utilisation = totalBeds ? Math.min(usedCount / totalBeds, 1) : 0;
 
   const CHIP = useMemo(() => chipTint(colors), [colors]);
@@ -154,14 +150,11 @@ const RoomCard: React.FC<Props> = ({ room }) => {
           padding: spacing.md + 2,
           overflow: "hidden",
         },
-
         rowBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
 
-        /* A.3 — header: "Room - 102" with styled number */
         roomLabel: { fontSize: 18, fontWeight: "600", color: colors.textPrimary },
         roomNo: { fontSize: 18, fontWeight: "800", color: colors.accent },
 
-        /* status chip */
         statusChip: (bg: string) => ({
           backgroundColor: bg,
           borderRadius: 12,
@@ -180,7 +173,17 @@ const RoomCard: React.FC<Props> = ({ room }) => {
           textTransform: "uppercase",
         },
 
-        /* A.1 — floor label */
+        // New: small Edit icon next to status chip
+        headerRight: { flexDirection: "row", alignItems: "center", gap: 8 },
+        editBtn: {
+          width: 28,
+          height: 28,
+          borderRadius: 14,
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: hexToRgba(colors.accent, 0.12),
+        },
+
         floorWrap: { flexDirection: "row", alignItems: "center", gap: 6 },
         floorTxt: { fontSize: 14, color: colors.textSecondary },
 
@@ -193,15 +196,12 @@ const RoomCard: React.FC<Props> = ({ room }) => {
         },
         moreBadgeTxt: { fontSize: 11, color: colors.accent, fontWeight: "600" },
 
-        /* A.2 — rent line */
         rentTxt: { marginTop: 6, fontSize: 13, color: colors.textSecondary },
         rentBold: { fontWeight: "700", color: colors.textPrimary },
 
-        /* A.4 — deposit line text & bold value */
         depositTxt: { marginTop: 4, fontSize: 13, color: colors.textSecondary },
         depositBold: { fontWeight: "800", color: colors.textPrimary },
 
-        /* A.7 — progress bar colored by status & width by utilisation */
         utilBarWrap: {
           height: 6,
           backgroundColor: hexToRgba(colors.textSecondary, 0.25),
@@ -232,18 +232,40 @@ const RoomCard: React.FC<Props> = ({ room }) => {
         onPress={handlePress}
         android_ripple={{ color: hexToRgba(colors.primary, 0.07) }}
       >
-        {/* row 1 – header & status chip */}
+        {/* header */}
         <View style={s.rowBetween}>
           <Text style={s.roomLabel}>
             Room - <Text style={s.roomNo}>{roomNo}</Text>
           </Text>
 
-          <View style={s.statusChip(CHIP[derivedStatus as keyof typeof CHIP] ?? colors.accent)}>
-            <Text style={s.statusTxt}>{derivedStatus}</Text>
+          <View style={s.headerRight}>
+            <View style={s.statusChip(CHIP[derivedStatus as keyof typeof CHIP] ?? colors.accent)}>
+              <Text style={s.statusTxt}>{derivedStatus}</Text>
+            </View>
+
+            {/* EDIT */}
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                const rid = String(room?._id ?? room?.id ?? "");
+                if (!rid) return;
+                // include pid so /rooms/[id] can resolve property even if context is late
+                router.push({
+                  pathname: `/protected/rooms/${rid}`,
+                  params: { pid: String(selectedId || "") },
+                });
+              }}
+              style={({ pressed }) => [s.editBtn, pressed && { opacity: 0.8 }]}
+              hitSlop={10}
+              accessibilityRole="button"
+              accessibilityLabel={`Edit Room ${roomNo}`}
+            >
+              <MaterialIcons name="edit" size={16} color={colors.accent} />
+            </Pressable>
           </View>
         </View>
 
-        {/* row 2 – floor & beds mini-icons */}
+        {/* row 2 */}
         <View style={[s.rowBetween, { marginTop: 6 }]}>
           <View style={s.floorWrap}>
             <MaterialIcons name="stairs" size={16} color={colors.accent} />
@@ -261,21 +283,18 @@ const RoomCard: React.FC<Props> = ({ room }) => {
           </View>
         </View>
 
-        {/* A.2 — rent (bedPrice) */}
         {!!bedPrice && (
           <Text style={s.rentTxt}>
             <Text style={s.rentBold}>₹{bedPrice.toLocaleString()}</Text> - Rent
           </Text>
         )}
 
-        {/* A.4 — deposit label + bold value */}
         {!!deposit && (
           <Text style={s.depositTxt}>
             <Text style={s.depositBold}>₹{deposit.toLocaleString()}</Text> - Security Deposit
           </Text>
         )}
 
-        {/* A.7 — utilisation bar reflects occupancy (occupied + underNotice + advancedBookings) */}
         <View style={s.utilBarWrap}>
           <View
             style={[
@@ -285,7 +304,6 @@ const RoomCard: React.FC<Props> = ({ room }) => {
           />
         </View>
 
-        {/* expandable panel (dropdown) — A.5 "Total Beds" pulls from `beds` fallback too */}
         {open && (
           <View style={s.infoBox}>
             {Object.entries(bedBreakdown).map(([k, v]) => (
