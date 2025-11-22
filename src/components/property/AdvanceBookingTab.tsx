@@ -128,7 +128,7 @@ export default function AdvanceBookingTab({ data, refreshing, onRefresh }: Props
       if (bFrom || bTo) {
         out = out.filter((t) => {
           const d = parseDate(t?.bookingDate);
-          if (!d) return false; // if we are filtering by booking date, rows without a valid date are excluded
+          if (!d) return false;
           if (bFrom && d < bFrom) return false;
           if (bTo && d > bTo) return false;
           return true;
@@ -177,12 +177,44 @@ export default function AdvanceBookingTab({ data, refreshing, onRefresh }: Props
     []
   );
 
+  const handleEdit = useCallback(
+    (tenantId: string) => {
+      if (!tenantId) return;
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      router.push({
+        pathname: "/protected/advancedBooking/[id]",
+        params: { id: tenantId, mode: "edit" },
+      });
+    },
+    [router]
+  );
+
+  const handleConvertToTenant = useCallback(
+    (tenant: any) => {
+      const tenantId = str(tenant?._id ?? tenant?.id ?? "", "");
+      if (!tenantId) return;
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      router.push({
+        pathname: "/protected/advancedBooking/[id]",
+        params: { id: tenantId, mode: "convert" },
+      });
+    },
+    [router]
+  );
+
   return (
     <>
       <FlatList
         data={filtered}
         keyExtractor={(t: any, i) => String(t?._id ?? t?.id ?? i)}
-        renderItem={({ item }) => <AdvancedBookingCard tenant={item} onDelete={handleDelete} />}
+        renderItem={({ item }) => (
+          <AdvancedBookingCard
+            tenant={item}
+            onDelete={handleDelete}
+            onEdit={handleEdit}
+            onConvertToTenant={handleConvertToTenant}
+          />
+        )}
         numColumns={cols}
         columnWrapperStyle={cols > 1 ? s.columnGap : undefined}
         contentContainerStyle={s.listContent}
@@ -225,7 +257,7 @@ export default function AdvanceBookingTab({ data, refreshing, onRefresh }: Props
       <AddButton
         onPress={() => {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          router.push("/protected/tenant/add");
+          router.push("/protected/advancedBooking/add");
         }}
       />
     </>

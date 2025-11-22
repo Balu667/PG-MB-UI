@@ -3,7 +3,7 @@ import React, { useMemo, useState } from "react";
 import { View, Text, StyleSheet, Image, Pressable } from "react-native";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
-import { Menu, IconButton, Portal, Dialog, Button, Snackbar } from "react-native-paper";
+import { Menu, IconButton, Divider } from "react-native-paper";
 import { useTheme } from "@/src/theme/ThemeContext";
 import { hexToRgba } from "@/src/theme";
 
@@ -52,7 +52,6 @@ const tImage = (t: any) => {
 
 const sumAdvancePaid = (t: any) => num(t?.advanceRentAmountPaid) + num(t?.advanceDepositAmountPaid);
 
-/** prefer correct joiningDate, bookingDate as-is */
 const parseDate = (v: any) => {
   try {
     const s = str(v, "");
@@ -76,10 +75,23 @@ const formatDate = (v: any) => {
 
 interface Props {
   tenant: any;
+
+  /** Legacy prop kept for backward compatibility (no longer used). */
   onDelete?: (id: string) => void;
+
+  /** New action hooks (optional) */
+  onEdit?: (id: string) => void;
+  onConvertToTenant?: (tenant: any) => void;
+  onCancelBooking?: (tenant: any) => void;
 }
 
-const AdvancedBookingCard: React.FC<Props> = ({ tenant, onDelete }) => {
+const AdvancedBookingCard: React.FC<Props> = ({
+  tenant,
+  onDelete, // eslint-disable-line @typescript-eslint/no-unused-vars
+  onEdit,
+  onConvertToTenant,
+  onCancelBooking,
+}) => {
   const { colors, spacing, radius, shadow } = useTheme();
   const router = useRouter();
   const STATUS_COLORS = useMemo(() => statusTint(colors), [colors]);
@@ -120,21 +132,50 @@ const AdvancedBookingCard: React.FC<Props> = ({ tenant, onDelete }) => {
           paddingVertical: 3,
         }),
         statusTxt: { fontSize: 12, color: colors.white, fontWeight: "600" },
-        activeTxt: { fontSize: 12, fontWeight: "700", color: colors.success }, // green “(Active)”
+        activeTxt: { fontSize: 12, fontWeight: "700", color: colors.success },
       }),
     [colors, spacing, radius, shadow]
   );
 
+  // Premium menu styling
+  const menuStyles = useMemo(
+    () =>
+      StyleSheet.create({
+        content: {
+          backgroundColor: colors.cardBackground,
+          borderRadius: 14,
+          borderWidth: 1,
+          borderColor: colors.borderColor,
+          minWidth: 200,
+          paddingVertical: 2,
+          // paper adds elevation automatically; border + radius gives premium look
+        },
+        item: {
+          paddingVertical: 6,
+        },
+        title: {
+          fontSize: 14,
+          color: colors.textPrimary,
+        },
+        dangerTitle: {
+          fontSize: 14,
+          color: colors.error,
+        },
+        anchorRipple: {
+          borderRadius: 20,
+          overflow: "hidden",
+        },
+      }),
+    [colors]
+  );
+
   const [menuVisible, setMenuVisible] = useState(false);
-  const [confirmOpen, setConfirmOpen] = useState(false);
-  const [snack, setSnack] = useState(false);
 
   const id = tId(tenant);
   const statusLabel = statusLabelFromCode(tenant?.status);
   const advPaid = sumAdvancePaid(tenant);
   const booking = formatDate(tenant?.bookingDate);
   const joining = formatDate(tenant?.joiningDate ?? tenant?.joinedOn ?? tenant?.joinDate);
-
   const isAdvBooking = num(tenant?.status) === 3;
 
   return (
@@ -162,27 +203,61 @@ const AdvancedBookingCard: React.FC<Props> = ({ tenant, onDelete }) => {
           </View>
         </Pressable>
 
+        {/* Premium three-dot menu */}
         <Menu
           visible={menuVisible}
           onDismiss={() => setMenuVisible(false)}
-          anchor={<IconButton icon="dots-vertical" onPress={() => setMenuVisible(true)} />}
+          anchor={
+            <Pressable
+              hitSlop={8}
+              onPress={() => setMenuVisible(true)}
+              style={menuStyles.anchorRipple}
+              android_ripple={{ color: hexToRgba(colors.primary, 0.08) }}
+            >
+              <IconButton icon="dots-vertical" />
+            </Pressable>
+          }
+          contentStyle={menuStyles.content}
+          anchorPosition="bottom"
         >
           <Menu.Item
+            style={menuStyles.item}
+            titleStyle={menuStyles.title}
+            leadingIcon="pencil"
+            title="Edit"
             onPress={() => {
               setMenuVisible(false);
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              router.push({ pathname: "/protected/tenant/[id]", params: { id } });
+              if (onEdit) {
+                onEdit(id);
+              } else {
+                // Safe default navigation
+                router.push({ pathname: "/protected/tenant/[id]", params: { id } });
+              }
             }}
-            title="Edit"
-            leadingIcon="pencil"
           />
+          <Divider />
           <Menu.Item
+            style={menuStyles.item}
+            titleStyle={menuStyles.title}
+            leadingIcon="account-convert"
+            title="Convert to Tenant"
             onPress={() => {
               setMenuVisible(false);
-              setConfirmOpen(true);
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              onConvertToTenant?.(tenant);
             }}
-            title="Delete"
-            leadingIcon="delete"
+          />
+          <Menu.Item
+            style={menuStyles.item}
+            titleStyle={menuStyles.dangerTitle}
+            leadingIcon="close-circle-outline"
+            title="Cancel Booking"
+            onPress={() => {
+              setMenuVisible(false);
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              onCancelBooking?.(tenant);
+            }}
           />
         </Menu>
       </View>
@@ -217,41 +292,10 @@ const AdvancedBookingCard: React.FC<Props> = ({ tenant, onDelete }) => {
             <View style={s.statusBadge(STATUS_COLORS[statusLabel] ?? colors.accent)}>
               <Text style={s.statusTxt}>{statusLabel}</Text>
             </View>
-            {/* 👇 Extra green hint for status 3 */}
             {isAdvBooking && <Text style={s.activeTxt}>(Active)</Text>}
           </>
         )}
       </View>
-
-      {/* Delete confirm */}
-      <Portal>
-        <Dialog visible={confirmOpen} onDismiss={() => setConfirmOpen(false)}>
-          <Dialog.Title>Delete Tenant</Dialog.Title>
-          <Dialog.Content>
-            <Text style={{ color: colors.textSecondary }}>
-              Delete this tenant? This action cannot be undone.
-            </Text>
-          </Dialog.Content>
-          <Dialog.Actions>
-            <Button onPress={() => setConfirmOpen(false)}>Cancel</Button>
-            <Button
-              textColor={colors.white}
-              buttonColor={colors.error}
-              onPress={() => {
-                setConfirmOpen(false);
-                onDelete?.(id);
-                setSnack(true);
-              }}
-            >
-              Delete
-            </Button>
-          </Dialog.Actions>
-        </Dialog>
-      </Portal>
-
-      <Snackbar visible={snack} onDismiss={() => setSnack(false)} duration={1200}>
-        Tenant deleted
-      </Snackbar>
     </View>
   );
 };

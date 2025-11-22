@@ -12,6 +12,7 @@ export default function ProtectedLayout() {
   const HEADERLESS = new Set([
     "/protected/AddandEditProperty",
     "/protected/rooms", // ✅ hide header for Add/Edit Room screen
+    "/protected/advancedBooking",
   ]);
 
   const isPropertyDetail = pathname.startsWith("/protected/property/");
