@@ -1,5 +1,5 @@
 // app/protected/advancedBooking/[id].tsx
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   BackHandler,
@@ -26,12 +26,13 @@ import {
   Dialog,
 } from "react-native-paper";
 import Toast from "react-native-toast-message";
+import { useSelector } from "react-redux";
 
 import { useTheme } from "@/src/theme/ThemeContext";
 import { hexToRgba } from "@/src/theme";
 import { useProperty } from "@/src/context/PropertyContext";
 import { useGetAllRooms } from "@/src/hooks/room";
-import { useGetAllTenants } from "@/src/hooks/tenants";
+import { useGetAllTenants, useInsertTenant, useUpdateTenant } from "@/src/hooks/tenants";
 
 /* ----------------------------- helpers ----------------------------- */
 
@@ -53,7 +54,6 @@ const parseISODate = (v: any): Date | null => {
 const formatDisplayDate = (d: Date | null) => {
   if (!d) return "Select date";
   try {
-    // Will render in device local timezone (IST for you) with en-IN format
     return d.toLocaleDateString("en-IN", {
       day: "2-digit",
       month: "short",
@@ -65,6 +65,12 @@ const formatDisplayDate = (d: Date | null) => {
 };
 
 const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+
+const addDays = (d: Date, days: number) => {
+  const nd = new Date(d.getTime());
+  nd.setDate(nd.getDate() + days);
+  return nd;
+};
 
 const addMonths = (d: Date, months: number) => {
   const nd = new Date(d.getTime());
@@ -86,6 +92,51 @@ const firstOfNextMonth = (base: Date) => {
   return new Date(y, m + 1, 1, 0, 0, 0, 0);
 };
 
+const unwrapPayload = (resp: any): any => {
+  if (!resp) return {};
+  if (resp.data && typeof resp.data === "object" && !Array.isArray(resp.data)) {
+    return resp.data;
+  }
+  return resp;
+};
+
+const isErrorPayload = (payload: any): boolean => {
+  if (!payload || typeof payload !== "object") return false;
+  if (payload.success === false) return true;
+  if (typeof payload.statusCode === "number" && payload.statusCode >= 400) return true;
+  return false;
+};
+
+const getPayloadMessage = (
+  payload: any,
+  fallback = "Something went wrong. Please try again."
+): string => {
+  if (!payload || typeof payload !== "object") return fallback;
+
+  const nested = payload.data && typeof payload.data === "object" ? payload.data : null;
+
+  const msg = payload.errorMessage || payload.message || nested?.errorMessage || nested?.message;
+
+  if (typeof msg === "string" && msg.trim().length > 0) return msg.trim();
+  return fallback;
+};
+
+const getErrorMessageFromError = (
+  err: any,
+  fallback = "Something went wrong. Please try again."
+): string => {
+  if (!err) return fallback;
+  const data = err?.response?.data ?? err?.data ?? err;
+  if (data && typeof data === "object") {
+    return getPayloadMessage(data, fallback);
+  }
+  if (typeof data === "string" && data.trim().length > 0) return data.trim();
+  if (typeof err?.message === "string" && err.message.trim().length > 0) {
+    return err.message.trim();
+  }
+  return fallback;
+};
+
 /* ------------------- digits & currency formatting ------------------ */
 
 const MAX_AMOUNT_DIGITS = 9;
@@ -98,7 +149,7 @@ const formatAmountInput = (value: string): string => {
   if (!digits) return "";
   const n = Number(digits);
   if (!Number.isFinite(n)) return "";
-  return n.toLocaleString("en-IN"); // e.g. "5,000"
+  return n.toLocaleString("en-IN");
 };
 
 /** Parse formatted text like "5,000" to a number (5000). */
@@ -116,7 +167,7 @@ const extractRooms = (resp: any): any[] => {
     if (Array.isArray(resp.data)) {
       const first = resp.data[0];
       if (first && Array.isArray(first.rooms)) return first.rooms;
-      if (Array.isArray(resp.data)) return resp.data;
+      return resp.data;
     }
     if (Array.isArray(resp.rooms)) return resp.rooms;
   }
@@ -174,6 +225,19 @@ const BED_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
 type DueType = "Monthly" | "FirstMonth" | "Custom";
 
+/* ---------------- Bed display status (per bed) ---------------- */
+
+type BedDisplayStatus = "Filled" | "AdvBooked" | "UnderNotice" | "Available";
+
+const bedStatusFromTenantStatuses = (codes: number[]): BedDisplayStatus => {
+  if (!codes || codes.length === 0) return "Available";
+  // Follow your priority mapping: 1 → Filled, 3 → AdvBooked, 2 → UnderNotice, else Available
+  if (codes.some((c) => c === 1)) return "Filled";
+  if (codes.some((c) => c === 3)) return "AdvBooked";
+  if (codes.some((c) => c === 2)) return "UnderNotice";
+  return "Available";
+};
+
 interface DateFieldProps {
   label: string;
   value: Date | null;
@@ -185,7 +249,7 @@ interface DateFieldProps {
 }
 
 /* ------------------------ Small shared UI pieces ------------------------ */
-/** Premium modal-style date picker (like expenses/[id].tsx) */
+/** Premium modal-style date picker */
 const DateField: React.FC<DateFieldProps> = ({
   label,
   value,
@@ -242,7 +306,7 @@ const DateField: React.FC<DateFieldProps> = ({
           backgroundColor: disabled ? colors.surface : colors.cardSurface,
           paddingVertical: 12,
           paddingHorizontal: 12,
-          minHeight: 44,
+          minHeight: 48,
           justifyContent: "center",
           opacity: disabled ? 0.7 : 1,
         }}
@@ -353,7 +417,7 @@ const RoomSelect: React.FC<RoomSelectProps> = ({ label, value, onChange, rooms }
             backgroundColor: colors.cardSurface,
             paddingVertical: 12,
             paddingHorizontal: 12,
-            minHeight: 44,
+            minHeight: 48,
             justifyContent: "center",
           }}
           accessibilityRole="button"
@@ -454,7 +518,7 @@ const RoomSelect: React.FC<RoomSelectProps> = ({ label, value, onChange, rooms }
                         setOpen(false);
                       }}
                       style={{
-                        paddingVertical: 12,
+                        paddingVertical: 14,
                         borderBottomWidth: StyleSheet.hairlineWidth,
                         borderColor: hexToRgba(colors.textSecondary, 0.16),
                         backgroundColor: bg,
@@ -471,7 +535,12 @@ const RoomSelect: React.FC<RoomSelectProps> = ({ label, value, onChange, rooms }
                           alignItems: "center",
                         }}
                       >
-                        <PaperText style={{ color: colors.textPrimary }}>
+                        <PaperText
+                          style={{
+                            color: colors.textPrimary,
+                            fontSize: typography.fontSizeSm,
+                          }}
+                        >
                           Room - {r.roomNo}
                         </PaperText>
                         <View
@@ -480,7 +549,7 @@ const RoomSelect: React.FC<RoomSelectProps> = ({ label, value, onChange, rooms }
                               statusColor[r.status] ?? hexToRgba(colors.textSecondary, 0.2),
                             borderRadius: 999,
                             paddingHorizontal: 10,
-                            paddingVertical: 3,
+                            paddingVertical: 4,
                           }}
                         >
                           <Text
@@ -512,6 +581,7 @@ const RoomSelect: React.FC<RoomSelectProps> = ({ label, value, onChange, rooms }
 
 interface BedOption {
   value: string;
+  status: BedDisplayStatus;
   disabled?: boolean;
 }
 
@@ -529,6 +599,15 @@ const BedSelect: React.FC<BedSelectProps> = ({ label, value, options, onChange, 
   const [open, setOpen] = useState(false);
 
   const selectedOption = options.find((o) => o.value === value);
+  const bedStatusColors = useMemo(
+    () => ({
+      Filled: colors.filledBeds,
+      AdvBooked: colors.advBookedBeds,
+      UnderNotice: colors.underNoticeBeds ?? colors.advBookedBeds,
+      Available: colors.availableBeds ?? colors.success,
+    }),
+    [colors]
+  );
 
   return (
     <>
@@ -557,7 +636,7 @@ const BedSelect: React.FC<BedSelectProps> = ({ label, value, options, onChange, 
             backgroundColor: disabled ? colors.surface : colors.cardSurface,
             paddingVertical: 12,
             paddingHorizontal: 12,
-            minHeight: 44,
+            minHeight: 48,
             justifyContent: "center",
             opacity: disabled ? 0.7 : 1,
           }}
@@ -577,7 +656,11 @@ const BedSelect: React.FC<BedSelectProps> = ({ label, value, options, onChange, 
                 fontSize: typography.fontSizeSm,
               }}
             >
-              {selectedOption ? selectedOption.value : "Select bed"}
+              {selectedOption
+                ? `Bed ${selectedOption.value} (${selectedOption.status})`
+                : value
+                ? `Bed ${String(value).toUpperCase()}`
+                : "Select bed"}
             </PaperText>
             <MaterialIcons
               name={open ? "keyboard-arrow-up" : "keyboard-arrow-down"}
@@ -648,6 +731,7 @@ const BedSelect: React.FC<BedSelectProps> = ({ label, value, options, onChange, 
                 options.map((opt) => {
                   const isSelected = opt.value === value;
                   const isDisabled = !!opt.disabled;
+
                   return (
                     <Pressable
                       key={opt.value}
@@ -658,7 +742,7 @@ const BedSelect: React.FC<BedSelectProps> = ({ label, value, options, onChange, 
                         setOpen(false);
                       }}
                       style={{
-                        paddingVertical: 10,
+                        paddingVertical: 12,
                         paddingHorizontal: 8,
                         borderBottomWidth: StyleSheet.hairlineWidth,
                         borderColor: hexToRgba(colors.textSecondary, 0.14),
@@ -670,16 +754,42 @@ const BedSelect: React.FC<BedSelectProps> = ({ label, value, options, onChange, 
                         marginBottom: 4,
                       }}
                     >
-                      <PaperText
+                      <View
                         style={{
-                          color: colors.textPrimary,
-                          fontSize: typography.fontSizeSm,
-                          fontWeight: isSelected ? "700" : "500",
+                          flexDirection: "row",
+                          alignItems: "center",
+                          justifyContent: "space-between",
                         }}
                       >
-                        {opt.value}
-                        {isDisabled && " (Filled)"}
-                      </PaperText>
+                        <PaperText
+                          style={{
+                            color: colors.textPrimary,
+                            fontSize: typography.fontSizeSm,
+                            fontWeight: isSelected ? "700" : "500",
+                          }}
+                        >
+                          Bed {opt.value}
+                        </PaperText>
+                        <View
+                          style={{
+                            backgroundColor:
+                              bedStatusColors[opt.status] ?? hexToRgba(colors.textSecondary, 0.2),
+                            borderRadius: 999,
+                            paddingHorizontal: 10,
+                            paddingVertical: 4,
+                          }}
+                        >
+                          <Text
+                            style={{
+                              color: colors.white,
+                              fontSize: 11,
+                              fontWeight: "700",
+                            }}
+                          >
+                            {opt.status}
+                          </Text>
+                        </View>
+                      </View>
                     </Pressable>
                   );
                 })
@@ -703,11 +813,17 @@ export default function AdvancedBookingScreen() {
   const insets = useSafeAreaInsets();
   const { colors, spacing, radius, typography } = useTheme();
   const { selectedId, properties } = useProperty();
+  const { profileData } = useSelector((state: any) => state.profileDetails);
   const propertyId = selectedId as string | undefined;
 
   const isAddMode = String(id) === "add";
   const isConvertMode = !isAddMode && mode === "convert";
   const isEditMode = !isAddMode && !isConvertMode;
+
+  const ownerIdSafe = str(
+    profileData?.ownerId ?? profileData?.userId ?? profileData?._id ?? "",
+    ""
+  );
 
   const currentProperty = useMemo(
     () => properties.find((p) => p._id === propertyId),
@@ -729,15 +845,13 @@ export default function AdvancedBookingScreen() {
   const rooms = useMemo(() => extractRooms(roomsResp), [roomsResp]);
   const allAdvanceTenants = useMemo(() => extractAdvanceTenants(tenantsResp), [tenantsResp]);
 
-  const currentTenant = useMemo(
-    () =>
-      !isAddMode
-        ? allAdvanceTenants[0]?.tenants?.find(
-            (t: any) => String(t?._id ?? t?.id ?? "") === String(id)
-          )
-        : null,
-    [allAdvanceTenants, id, isAddMode]
-  );
+  const currentTenant = useMemo(() => {
+    if (isAddMode || !id) return null;
+    const key = String(id);
+    return (
+      allAdvanceTenants[0]?.tenants?.find((t: any) => String(t?._id ?? t?.id ?? "") === key) ?? null
+    );
+  }, [allAdvanceTenants, id, isAddMode]);
 
   /* ----------------------------- form state ----------------------------- */
 
@@ -748,6 +862,7 @@ export default function AdvancedBookingScreen() {
   const [gender, setGender] = useState<"Male" | "Female">("Male");
 
   const [joiningDate, setJoiningDate] = useState<Date | null>(null);
+  const [initialJoiningDate, setInitialJoiningDate] = useState<Date | null>(null);
 
   const [roomId, setRoomId] = useState<string>("");
   const [bed, setBed] = useState<string>("");
@@ -757,7 +872,7 @@ export default function AdvancedBookingScreen() {
   const [advRentCollected, setAdvRentCollected] = useState("");
   const [advDepositCollected, setAdvDepositCollected] = useState("");
   const [rentCollected, setRentCollected] = useState("");
-  const [depositCollected, setDepositCollected] = useState(""); // new field (convert-only, optional)
+  const [depositCollected, setDepositCollected] = useState("");
 
   const [dueType, setDueType] = useState<DueType>("Monthly");
   const [dueDate, setDueDate] = useState<Date | null>(null);
@@ -765,7 +880,10 @@ export default function AdvancedBookingScreen() {
   /* ---------------------- prefill Edit / Convert ----------------------- */
 
   useEffect(() => {
-    if (isAddMode || !currentTenant) return;
+    if (isAddMode || !currentTenant) {
+      setInitialJoiningDate(null);
+      return;
+    }
 
     setTenantName(str(currentTenant.tenantName, ""));
     setPhone(str(currentTenant.phoneNumber, "").replace(/[^\d]/g, "").slice(0, 10));
@@ -773,10 +891,24 @@ export default function AdvancedBookingScreen() {
 
     setGender(String(currentTenant.gender).toLowerCase() === "female" ? "Female" : "Male");
 
-    const j = parseISODate(currentTenant.joiningDate);
+    const j =
+      parseISODate(currentTenant.joiningDate) ||
+      parseISODate(currentTenant.joinDate) ||
+      parseISODate(currentTenant.joinedOn);
     setJoiningDate(j);
+    setInitialJoiningDate(j);
 
-    setRoomId(str(currentTenant.roomId ?? "", ""));
+    // setRoomId(str(currentTenant.roomId ?? "", ""));
+
+    const tenantRoomIdRaw =
+      currentTenant?.roomId?._id ??
+      currentTenant?.roomId ??
+      currentTenant?.room?._id ??
+      currentTenant?.room?.id ??
+      "";
+
+    const tenantRoomId = str(tenantRoomIdRaw, "");
+    setRoomId(tenantRoomId);
     setBed(str(currentTenant.bedNumber ?? "", "").toUpperCase());
 
     setRentAmount(
@@ -796,36 +928,27 @@ export default function AdvancedBookingScreen() {
         : ""
     );
     setAdvDepositCollected(
-      currentTenant.collectedDeposit != null
-        ? formatAmountInput(String(num(currentTenant.collectedDeposit)))
+      currentTenant.advanceDepositAmountPaid != null
+        ? formatAmountInput(String(num(currentTenant.advanceDepositAmountPaid)))
         : ""
     );
 
     setRentCollected(
-      currentTenant.collectedRent != null
-        ? formatAmountInput(String(num(currentTenant.collectedRent)))
+      currentTenant.rentAmountPaid != null
+        ? formatAmountInput(String(num(currentTenant.rentAmountPaid)))
         : ""
     );
-    setDepositCollected(""); // no backend mapping yet, will be wired later
+    setDepositCollected(
+      currentTenant.depositAmountPaid != null
+        ? formatAmountInput(String(num(currentTenant.depositAmountPaid)))
+        : ""
+    );
 
-    if (isConvertMode) {
-      const rawDueType = num(currentTenant.dueType, 0);
-      let mapped: DueType = "Monthly";
-      if (rawDueType === 1) mapped = "FirstMonth";
-      else if (rawDueType === 2) mapped = "Custom";
-      setDueType(mapped);
-
-      const d = parseISODate(currentTenant.dueDate);
-      if (mapped === "Custom" && d) {
-        setDueDate(d);
-      } else {
-        setDueDate(null); // will be recomputed in effect
-      }
-    } else {
-      setDueType("Monthly");
-      setDueDate(null);
-    }
-  }, [isAddMode, currentTenant, isConvertMode]);
+    // For both Edit and Convert, default Due Type to Monthly.
+    // For Convert mode, actual dueDate will be recomputed in the due-date effect.
+    setDueType("Monthly");
+    setDueDate(null);
+  }, [isAddMode, currentTenant]);
 
   /* ---------------------- recompute Due Date logic --------------------- */
 
@@ -841,9 +964,9 @@ export default function AdvancedBookingScreen() {
         setDueDate(null);
       }
     } else if (dueType === "FirstMonth") {
-      setDueDate(firstOfNextMonth(today));
+      const base = joiningDate ?? today;
+      setDueDate(firstOfNextMonth(base));
     } else if (dueType === "Custom") {
-      // Keep whatever user picked, but if it's in the past, bump to today
       setDueDate((prev) => {
         if (!prev) return today;
         const prevStart = startOfDay(prev);
@@ -877,30 +1000,70 @@ export default function AdvancedBookingScreen() {
     [rooms, roomId]
   );
 
+  // Auto-bind rent & deposit when a room is picked (user can still override)
+  useEffect(() => {
+    if (!selectedRoom) return;
+    const price = num(selectedRoom.bedPrice);
+    const deposit = num(selectedRoom.securityDeposit);
+
+    if (price > 0) {
+      setRentAmount(formatAmountInput(String(price)));
+    }
+    if (deposit > 0) {
+      setDepositAmount(formatAmountInput(String(deposit)));
+    }
+  }, [selectedRoom]);
+
   const bedOptions: BedOption[] = useMemo(() => {
     if (!selectedRoom) return [];
+
     const sharing = num(selectedRoom.beds, 0);
     if (!sharing) return [];
 
     const letters = BED_LETTERS.slice(0, Math.min(sharing, BED_LETTERS.length)).split("");
 
-    const filledSet = new Set(
-      (Array.isArray(selectedRoom.bedsPerRoom) ? selectedRoom.bedsPerRoom : []).map((b: any) =>
-        str(b?._id ?? b?.bedNumber, "").toUpperCase()
-      )
-    );
+    const bpr: any[] = Array.isArray(selectedRoom.bedsPerRoom) ? selectedRoom.bedsPerRoom : [];
 
     const tenantBedUpper = str(bed, "").toUpperCase();
+    // const isExistingAssignment =
+    //   !isAddMode &&
+    //   !!currentTenant &&
+    //   str(currentTenant.roomId ?? "", "") === roomId &&
+    //   !!tenantBedUpper;
+
+    const tenantRoomIdForCheck = currentTenant
+      ? str(
+          currentTenant.roomId?._id ??
+            currentTenant.roomId ??
+            currentTenant.room?._id ??
+            currentTenant.room?.id ??
+            "",
+          ""
+        )
+      : "";
+
     const isExistingAssignment =
-      !isAddMode &&
-      !!currentTenant &&
-      String(currentTenant.roomId ?? "") === roomId &&
-      !!tenantBedUpper;
+      !isAddMode && !!tenantRoomIdForCheck && tenantRoomIdForCheck === roomId && !!tenantBedUpper;
 
     return letters.map((letter) => {
-      const isFilled = filledSet.has(letter);
-      const disabled = isFilled && !(isExistingAssignment && tenantBedUpper === letter);
-      return { value: letter, disabled };
+      const match = bpr.find(
+        (b: any) => str(b?._id ?? b?.bedNumber, "").toUpperCase() === letter.toUpperCase()
+      );
+      const codes = (Array.isArray(match?.tenantsPerBed) ? match.tenantsPerBed : [])
+        .map((t: any) => num(t?.tenantStatus))
+        .filter((c: number) => c > 0);
+      const status = bedStatusFromTenantStatuses(codes);
+      const isCurrent = isExistingAssignment && tenantBedUpper === letter.toUpperCase();
+
+      // In add mode: only Available can be selected.
+      // In edit/convert: Available + current tenant's own bed can be selected.
+      const disabled = status !== "Available" && !isCurrent;
+
+      return {
+        value: letter,
+        status,
+        disabled,
+      };
     });
   }, [selectedRoom, bed, isAddMode, currentTenant, roomId]);
 
@@ -914,13 +1077,45 @@ export default function AdvancedBookingScreen() {
     const allowedLetters = BED_LETTERS.slice(0, Math.min(sharing, BED_LETTERS.length))
       .split("")
       .map((c) => c.toUpperCase());
-    if (!bed || !allowedLetters.includes(str(bed, "").toUpperCase())) {
+
+    const upperBed = str(bed, "").toUpperCase();
+    const isExistingAssignment =
+      !isAddMode &&
+      !!currentTenant &&
+      str(currentTenant.roomId ?? "", "") === roomId &&
+      upperBed === str(currentTenant.bedNumber ?? "", "").toUpperCase();
+
+    if (!bed) return;
+
+    if (!allowedLetters.includes(upperBed) && !isExistingAssignment) {
       setBed("");
     }
-  }, [selectedRoom, bed]);
+  }, [selectedRoom, bed, isAddMode, currentTenant, roomId]);
+
+  /* ---------------------------- joining date limits -------------------- */
+
+  const todayStart = useMemo(() => startOfDay(new Date()), []);
+  const joiningMinDate = useMemo(() => {
+    if (isAddMode) {
+      return addDays(todayStart, 1); // tomorrow
+    }
+    if (initialJoiningDate) {
+      return startOfDay(addMonths(initialJoiningDate, -1)); // 1 month back
+    }
+    return undefined;
+  }, [isAddMode, initialJoiningDate, todayStart]);
+
+  const joiningMaxDate = useMemo(() => {
+    if (isAddMode) {
+      return undefined; // no upper limit in add mode
+    }
+    if (initialJoiningDate) {
+      return startOfDay(initialJoiningDate);
+    }
+    return undefined;
+  }, [isAddMode, initialJoiningDate]);
 
   /* ---------------------------- validation ----------------------------- */
-
   const validate = (): string | null => {
     if (!propertyId) return "Please select a property first.";
 
@@ -930,6 +1125,21 @@ export default function AdvancedBookingScreen() {
     if (phone.trim().length !== 10) return "Phone number must be 10 digits.";
 
     if (!joiningDate) return "Date of joining is required.";
+
+    // Joining date rules
+    const jdStart = startOfDay(joiningDate);
+    if (isAddMode) {
+      const tomorrow = addDays(todayStart, 1);
+      if (jdStart.getTime() < tomorrow.getTime()) {
+        return "For advance booking, date of joining must be from tomorrow onwards.";
+      }
+    } else if (initialJoiningDate) {
+      const minAllowed = startOfDay(addMonths(initialJoiningDate, -1));
+      const maxAllowed = startOfDay(initialJoiningDate);
+      if (jdStart.getTime() < minAllowed.getTime() || jdStart.getTime() > maxAllowed.getTime()) {
+        return "In edit / convert mode, date of joining can only be changed up to 1 month earlier than the original date.";
+      }
+    }
 
     if (!roomId) return "Please select a room.";
     if (!bed) return "Please select a bed.";
@@ -948,27 +1158,27 @@ export default function AdvancedBookingScreen() {
     if (deposit <= 0) return "Deposit amount must be greater than 0.";
 
     if (advRentCollected.trim() && advRent <= 0) {
-      return "Collected advance rent amount must be greater than 0.";
+      return "Paid advance rent amount must be greater than 0.";
     }
 
     if (advDepositCollected.trim() && advDeposit <= 0) {
-      return "Collected advance deposit amount must be greater than 0.";
+      return "Paid advance deposit amount must be greater than 0.";
     }
 
     if (advRent > 0 && rent > 0 && advRent > rent) {
-      return "Collected advance rent amount cannot be greater than rent amount.";
+      return "Paid advance rent amount cannot be greater than rent amount.";
     }
 
     if (advDeposit > 0 && deposit > 0 && advDeposit > deposit) {
-      return "Collected advance deposit amount cannot be greater than deposit amount.";
+      return "Paid advance deposit amount cannot be greater than deposit amount.";
     }
 
     if (isConvertMode) {
       if (!advRentCollected.trim()) {
-        return "Collected advance rent amount is required in convert mode.";
+        return "Paid advance rent amount is required in convert mode.";
       }
       if (!advDepositCollected.trim()) {
-        return "Collected advance deposit amount is required in convert mode.";
+        return "Paid advance deposit amount is required in convert mode.";
       }
 
       if (!dueType) return "Please select due type.";
@@ -980,17 +1190,21 @@ export default function AdvancedBookingScreen() {
       }
 
       if (collectedRentNum > 0 && collectedRentNum > advRent + rent) {
-        return "Collected rent amount cannot be greater than collected advance rent plus rent amount.";
+        return "Collected rent amount cannot be greater than paid advance rent plus rent amount.";
       }
 
       if (collectedDepositNum > 0 && collectedDepositNum > deposit + advDeposit) {
-        return "Collected deposited amount cannot be greater than deposit amount plus collected advance deposit.";
+        return "Collected deposit amount cannot be greater than deposit amount plus paid advance deposit.";
       }
     }
 
     if (email.trim()) {
       const re = /^\S+@\S+\.\S+$/;
       if (!re.test(email.trim())) return "Please enter a valid email address.";
+    }
+
+    if (!isAddMode && !currentTenant) {
+      return "Unable to load advance booking details for this tenant.";
     }
 
     return null;
@@ -1026,17 +1240,52 @@ export default function AdvancedBookingScreen() {
   useEffect(() => {
     const err: any = roomsError || tenantsError;
     if (!err) return;
-    let msg = "Something went wrong. Please try again.";
-    const data = err?.response?.data ?? err?.data ?? err;
-    if (data && typeof data === "object") {
-      msg = data.errorMessage || data.message || msg;
-    } else if (typeof data === "string") {
-      msg = data;
-    } else if (typeof err?.message === "string") {
-      msg = err.message;
-    }
+    const msg = getErrorMessageFromError(err, "Something went wrong. Please try again.");
     Toast.show({ type: "error", text1: msg, position: "bottom" });
   }, [roomsError, tenantsError]);
+
+  /* ------------------------------ mutations ---------------------------- */
+
+  const insertTenantMutation = useInsertTenant((resp: any) => {
+    const payload = unwrapPayload(resp);
+
+    if (isErrorPayload(payload)) {
+      const errMsg = getPayloadMessage(payload, "Something went wrong. Please try again.");
+      Toast.show({ type: "error", text1: errMsg, position: "bottom" });
+      return;
+    }
+
+    const msg = getPayloadMessage(payload, "Advance booking added successfully.");
+    Toast.show({ type: "success", text1: msg, position: "bottom" });
+    goToAdvanceBookingTab();
+  });
+
+  const updateTenantMutation = useUpdateTenant((resp: any) => {
+    const payload = unwrapPayload(resp);
+
+    if (isErrorPayload(payload)) {
+      const errMsg = getPayloadMessage(payload, "Something went wrong. Please try again.");
+      Toast.show({ type: "error", text1: errMsg, position: "bottom" });
+      return;
+    }
+
+    const fallbackMsg = isConvertMode
+      ? "Tenant converted successfully."
+      : "Advance booking updated successfully.";
+    const msg = getPayloadMessage(payload, fallbackMsg);
+
+    Toast.show({ type: "success", text1: msg, position: "bottom" });
+    goToAdvanceBookingTab();
+  });
+
+  useEffect(() => {
+    const err: any = insertTenantMutation.error || updateTenantMutation.error;
+    if (!err) return;
+    const msg = getErrorMessageFromError(err, "Something went wrong. Please try again.");
+    Toast.show({ type: "error", text1: msg, position: "bottom" });
+  }, [insertTenantMutation.error, updateTenantMutation.error]);
+
+  const isSubmitting = insertTenantMutation.isPending || updateTenantMutation.isPending;
 
   /* ------------------------------ submit ------------------------------- */
 
@@ -1047,6 +1296,8 @@ export default function AdvancedBookingScreen() {
       return;
     }
 
+    if (!propertyId) return;
+
     const rentNum = parseAmount(rentAmount);
     const depositNum = parseAmount(depositAmount);
     const advRentNum = parseAmount(advRentCollected);
@@ -1054,51 +1305,96 @@ export default function AdvancedBookingScreen() {
     const collectedRentNum = parseAmount(rentCollected);
     const collectedDepositNum = parseAmount(depositCollected);
 
-    const payload = {
-      mode: isAddMode ? "add" : isConvertMode ? "convert" : "edit",
-      propertyId,
-      tenantId: !isAddMode ? str(currentTenant?._id ?? id, "") : null,
-      tenantName: tenantName.trim(),
-      phoneNumber: phone.trim(),
-      email: email.trim() || null,
-      gender,
-      joiningDate: joiningDate ? joiningDate.toISOString() : null,
-      roomId,
-      bedNumber: bed,
-      rentAmount: rentNum || null,
-      depositAmount: depositNum || null,
-      // as per mapping you gave:
-      advanceRentAmountPaid: advRentNum || null, // "Collected Adv Rent Amount"
-      collectedDeposit: advDepositNum || null, // "Collected Adv Deposit Amount"
-      collectedRent: collectedRentNum || null, // optional
-      collectedDepositFinal: collectedDepositNum || null, // NEW (for future API wiring)
-      dueType: isConvertMode
-        ? dueType === "Monthly"
-          ? 0
-          : dueType === "FirstMonth"
-          ? 1
-          : 2
-        : null,
-      dueDate: isConvertMode && dueDate ? dueDate.toISOString() : null,
-    };
+    const formData = new FormData();
 
-    // For now just log; we will wire APIs later:
-    // eslint-disable-next-line no-console
-    console.log("Advanced booking form payload (API integration pending):", payload);
+    formData.append("tenantName", tenantName.trim());
+    formData.append("phoneNumber", phone.trim());
+    if (email.trim()) formData.append("email", email.trim());
+    formData.append("gender", gender);
 
-    Toast.show({
-      type: "success",
-      text1: isConvertMode
-        ? "Form is valid. Ready to convert (API integration pending)."
-        : "Form is valid. API integration pending.",
-      position: "bottom",
-    });
+    if (joiningDate) {
+      formData.append("joiningDate", joiningDate.toISOString());
+    }
 
-    // Later, after API integration, you can navigate back here.
+    if (roomId) {
+      formData.append("roomId", roomId);
+      // for safety if backend expects this typo'd key
+      formData.append("roomld", roomId);
+    }
+    if (bed) {
+      formData.append("bedNumber", bed);
+    }
+
+    formData.append("rentAmount", String(rentNum));
+    formData.append("depositAmount", String(depositNum));
+
+    // As per your examples
+    formData.append("lockingPeriod", "");
+    formData.append("noticePeriod", "15");
+
+    if (advRentNum) {
+      formData.append("advanceRentAmountPaid", String(advRentNum));
+    }
+    if (advDepositNum) {
+      formData.append("advanceDepositAmountPaid", String(advDepositNum));
+    }
+
+    if (ownerIdSafe) {
+      formData.append("ownerId", ownerIdSafe);
+      formData.append("ownerld", ownerIdSafe);
+      formData.append("createdBy", ownerIdSafe);
+    }
+
+    if (isAddMode) {
+      // Add Advance Booking
+      formData.append("status", "3");
+      formData.append("dueType", "0");
+      insertTenantMutation.mutate(formData);
+    } else {
+      const tenantKey = str(currentTenant?._id ?? id, "");
+      if (!tenantKey) {
+        Toast.show({
+          type: "error",
+          text1: "Unable to identify booking record.",
+          position: "bottom",
+        });
+        return;
+      }
+
+      if (isConvertMode) {
+        // Convert to tenant
+        const dueTypeCode = dueType === "FirstMonth" ? 0 : dueType === "Custom" ? 2 : 1;
+
+        formData.append("status", "1");
+        formData.append("dueType", String(dueTypeCode));
+
+        if (dueDate) {
+          formData.append("dueDate", dueDate.toUTCString());
+        }
+
+        if (collectedRentNum) {
+          formData.append("rentAmountPaid", String(collectedRentNum));
+        }
+        if (collectedDepositNum) {
+          formData.append("depositAmountPaid", String(collectedDepositNum));
+        }
+
+        // Due amounts – sensible formula
+        const dueRentAmount = Math.max(rentNum - advRentNum - collectedRentNum, 0);
+        const dueDepositAmount = Math.max(depositNum - advDepositNum - collectedDepositNum, 0);
+
+        formData.append("dueRentAmount", String(dueRentAmount));
+        formData.append("dueDepositAmount", String(dueDepositAmount));
+      } else if (isEditMode) {
+        // Edit advance booking
+        formData.append("status", "3");
+        formData.append("dueType", "0");
+      }
+
+      updateTenantMutation.mutate({ formData, tenantId: tenantKey });
+    }
   };
-
   /* ------------------------------ styles ------------------------------- */
-
   const styles = useMemo(
     () =>
       StyleSheet.create({
@@ -1136,7 +1432,8 @@ export default function AdvancedBookingScreen() {
           flex: 1,
           paddingHorizontal: spacing.md,
           paddingTop: spacing.md,
-          paddingBottom: insets.bottom + spacing.lg,
+          // Extra bottom padding so buttons don't touch the "chin" / nav bar
+          paddingBottom: insets.bottom + spacing.lg * 2,
         },
         sectionCard: {
           borderWidth: 1,
@@ -1239,7 +1536,10 @@ export default function AdvancedBookingScreen() {
           onPress={handleBack}
           accessibilityRole="button"
           accessibilityLabel="Go back"
-          android_ripple={{ color: hexToRgba(colors.textSecondary, 0.2), borderless: true }}
+          android_ripple={{
+            color: hexToRgba(colors.textSecondary, 0.2),
+            borderless: true,
+          }}
         >
           <Text style={{ color: colors.textPrimary, fontSize: 18 }}>{"←"}</Text>
         </Pressable>
@@ -1294,49 +1594,49 @@ export default function AdvancedBookingScreen() {
               />
             </View>
 
-            <View style={styles.row}>
-              <View style={styles.col}>
-                <Text style={styles.label}>Phone number *</Text>
-                <TextInput
-                  value={phone}
-                  onChangeText={(t) => setPhone(onlyDigitsMax(t, 10))}
-                  mode="outlined"
-                  placeholder="10 digit number"
-                  outlineColor={hexToRgba(colors.textSecondary, 0.22)}
-                  activeOutlineColor={colors.accent}
-                  style={{ backgroundColor: colors.cardSurface }}
-                  textColor={colors.textPrimary}
-                  placeholderTextColor={colors.textMuted}
-                  keyboardType={Platform.OS === "ios" ? "number-pad" : "numeric"}
-                  maxLength={10}
-                  left={
-                    <TextInput.Affix
-                      text="+91"
-                      textStyle={{ color: colors.textSecondary, fontWeight: "600" }}
-                    />
-                  }
-                  contentStyle={inputContentStyle}
-                />
-              </View>
-
-              <View style={styles.col}>
-                <Text style={styles.label}>Email (optional)</Text>
-                <TextInput
-                  value={email}
-                  onChangeText={setEmail}
-                  mode="outlined"
-                  placeholder="Enter tenant email"
-                  outlineColor={hexToRgba(colors.textSecondary, 0.22)}
-                  activeOutlineColor={colors.accent}
-                  style={{ backgroundColor: colors.cardSurface }}
-                  textColor={colors.textPrimary}
-                  placeholderTextColor={colors.textMuted}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  contentStyle={inputContentStyle}
-                />
-              </View>
+            {/* <View style={styles.row}> */}
+            <View style={styles.fieldBlock}>
+              <Text style={styles.label}>Phone number *</Text>
+              <TextInput
+                value={phone}
+                onChangeText={(t) => setPhone(onlyDigitsMax(t, 10))}
+                mode="outlined"
+                placeholder="10 digit number"
+                outlineColor={hexToRgba(colors.textSecondary, 0.22)}
+                activeOutlineColor={colors.accent}
+                style={{ backgroundColor: colors.cardSurface }}
+                textColor={colors.textPrimary}
+                placeholderTextColor={colors.textMuted}
+                keyboardType={Platform.OS === "ios" ? "number-pad" : "numeric"}
+                maxLength={10}
+                left={
+                  <TextInput.Affix
+                    text="+91"
+                    textStyle={{ color: colors.textSecondary, fontWeight: "600" }}
+                  />
+                }
+                contentStyle={inputContentStyle}
+              />
             </View>
+
+            <View style={styles.fieldBlock}>
+              <Text style={styles.label}>Email (optional)</Text>
+              <TextInput
+                value={email}
+                onChangeText={setEmail}
+                mode="outlined"
+                placeholder="Enter tenant email"
+                outlineColor={hexToRgba(colors.textSecondary, 0.22)}
+                activeOutlineColor={colors.accent}
+                style={{ backgroundColor: colors.cardSurface }}
+                textColor={colors.textPrimary}
+                placeholderTextColor={colors.textMuted}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                contentStyle={inputContentStyle}
+              />
+            </View>
+            {/* </View> */}
 
             <View style={styles.fieldBlock}>
               <Text style={styles.label}>Gender *</Text>
@@ -1377,27 +1677,24 @@ export default function AdvancedBookingScreen() {
               value={joiningDate}
               onChange={(d) => setJoiningDate(startOfDay(d))}
               placeholder="Select date of joining"
+              minimumDate={joiningMinDate}
+              maximumDate={joiningMaxDate}
             />
 
-            <View style={styles.row}>
-              <View style={styles.col}>
-                <RoomSelect
-                  label="Room *"
-                  value={roomId}
-                  onChange={setRoomId}
-                  rooms={roomOptions}
-                />
-              </View>
-              <View style={styles.col}>
-                <BedSelect
-                  label="Bed *"
-                  value={bed}
-                  options={bedOptions}
-                  onChange={setBed}
-                  disabled={!roomId}
-                />
-              </View>
+            {/* <View style={styles.row}> */}
+            <View style={styles.col}>
+              <RoomSelect label="Room *" value={roomId} onChange={setRoomId} rooms={roomOptions} />
             </View>
+            <View style={styles.col}>
+              <BedSelect
+                label="Bed *"
+                value={bed}
+                options={bedOptions}
+                onChange={setBed}
+                disabled={!roomId}
+              />
+            </View>
+            {/* </View> */}
 
             {isConvertMode && (
               <>
@@ -1411,7 +1708,13 @@ export default function AdvancedBookingScreen() {
                       setDueType(mapped);
                     }}
                   >
-                    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.md }}>
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        flexWrap: "wrap",
+                        gap: spacing.md,
+                      }}
+                    >
                       <View style={{ flexDirection: "row", alignItems: "center" }}>
                         <RadioButton value="Monthly" />
                         <Text style={{ color: colors.textPrimary }}>Monthly</Text>
@@ -1493,7 +1796,7 @@ export default function AdvancedBookingScreen() {
             </View>
 
             <View style={styles.fieldBlock}>
-              <Text style={styles.label}>Collected adv rent amount{isConvertMode ? " *" : ""}</Text>
+              <Text style={styles.label}>Paid advance rent amount{isConvertMode ? " *" : ""}</Text>
               <TextInput
                 value={advRentCollected}
                 onChangeText={(t) => setAdvRentCollected(formatAmountInput(t))}
@@ -1518,7 +1821,7 @@ export default function AdvancedBookingScreen() {
 
             <View style={styles.fieldBlock}>
               <Text style={styles.label}>
-                Collected adv deposit amount{isConvertMode ? " *" : ""}
+                Paid advance deposit amount{isConvertMode ? " *" : ""}
               </Text>
               <TextInput
                 value={advDepositCollected}
@@ -1561,7 +1864,10 @@ export default function AdvancedBookingScreen() {
                     left={
                       <TextInput.Affix
                         text="₹"
-                        textStyle={{ color: colors.textSecondary, fontWeight: "600" }}
+                        textStyle={{
+                          color: colors.textSecondary,
+                          fontWeight: "600",
+                        }}
                       />
                     }
                     contentStyle={inputContentStyle}
@@ -1569,7 +1875,7 @@ export default function AdvancedBookingScreen() {
                 </View>
 
                 <View style={styles.fieldBlock}>
-                  <Text style={styles.label}>Collected deposited amount (optional)</Text>
+                  <Text style={styles.label}>Collected deposit amount (optional)</Text>
                   <TextInput
                     value={depositCollected}
                     onChangeText={(t) => setDepositCollected(formatAmountInput(t))}
@@ -1585,7 +1891,10 @@ export default function AdvancedBookingScreen() {
                     left={
                       <TextInput.Affix
                         text="₹"
-                        textStyle={{ color: colors.textSecondary, fontWeight: "600" }}
+                        textStyle={{
+                          color: colors.textSecondary,
+                          fontWeight: "600",
+                        }}
                       />
                     }
                     contentStyle={inputContentStyle}
@@ -1619,9 +1928,9 @@ export default function AdvancedBookingScreen() {
               mode="contained"
               style={styles.primaryBtn}
               onPress={onSubmit}
-              disabled={roomsLoading || (tenantsLoading && !isAddMode)}
+              disabled={roomsLoading || (tenantsLoading && !isAddMode) || isSubmitting}
             >
-              {isConvertMode ? "Validate & Convert (later)" : isAddMode ? "Validate" : "Save"}
+              {isConvertMode ? "Save & Convert" : isAddMode ? "Save Booking" : "Save Changes"}
             </Button>
           </View>
         </ScrollView>
