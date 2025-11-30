@@ -1,10 +1,19 @@
 // src/constants/tenantFilter.ts
 export interface TenantFilter {
   sharing: number[];
-  status: ("Active" | "Dues" | "Under Notice")[];
+  // include all status labels you show in the UI + "Dues" as a pseudo-status
+  status: (
+    | "Active"
+    | "Under Notice"
+    | "Adv Booking"
+    | "Expired Booking"
+    | "Canceled Booking"
+    | "Dues"
+  )[];
   fromDate?: Date;
   toDate?: Date;
-  downloadedApp: ("Downloaded" | "Not Downloaded")[];
+  // align with TenantsTab UI strings
+  downloadedApp: ("App Downloaded" | "App Not Downloaded")[];
 }
 
 export const emptyTenantFilter: TenantFilter = {

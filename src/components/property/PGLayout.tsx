@@ -1,3 +1,419 @@
+// // src/components/property/PGLayout.tsx
+// import React, { useMemo } from "react";
+// import {
+//   View,
+//   Text,
+//   StyleSheet,
+//   ScrollView,
+//   useWindowDimensions,
+//   Pressable,
+//   RefreshControl,
+//   AccessibilityInfo,
+// } from "react-native";
+// import { useSafeAreaInsets } from "react-native-safe-area-context";
+// import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
+// import * as Haptics from "expo-haptics";
+
+// import StatsGrid, { Metric } from "@/src/components/StatsGrid";
+// import { useTheme } from "@/src/theme/ThemeContext";
+// import { hexToRgba } from "@/src/theme";
+
+// /** Data contracts (unchanged) */
+// type BedStatus = "vacant" | "filled" | "notice" | "advance";
+// type RoomInfo = { roomNo: string; beds: { id: string; status: BedStatus }[] };
+// type GroupInfo = { sharing: number; rooms: RoomInfo[] };
+// type FloorInfo = { name: string; groups: GroupInfo[] };
+
+// type Props = {
+//   floors: FloorInfo[];
+//   metrics: Metric[];
+//   refreshing: boolean;
+//   onRefresh: () => void;
+// };
+
+// const num = (v: any, fb = 0) => (typeof v === "number" ? v : Number(v ?? fb)) || 0;
+
+// /** Derive room badge + counts from bed statuses (same logic as before) */
+// function analyzeRoom(beds?: { id: string; status: BedStatus }[]) {
+//   const total = beds?.length ?? 0;
+//   let filled = 0,
+//     notice = 0,
+//     advance = 0;
+
+//   beds?.forEach?.((b) => {
+//     if (b?.status === "filled") filled += 1;
+//     else if (b?.status === "notice") notice += 1;
+//     else if (b?.status === "advance") advance += 1;
+//   });
+
+//   const used = Math.min(filled + notice + advance, total);
+//   const vacant = Math.max(total - used, 0);
+
+//   let badge: "Available" | "Partial" | "Filled" = "Available";
+//   if (total > 0) {
+//     if (vacant <= 0) badge = "Filled";
+//     else if (vacant >= total) badge = "Available";
+//     else badge = "Partial";
+//   }
+
+//   const a11y = `Room status ${badge}. Total beds ${total}, used ${used}, vacant ${vacant}, advance bookings ${advance}, under notice ${notice}.`;
+//   return { total, used, vacant, filled, notice, advance, badge, a11y };
+// }
+
+// export default function PGLayout({ floors, metrics, refreshing, onRefresh }: Props) {
+//   const insets = useSafeAreaInsets();
+//   const { width } = useWindowDimensions();
+//   const { colors, spacing, radius, typography } = useTheme();
+
+//   /** responsive columns for room grid */
+//   const cols = width >= 1200 ? 4 : width >= 900 ? 3 : width >= 640 ? 2 : 1;
+//   const cardGap = 8; // compact
+
+//   /** palette */
+//   const BED_COLOR: Record<BedStatus, string> = {
+//     vacant: colors.availableBeds,
+//     filled: colors.filledBeds,
+//     notice: colors.underNoticeBeds,
+//     advance: colors.advBookedBeds,
+//   };
+//   const STATUS_BG: Record<"Available" | "Partial" | "Filled", string> = {
+//     Available: colors.availableBeds,
+//     Partial: colors.advBookedBeds,
+//     Filled: colors.filledBeds,
+//   };
+
+//   const s = useMemo(
+//     () =>
+//       StyleSheet.create({
+//         root: { flex: 1, backgroundColor: colors.background },
+//         body: {
+//           paddingHorizontal: spacing.md,
+//           paddingTop: spacing.sm, // tighter
+//           paddingBottom: insets.bottom + spacing.lg * 1.5, // compact
+//           gap: spacing.sm,
+//         },
+
+//         /** sticky legend wrapper */
+//         stickyWrap: {
+//           // This wrapper is what becomes sticky (index 1 in ScrollView children)
+//           backgroundColor: colors.background,
+//           paddingTop: 2,
+//           paddingBottom: 6,
+//           // subtle separation
+//           borderBottomWidth: StyleSheet.hairlineWidth,
+//           borderColor: hexToRgba(colors.textSecondary, 0.15),
+//           // slight elevation for Android
+//           shadowColor: colors.shadow,
+//           shadowOffset: { width: 0, height: 2 },
+//           shadowOpacity: 0.06,
+//           shadowRadius: 4,
+//           elevation: 2,
+//         },
+
+//         /* legend chips (compact) */
+//         legend: {
+//           flexDirection: "row",
+//           flexWrap: "wrap",
+//           gap: 6,
+//           padding: 8, // compact
+//           backgroundColor: colors.cardBackground,
+//           borderRadius: radius.lg,
+//           borderWidth: 1,
+//           borderColor: hexToRgba(colors.textSecondary, 0.15),
+//         },
+//         chip: {
+//           flexDirection: "row",
+//           alignItems: "center",
+//           borderRadius: 12,
+//           paddingHorizontal: 8,
+//           paddingVertical: 4,
+//           backgroundColor: colors.surface,
+//         },
+//         chipDot: { marginRight: 6 },
+//         chipTxt: { fontSize: 12, color: colors.textSecondary },
+
+//         /* floor header */
+//         floor: {
+//           padding: 10, // compact
+//           backgroundColor: colors.cardBackground,
+//           borderRadius: radius.lg,
+//           borderWidth: 1,
+//           borderColor: hexToRgba(colors.textSecondary, 0.15),
+//         },
+//         floorTitleRow: {
+//           flexDirection: "row",
+//           alignItems: "center",
+//           justifyContent: "space-between",
+//           marginBottom: 4,
+//         },
+//         floorTitle: {
+//           fontSize: 15, // compact
+//           fontWeight: "800",
+//           color: colors.textPrimary,
+//         },
+//         floorMeta: {
+//           fontSize: 11,
+//           color: colors.textSecondary,
+//         },
+
+//         /* sharing group */
+//         groupCard: {
+//           marginTop: 6,
+//           padding: 8, // compact
+//           backgroundColor: colors.surface,
+//           borderRadius: radius.md,
+//           borderWidth: 1,
+//           borderColor: hexToRgba(colors.textSecondary, 0.12),
+//         },
+//         groupHeader: {
+//           flexDirection: "row",
+//           alignItems: "center",
+//           justifyContent: "space-between",
+//           marginBottom: 6, // compact
+//         },
+//         groupTitle: { fontSize: 12.5, fontWeight: "700", color: colors.accent },
+//         groupCount: {
+//           fontSize: 10.5,
+//           fontWeight: "700",
+//           color: colors.textSecondary,
+//           backgroundColor: hexToRgba(colors.textSecondary, 0.1),
+//           paddingHorizontal: 8,
+//           paddingVertical: 2,
+//           borderRadius: 10,
+//         },
+
+//         /* room grid */
+//         roomGrid: {
+//           flexDirection: "row",
+//           flexWrap: "wrap",
+//           marginHorizontal: -cardGap / 2,
+//         },
+//         roomCardWrap: {
+//           width: `${100 / cols}%`,
+//           paddingHorizontal: cardGap / 2,
+//           marginBottom: cardGap,
+//         },
+//         roomCard: {
+//           backgroundColor: colors.cardBackground,
+//           borderRadius: radius.lg,
+//           borderWidth: 1,
+//           borderColor: hexToRgba(colors.textSecondary, 0.13),
+//           padding: 8, // compact
+//         },
+
+//         /* room header row: number + badge */
+//         roomHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+//         roomNo: {
+//           fontSize: 13.5, // compact
+//           fontWeight: "800",
+//           color: colors.textPrimary,
+//           backgroundColor: hexToRgba(colors.primary, 0.08),
+//           paddingHorizontal: 8,
+//           paddingVertical: 2,
+//           borderRadius: 8,
+//         },
+//         badge: (bg: string) => ({
+//           flexDirection: "row",
+//           alignItems: "center",
+//           backgroundColor: bg,
+//           paddingHorizontal: 8,
+//           paddingVertical: 2,
+//           borderRadius: 12,
+//         }),
+//         badgeTxt: { color: colors.white, fontSize: 10.5, fontWeight: "800" },
+
+//         /* compact bed strip */
+//         bedStrip: { flexDirection: "row", flexWrap: "wrap", gap: 3, marginTop: 6 },
+//         bedDot: (bg: string) => ({
+//           width: 10,
+//           height: 10,
+//           borderRadius: 3,
+//           backgroundColor: bg,
+//         }),
+
+//         /* counts row */
+//         countsRow: {
+//           flexDirection: "row",
+//           alignItems: "center",
+//           justifyContent: "space-between",
+//           marginTop: 6,
+//         },
+//         countPill: {
+//           flexDirection: "row",
+//           alignItems: "center",
+//           gap: 6,
+//           backgroundColor: colors.surface,
+//           borderRadius: 10,
+//           paddingHorizontal: 6,
+//           paddingVertical: 3,
+//           borderWidth: 1,
+//           borderColor: hexToRgba(colors.textSecondary, 0.1),
+//           minWidth: 62, // compact
+//           justifyContent: "center",
+//         },
+//         countTxt: { fontSize: 10.5, color: colors.textSecondary, fontWeight: "600" },
+//         countVal: (fg: string) => ({ fontSize: 11.5, fontWeight: "800", color: fg }),
+
+//         emptyText: {
+//           textAlign: "center",
+//           color: colors.textMuted,
+//           fontSize: 14,
+//           marginTop: 8,
+//         },
+//       }),
+//     // eslint-disable-next-line react-hooks/exhaustive-deps
+//     [colors, spacing, radius, typography, cols, cardGap, insets.bottom]
+//   );
+
+//   const Legend = () => (
+//     <View style={s.legend}>
+//       {[
+//         { label: "Vacant", color: BED_COLOR.vacant },
+//         { label: "Filled", color: BED_COLOR.filled },
+//         { label: "Under Notice", color: BED_COLOR.notice },
+//         { label: "Adv. Booking", color: BED_COLOR.advance },
+//       ].map((x) => (
+//         <View
+//           key={x.label}
+//           style={s.chip}
+//           accessible
+//           accessibilityRole="text"
+//           accessibilityLabel={x.label}
+//         >
+//           <MaterialCommunityIcons name="circle" size={10} color={x.color} style={s.chipDot} />
+//           <Text style={s.chipTxt}>{x.label}</Text>
+//         </View>
+//       ))}
+//     </View>
+//   );
+
+//   return (
+//     <ScrollView
+//       style={s.root}
+//       contentContainerStyle={s.body}
+//       showsVerticalScrollIndicator={false}
+//       // 👇 make the Legend sticky (child index 1: [0]=StatsGrid, [1]=stickyWrap containing Legend)
+//       stickyHeaderIndices={[1]}
+//       refreshControl={
+//         <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} tintColor={colors.accent} />
+//       }
+//     >
+//       {/* 0: Stats header (non-sticky) */}
+//       <StatsGrid metrics={metrics ?? []} />
+
+//       {/* 1: Sticky legend */}
+//       <View style={s.stickyWrap}>
+//         <Legend />
+//       </View>
+
+//       {(!floors || floors.length === 0) && <Text style={s.emptyText}>No layout data</Text>}
+
+//       {(floors ?? []).map((floor) => {
+//         // floor rollup (rooms/beds)
+//         let roomsCount = 0;
+//         let bedsCount = 0;
+//         floor?.groups?.forEach?.((g) => {
+//           roomsCount += g?.rooms?.length ?? 0;
+//           g?.rooms?.forEach?.((r) => (bedsCount += r?.beds?.length ?? 0));
+//         });
+
+//         return (
+//           <View key={floor?.name} style={s.floor}>
+//             <View style={s.floorTitleRow}>
+//               <Text style={s.floorTitle}>{floor?.name ?? "Floor"}</Text>
+//               <Text style={s.floorMeta}>
+//                 Rooms: {roomsCount} • Beds: {bedsCount}
+//               </Text>
+//             </View>
+
+//             {(floor?.groups ?? []).map((grp) => (
+//               <View key={`${floor?.name}-${grp?.sharing}`} style={s.groupCard}>
+//                 <View style={s.groupHeader}>
+//                   <Text style={s.groupTitle}>
+//                     <MaterialCommunityIcons name="account-group" size={14} color={colors.accent} />{" "}
+//                     {num(grp?.sharing)} Sharing
+//                   </Text>
+//                   <Text style={s.groupCount}>{grp?.rooms?.length ?? 0} rooms</Text>
+//                 </View>
+
+//                 <View style={s.roomGrid}>
+//                   {(grp?.rooms ?? []).map((room) => {
+//                     const { total, used, vacant, advance, notice, badge, a11y } = analyzeRoom(
+//                       room?.beds
+//                     );
+
+//                     return (
+//                       <View key={room?.roomNo} style={s.roomCardWrap}>
+//                         <Pressable
+//                           onPress={async () => {
+//                             try {
+//                               await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+//                             } catch {}
+//                             AccessibilityInfo.announceForAccessibility?.(
+//                               `Room ${room?.roomNo ?? ""}. ${a11y}`
+//                             );
+//                           }}
+//                           android_ripple={{ color: hexToRgba(colors.textSecondary, 0.12) }}
+//                           style={s.roomCard}
+//                           accessible
+//                           accessibilityRole="button"
+//                           accessibilityLabel={`Room ${room?.roomNo ?? ""}`}
+//                           accessibilityHint={a11y}
+//                         >
+//                           {/* header: room no + badge */}
+//                           <View style={s.roomHeader}>
+//                             <Text style={s.roomNo}>{room?.roomNo ?? "—"}</Text>
+//                             <View style={s.badge(STATUS_BG[badge])}>
+//                               <Text style={s.badgeTxt}>{badge}</Text>
+//                             </View>
+//                           </View>
+
+//                           {/* compact bed strip */}
+//                           <View style={s.bedStrip}>
+//                             {(room?.beds ?? []).map((b) => (
+//                               <View
+//                                 key={b?.id}
+//                                 style={s.bedDot(BED_COLOR[b?.status ?? "vacant"])}
+//                               />
+//                             ))}
+//                           </View>
+
+//                           {/* counts row: Vac • Adv • Notice • Used */}
+//                           <View style={s.countsRow}>
+//                             <View style={s.countPill}>
+//                               <Text style={s.countTxt}>Vac</Text>
+//                               <Text style={s.countVal(BED_COLOR.vacant)}>{vacant}</Text>
+//                             </View>
+//                             <View style={s.countPill}>
+//                               <Text style={s.countTxt}>Adv</Text>
+//                               <Text style={s.countVal(BED_COLOR.advance)}>{advance}</Text>
+//                             </View>
+//                             <View style={s.countPill}>
+//                               <Text style={s.countTxt}>Notice</Text>
+//                               <Text style={s.countVal(BED_COLOR.notice)}>{notice}</Text>
+//                             </View>
+//                             <View style={s.countPill}>
+//                               <Text style={s.countTxt}>Used</Text>
+//                               <Text style={s.countVal(BED_COLOR.filled)}>
+//                                 {used}/{total}
+//                               </Text>
+//                             </View>
+//                           </View>
+//                         </Pressable>
+//                       </View>
+//                     );
+//                   })}
+//                 </View>
+//               </View>
+//             ))}
+//           </View>
+//         );
+//       })}
+//     </ScrollView>
+//   );
+// }
+
+// src/components/property/PGLayout.tsx
 import React, { useMemo, useState, useCallback } from "react";
 import {
   View,
@@ -5,323 +421,621 @@ import {
   StyleSheet,
   ScrollView,
   useWindowDimensions,
-  FlatList,
   Pressable,
-  Platform,
+  RefreshControl,
+  AccessibilityInfo,
+  NativeSyntheticEvent,
+  NativeScrollEvent,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import * as Haptics from "expo-haptics";
 
 import StatsGrid, { Metric } from "@/src/components/StatsGrid";
-import { mockRooms } from "@/src/constants/mockRooms";
 import { useTheme } from "@/src/theme/ThemeContext";
 import { hexToRgba } from "@/src/theme";
 
-/* ────────────────────────────────────────────────────────────────
-   1 ▸  mock (demo) data for layout
-   ──────────────────────────────────────────────────────────────── */
+/** Data contracts (unchanged) */
 type BedStatus = "vacant" | "filled" | "notice" | "advance";
-const ALL_STAT: BedStatus[] = ["vacant", "filled", "notice", "advance"];
-const pick = <T,>(arr: T[]) => arr[Math.floor(Math.random() * arr.length)];
-
 type RoomInfo = { roomNo: string; beds: { id: string; status: BedStatus }[] };
 type GroupInfo = { sharing: number; rooms: RoomInfo[] };
 type FloorInfo = { name: string; groups: GroupInfo[] };
 
-const makeRooms = (sh: number, f: number): RoomInfo[] =>
-  Array.from({ length: 2 + (sh % 2) }).map((_, r) => ({
-    roomNo: `${f + 1}${sh}${r}`,
-    beds: Array.from({ length: sh }, (_, b) => ({
-      id: `b${b}`,
-      status: pick(ALL_STAT),
-    })),
-  }));
-
-const floors: FloorInfo[] = ["1st Floor", "2nd Floor"].map((name, fIdx) => ({
-  name,
-  groups: Array.from({ length: 5 }, (_, i) => {
-    const sh = i + 1 + fIdx * 5;
-    return { sharing: sh, rooms: makeRooms(sh, fIdx) };
-  }),
-}));
-
-/* ────────────────────────────────────────────────────────────────
-   2 ▸  metrics
-   ──────────────────────────────────────────────────────────────── */
-const metricsFromRooms = (): Metric[] => {
-  const totalRooms = mockRooms.length;
-  const totalBeds = mockRooms.reduce((n, r) => n + r.totalBeds, 0);
-  const vacantBeds = mockRooms.reduce((n, r) => n + r.vacantBeds, 0);
-  const occupiedBeds = mockRooms.reduce((n, r) => n + r.occupiedBeds, 0);
-
-  return [
-    {
-      key: "rooms",
-      label: "Total Rooms",
-      value: totalRooms,
-      icon: "office-building",
-      iconBg: "#DBEAFE",
-    },
-    { key: "beds", label: "Total Beds", value: totalBeds, icon: "bed", iconBg: "#DBEAFE" },
-    {
-      key: "vacant",
-      label: "Vacant Beds",
-      value: vacantBeds,
-      icon: "bed",
-      iconBg: "#BBF7D0",
-      iconColor: "#059669",
-    },
-    {
-      key: "occ",
-      label: "Occupied",
-      value: occupiedBeds,
-      icon: "bed",
-      iconBg: "#FECACA",
-      iconColor: "#B91C1C",
-    },
-  ];
+type Props = {
+  floors: FloorInfo[];
+  metrics: Metric[];
+  refreshing: boolean;
+  onRefresh: () => void;
 };
 
-/* ────────────────────────────────────────────────────────────────
-   3 ▸  glyph helper
-   ──────────────────────────────────────────────────────────────── */
-const Bed = ({ status, color }: { status: BedStatus; color: string }) => (
-  <MaterialCommunityIcons name="bed" size={17} color={color} style={{ margin: 1 }} />
-);
+const num = (v: any, fb = 0) => (typeof v === "number" ? v : Number(v ?? fb)) || 0;
 
-/* ------------------------------------------------------------------
-   4 ▸  main component
-------------------------------------------------------------------- */
-export default function PGLayout() {
-  const { width } = useWindowDimensions();
+/** Per-room analysis */
+function analyzeRoom(beds?: { id: string; status: BedStatus }[]) {
+  const total = beds?.length ?? 0;
+  let filled = 0,
+    notice = 0,
+    advance = 0;
+
+  beds?.forEach?.((b) => {
+    if (b?.status === "filled") filled += 1;
+    else if (b?.status === "notice") notice += 1;
+    else if (b?.status === "advance") advance += 1;
+  });
+
+  const used = Math.min(filled + notice + advance, total);
+  const vacant = Math.max(total - used, 0);
+
+  let badge: "Available" | "Partial" | "Filled" = "Available";
+  if (total > 0) {
+    if (vacant <= 0) badge = "Filled";
+    else if (vacant >= total) badge = "Available";
+    else badge = "Partial";
+  }
+
+  const a11y = `Room status ${badge}. Total beds ${total}, used ${used}, vacant ${vacant}, advance bookings ${advance}, under notice ${notice}.`;
+  return { total, used, vacant, filled, notice, advance, badge, a11y };
+}
+
+/** Per-sharing analysis for “% full” pill */
+function analyzeSharing(rooms?: RoomInfo[]) {
+  let total = 0;
+  let used = 0;
+  rooms?.forEach?.((r) => {
+    const { total: t, used: u } = analyzeRoom(r?.beds);
+    total += t;
+    used += u;
+  });
+  const pct = total > 0 ? used / total : 0;
+  return { total, used, pct };
+}
+
+export default function PGLayout({ floors, metrics, refreshing, onRefresh }: Props) {
   const insets = useSafeAreaInsets();
-  const metrics = useMemo(metricsFromRooms, []);
+  const { width } = useWindowDimensions();
+  const { colors, spacing, radius, typography } = useTheme();
 
-  const { colors, spacing, radius } = useTheme();
-  const isAndroid = Platform.OS === "android";
+  /** fixed heights keep every floor card equal-height */
+  const GROUP_ZONE_H = width >= 1200 ? 230 : width >= 900 ? 220 : width >= 640 ? 210 : 200;
+  const ROOM_TILE_H = 58;
+  const CARD_GAP = 8;
 
-  /* outer scroll disabling (Android only, during vertical drags) */
-  const [outerScrollEnabled, setOuterScrollEnabled] = useState(true);
-
-  /* ---------- static colours ---------- */
   const BED_COLOR: Record<BedStatus, string> = {
     vacant: colors.availableBeds,
     filled: colors.filledBeds,
     notice: colors.underNoticeBeds,
     advance: colors.advBookedBeds,
   };
+  const STATUS_BG: Record<"Available" | "Partial" | "Filled", string> = {
+    Available: colors.availableBeds,
+    Partial: colors.advBookedBeds,
+    Filled: colors.filledBeds,
+  };
 
-  /* ---------- styles ---------- */
   const s = useMemo(
     () =>
       StyleSheet.create({
-        body: { paddingHorizontal: spacing.md, paddingTop: spacing.lg + 4 },
+        root: { flex: 1, backgroundColor: colors.background },
+        body: {
+          paddingHorizontal: spacing.md,
+          paddingTop: spacing.sm,
+          paddingBottom: insets.bottom + spacing.lg * 1.25,
+          gap: spacing.sm,
+        },
 
-        legendCard: {
+        /** sticky legend wrapper */
+        stickyWrap: {
+          backgroundColor: colors.background,
+          paddingTop: 2,
+          paddingBottom: 6,
+          borderBottomWidth: StyleSheet.hairlineWidth,
+          borderColor: hexToRgba(colors.textSecondary, 0.15),
+          shadowColor: colors.shadow,
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.06,
+          shadowRadius: 4,
+          elevation: 2,
+        },
+
+        /* legend chips (compact) */
+        legend: {
           flexDirection: "row",
           flexWrap: "wrap",
-          gap: 12,
-          padding: 12,
-          marginBottom: spacing.sm,
+          gap: 6,
+          padding: 8,
           backgroundColor: colors.cardBackground,
           borderRadius: radius.lg,
-          borderWidth: 0.8,
+          borderWidth: 1,
           borderColor: hexToRgba(colors.textSecondary, 0.15),
-          shadowColor: colors.shadow,
-          shadowOffset: { width: 0, height: 3 },
-          shadowOpacity: 0.06,
-          shadowRadius: 5,
-          elevation: 4,
         },
-        legendPill: {
+        chip: {
           flexDirection: "row",
           alignItems: "center",
+          borderRadius: 12,
+          paddingHorizontal: 8,
+          paddingVertical: 4,
           backgroundColor: colors.surface,
-          borderRadius: 16,
-          paddingVertical: 6,
-          paddingHorizontal: 12,
         },
-        legendText: { fontSize: 13, color: colors.textSecondary },
+        chipDot: { marginRight: 6 },
+        chipTxt: { fontSize: 14, color: colors.textSecondary },
 
-        floorTitle: {
-          fontSize: 16,
-          fontWeight: "700",
-          color: colors.textPrimary,
-          marginBottom: 12,
-        },
-
-        card: {
+        /* floor card */
+        floorCard: {
           backgroundColor: colors.cardBackground,
           borderRadius: radius.lg,
-          padding: 12,
-          borderWidth: 0.8,
+          borderWidth: 1,
           borderColor: hexToRgba(colors.textSecondary, 0.15),
-          shadowColor: colors.shadow,
-          shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.06,
-          shadowRadius: 7,
-          elevation: 4,
+          padding: 10,
         },
-        cardHeader: {
+        floorHeader: {
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          marginBottom: 8,
+        },
+        floorTitle: { fontSize: 15, fontWeight: "800", color: colors.textPrimary },
+        floorMeta: { fontSize: 11, color: colors.textSecondary },
+
+        /* group scroller zone (equal height) */
+        groupsWrap: {
+          position: "relative",
+        },
+        groupsScroller: {
+          height: GROUP_ZONE_H,
+        },
+
+        /* edge scroll hints */
+        edgeHint: {
+          position: "absolute",
+          top: 8,
+          bottom: 8,
+          width: 22,
+          justifyContent: "center",
+          alignItems: "center",
+          pointerEvents: "none",
+        },
+        leftHint: {
+          left: 0,
+          backgroundColor: hexToRgba(colors.background, 0.0),
+        },
+        rightHint: {
+          right: 0,
+          backgroundColor: hexToRgba(colors.background, 0.0),
+        },
+        hintIconWrap: {
+          backgroundColor: hexToRgba(colors.black, 0.06),
+          borderRadius: 999,
+          padding: 4,
+        },
+
+        /* bottom scroll progress bar */
+        scrollTrack: {
+          position: "absolute",
+          left: 10,
+          right: 10,
+          bottom: 4,
+          height: 3,
+          backgroundColor: hexToRgba(colors.textSecondary, 0.12),
+          borderRadius: 999,
+          overflow: "hidden",
+        },
+        scrollThumb: {
+          position: "absolute",
+          top: 0,
+          bottom: 0,
+          backgroundColor: hexToRgba(colors.accent, 0.55),
+          borderRadius: 999,
+        },
+
+        /* sharing card */
+        sharingCard: {
+          width: Math.max(180, width * (width >= 900 ? 0.28 : width >= 640 ? 0.42 : 0.87)),
+          flex: 1,
+          height: GROUP_ZONE_H - 2,
+          backgroundColor: colors.surface,
+          borderRadius: radius.md,
+          borderWidth: 1,
+          borderColor: hexToRgba(colors.textSecondary, 0.12),
+          padding: 8,
+        },
+        sharingCardFull: {
+          width: "100%",
+        },
+        sharingHeader: {
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          marginBottom: 6,
+        },
+        sharingTitle: { fontSize: 12.5, fontWeight: "700", color: colors.accent },
+        rightChips: { flexDirection: "row", alignItems: "center", gap: 6 },
+        groupCount: {
+          fontSize: 10.5,
+          fontWeight: "700",
+          color: colors.textSecondary,
+          backgroundColor: hexToRgba(colors.textSecondary, 0.1),
+          paddingHorizontal: 8,
+          paddingVertical: 2,
+          borderRadius: 10,
+        },
+
+        /* occupancy pill */
+        occPill: (fg: string) => ({
           flexDirection: "row",
           alignItems: "center",
           gap: 6,
-          paddingBottom: 6,
-          borderBottomWidth: StyleSheet.hairlineWidth,
-          borderColor: hexToRgba(colors.textSecondary, 0.2),
-          marginBottom: 6,
-        },
-        cardHeaderTxt: { fontWeight: "700", color: colors.accent, fontSize: 13 },
-
-        roomGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-
-        roomTile: {
-          flexBasis: "48%",
-          flexGrow: 1,
-          minWidth: 90,
-          marginBottom: 10,
-
+          backgroundColor: hexToRgba(fg, 0.12),
           borderWidth: 1,
-          borderColor: hexToRgba(colors.textSecondary, 0.3),
-          borderRadius: 12,
-          padding: 10,
-          backgroundColor: colors.surface,
+          borderColor: hexToRgba(fg, 0.35),
+          paddingHorizontal: 8,
+          paddingVertical: 2,
+          borderRadius: 999,
+        }),
+        occTxt: (fg: string) => ({ fontSize: 10.5, fontWeight: "800", color: fg }),
 
-          shadowColor: colors.shadow,
-          shadowOffset: { width: 0, height: 1 },
-          shadowOpacity: 0.05,
-          shadowRadius: 2,
-          elevation: 1,
+        /* vertical rooms area */
+        roomList: {
+          flex: 1,
+        },
+
+        /* room mini tile */
+        roomTile: {
+          height: ROOM_TILE_H,
+          borderRadius: 10,
+          borderWidth: 1,
+          borderColor: hexToRgba(colors.textSecondary, 0.12),
+          backgroundColor: colors.cardBackground,
+          paddingHorizontal: 8,
+          paddingVertical: 6,
+          marginBottom: 6,
+          justifyContent: "space-between",
+        },
+        roomRowTop: {
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
         },
         roomNo: {
-          alignSelf: "flex-start",
-          backgroundColor: hexToRgba(colors.primary, 0.1),
+          fontSize: 12.5,
+          fontWeight: "800",
           color: colors.textPrimary,
-          fontSize: 13,
-          fontWeight: "700",
+          backgroundColor: hexToRgba(colors.primary, 0.08),
           paddingHorizontal: 6,
           paddingVertical: 2,
           borderRadius: 6,
-          marginBottom: 6,
         },
-        bedRow: { flexDirection: "row", flexWrap: "wrap" },
+        badge: (bg: string) => ({
+          backgroundColor: bg,
+          paddingHorizontal: 6,
+          paddingVertical: 1,
+          borderRadius: 10,
+        }),
+        badgeTxt: { color: colors.white, fontSize: 10, fontWeight: "800" },
+
+        /* micro bed bar */
+        bedBar: {
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 2,
+          marginTop: 4,
+        },
+        bedSeg: (bg: string) => ({
+          height: 6,
+          width: 10,
+          borderRadius: 2,
+          backgroundColor: bg,
+        }),
+
+        /* labeled counts line */
+        countsLine: {
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          marginTop: 4,
+        },
+        countItem: {
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 4,
+          minWidth: 64,
+        },
+        dot: (bg: string) => ({
+          width: 8,
+          height: 8,
+          borderRadius: 10,
+          backgroundColor: bg,
+        }),
+        countLabel: { fontSize: 13, color: colors.textSecondary, fontWeight: "700" },
+        countValue: (fg: string) => ({ fontSize: 13, color: fg, fontWeight: "800" }),
+
+        emptyText: {
+          textAlign: "center",
+          color: colors.textMuted,
+          fontSize: 14,
+          marginTop: 8,
+        },
       }),
-    [colors, spacing, radius]
+    [colors, spacing, radius, typography, width, GROUP_ZONE_H, ROOM_TILE_H]
   );
 
-  /* ---------- legend ---------- */
-  const LegendPill = useCallback(
-    ({ status, label }: { status: BedStatus; label: string }) => (
-      <View style={s.legendPill}>
-        <MaterialCommunityIcons
-          name="circle"
-          size={10}
-          color={BED_COLOR[status]}
-          style={{ marginRight: 6 }}
-        />
-        <Text style={s.legendText}>{label}</Text>
-      </View>
-    ),
-    [s.legendPill, s.legendText, BED_COLOR]
-  );
-
-  const LegendCard = () => (
-    <View style={s.legendCard}>
-      <LegendPill status="notice" label="Notice" />
-      <LegendPill status="vacant" label="Vacant" />
-      <LegendPill status="filled" label="Filled" />
-      <LegendPill status="advance" label="Adv. Book" />
+  const Legend = () => (
+    <View style={s.legend}>
+      {[
+        { label: "Vacant", color: BED_COLOR.vacant },
+        { label: "Filled", color: BED_COLOR.filled },
+        { label: "Under Notice", color: BED_COLOR.notice },
+        { label: "Adv. Booking", color: BED_COLOR.advance },
+      ].map((x) => (
+        <View
+          key={x.label}
+          style={s.chip}
+          accessible
+          accessibilityRole="text"
+          accessibilityLabel={x.label}
+        >
+          <MaterialCommunityIcons name="circle" size={10} color={x.color} style={s.chipDot} />
+          <Text style={s.chipTxt}>{x.label}</Text>
+        </View>
+      ))}
     </View>
   );
 
-  /* ---------- floor block ---------- */
-  const FloorBlock = ({
-    floor,
-    setOuterScroll,
-  }: {
-    floor: FloorInfo;
-    setOuterScroll: (v: boolean) => void;
-  }) => {
-    const cardW = Math.max(160, width * (width >= 780 ? 0.33 : 0.4));
+  const occColorFor = (pct: number) => {
+    if (pct >= 0.9) return BED_COLOR.filled; // very full
+    if (pct >= 0.5) return BED_COLOR.advance; // mid
+    return BED_COLOR.vacant; // low
+  };
+
+  /** A floor block with its own scroll hint state */
+  const FloorBlock = ({ floor }: { floor: FloorInfo }) => {
+    const groups = floor?.groups ?? [];
+    const isSingleGroup = groups.length === 1;
+
+    // scroll state for hints / progress bar
+    const [layoutW, setLayoutW] = useState(0);
+    const [contentW, setContentW] = useState(0);
+    const [scrollX, setScrollX] = useState(0);
+
+    const canScroll = contentW - layoutW > 1;
+    const canLeft = canScroll && scrollX > 2;
+    const canRight = canScroll && scrollX < contentW - layoutW - 2;
+
+    const onScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      setScrollX(e.nativeEvent.contentOffset.x);
+    }, []);
+
+    // floor rollup (rooms/beds)
+    let roomsCount = 0;
+    let bedsCount = 0;
+    groups.forEach?.((g) => {
+      roomsCount += g?.rooms?.length ?? 0;
+      g?.rooms?.forEach?.((r) => (bedsCount += r?.beds?.length ?? 0));
+    });
 
     return (
-      <View>
-        <Text style={s.floorTitle}>{floor.name}</Text>
+      <View style={s.floorCard}>
+        {/* floor header */}
+        <View style={s.floorHeader}>
+          <Text style={s.floorTitle}>{floor?.name ?? "Floor"}</Text>
+          <Text style={s.floorMeta}>
+            Rooms: {roomsCount} • Beds: {bedsCount}
+          </Text>
+        </View>
 
-        {/* horizontal list of sharing cards – never disables outer scroll */}
-        <FlatList
-          horizontal
-          nestedScrollEnabled
-          showsHorizontalScrollIndicator={false}
-          data={floor.groups}
-          keyExtractor={(g) => String(g.sharing)}
-          contentContainerStyle={{ gap: 14, paddingRight: 10 }}
-          renderItem={({ item }) => (
-            <View style={[s.card, { width: cardW }]}>
-              <View style={s.cardHeader}>
-                <MaterialCommunityIcons name="account-group" size={15} color={colors.accent} />
-                <Text style={s.cardHeaderTxt}>{item.sharing} Sharing</Text>
-              </View>
+        {/* equal-height group zone with hints */}
+        <View style={s.groupsWrap} accessible accessibilityLabel="Sharing groups">
+          <ScrollView
+            horizontal
+            nestedScrollEnabled
+            showsHorizontalScrollIndicator={false}
+            onScroll={onScroll}
+            scrollEventThrottle={16}
+            onLayout={(e) => setLayoutW(e.nativeEvent.layout.width)}
+            onContentSizeChange={(w) => setContentW(w)}
+            contentContainerStyle={{
+              // no trailing padding — we’ll set per-card marginRight except last
+              paddingRight: 0,
+              // no fixed gap here to avoid right-side white space
+            }}
+            style={s.groupsScroller}
+            scrollEnabled={!isSingleGroup}
+            accessible
+            accessibilityHint="Swipe horizontally to see more sharing types"
+          >
+            {groups.map((grp, idx) => {
+              const { total: grpTotal, used: grpUsed, pct } = analyzeSharing(grp?.rooms);
+              const occColor = occColorFor(pct);
+              const isLast = idx === groups.length - 1;
 
-              {/* vertical bed list – pause outer scroll only while dragging (Android) */}
-              <ScrollView
-                style={{ maxHeight: 210 }}
-                showsVerticalScrollIndicator={false}
-                nestedScrollEnabled
-                scrollEventThrottle={16}
-                onTouchStart={isAndroid ? () => setOuterScroll(false) : undefined}
-                onTouchEnd={isAndroid ? () => setOuterScroll(true) : undefined}
-                onMomentumScrollEnd={isAndroid ? () => setOuterScroll(true) : undefined}
-                contentContainerStyle={s.roomGrid}
-              >
-                {item.rooms.map((r) => (
-                  <Pressable
-                    key={r.roomNo}
-                    android_ripple={{ color: hexToRgba(colors.textSecondary, 0.15) }}
-                    onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
-                    style={s.roomTile}
-                  >
-                    <Text style={s.roomNo}>{r.roomNo}</Text>
-                    <View style={s.bedRow}>
-                      {r.beds.map((b) => (
-                        <Bed key={b.id} status={b.status} color={BED_COLOR[b.status]} />
-                      ))}
+              return (
+                <View
+                  key={`${floor?.name}-${grp?.sharing}`}
+                  style={[
+                    s.sharingCard,
+                    isSingleGroup && s.sharingCardFull,
+                    !isLast && { marginRight: CARD_GAP }, // gap between cards only, no trailing gap
+                  ]}
+                >
+                  {/* sharing header */}
+                  <View style={s.sharingHeader}>
+                    <Text style={s.sharingTitle}>
+                      <MaterialCommunityIcons
+                        name="account-group"
+                        size={14}
+                        color={colors.accent}
+                      />{" "}
+                      {num(grp?.sharing)} Sharing
+                    </Text>
+
+                    <View style={s.rightChips}>
+                      <Text style={s.groupCount}>{grp?.rooms?.length ?? 0} rooms</Text>
+                      {/* unique: % full pill */}
+                      <View style={s.occPill(occColor)}>
+                        <View style={s.dot(occColor)} />
+                        <Text style={s.occTxt(occColor)}>{Math.round(pct * 100)}% full</Text>
+                      </View>
                     </View>
-                  </Pressable>
-                ))}
-              </ScrollView>
+                  </View>
+
+                  {/* rooms list (scrolls if overflow, card height fixed) */}
+                  <ScrollView
+                    style={s.roomList}
+                    showsVerticalScrollIndicator={false}
+                    nestedScrollEnabled
+                  >
+                    {(grp?.rooms ?? []).map((room) => {
+                      const { total, used, vacant, advance, notice, badge, a11y } = analyzeRoom(
+                        room?.beds
+                      );
+                      return (
+                        <Pressable
+                          key={room?.roomNo}
+                          onPress={async () => {
+                            try {
+                              await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                            } catch {}
+                            AccessibilityInfo.announceForAccessibility?.(
+                              `Room ${room?.roomNo ?? ""}. ${a11y}`
+                            );
+                          }}
+                          android_ripple={{ color: hexToRgba(colors.textSecondary, 0.12) }}
+                          style={s.roomTile}
+                          accessible
+                          accessibilityRole="button"
+                          accessibilityLabel={`Room ${room?.roomNo ?? ""}`}
+                          accessibilityHint={a11y}
+                        >
+                          {/* top row: room + badge */}
+                          <View style={s.roomRowTop}>
+                            <Text style={s.roomNo}>{room?.roomNo ?? "—"}</Text>
+                            <View style={s.badge(STATUS_BG[badge])}>
+                              <Text style={s.badgeTxt}>{badge}</Text>
+                            </View>
+                          </View>
+
+                          {/* micro bed bar */}
+                          <View style={s.bedBar}>
+                            {(room?.beds ?? []).map((b) => (
+                              <View
+                                key={b?.id}
+                                style={s.bedSeg(BED_COLOR[b?.status ?? "vacant"])}
+                              />
+                            ))}
+                          </View>
+
+                          {/* labeled counts line */}
+                          <View style={s.countsLine}>
+                            <View style={s.countItem}>
+                              <View style={s.dot(BED_COLOR.vacant)} />
+                              <Text style={s.countLabel}>Vacant</Text>
+                              <Text style={s.countValue(BED_COLOR.vacant)}>{vacant}</Text>
+                            </View>
+                            <View style={s.countItem}>
+                              <View style={s.dot(BED_COLOR.advance)} />
+                              <Text style={s.countLabel}>Adv</Text>
+                              <Text style={s.countValue(BED_COLOR.advance)}>{advance}</Text>
+                            </View>
+                            <View style={s.countItem}>
+                              <View style={s.dot(BED_COLOR.notice)} />
+                              <Text style={s.countLabel}>Notice</Text>
+                              <Text style={s.countValue(BED_COLOR.notice)}>{notice}</Text>
+                            </View>
+                            <View style={s.countItem}>
+                              <View style={s.dot(BED_COLOR.filled)} />
+                              <Text style={s.countLabel}>Used</Text>
+                              <Text style={s.countValue(BED_COLOR.filled)}>
+                                {used}/{total}
+                              </Text>
+                            </View>
+                          </View>
+                        </Pressable>
+                      );
+                    })}
+                  </ScrollView>
+                </View>
+              );
+            })}
+          </ScrollView>
+
+          {/* edge chevrons (hint only, non-interactive) */}
+          {canScroll && (
+            <>
+              {canLeft && (
+                <View
+                  style={[s.edgeHint, s.leftHint]}
+                  pointerEvents="none"
+                  accessibilityElementsHidden
+                >
+                  <View style={s.hintIconWrap}>
+                    <MaterialCommunityIcons
+                      name="chevron-left"
+                      size={18}
+                      color={hexToRgba(colors.textPrimary, 0.55)}
+                    />
+                  </View>
+                </View>
+              )}
+              {canRight && (
+                <View
+                  style={[s.edgeHint, s.rightHint]}
+                  pointerEvents="none"
+                  accessibilityElementsHidden
+                >
+                  <View style={s.hintIconWrap}>
+                    <MaterialCommunityIcons
+                      name="chevron-right"
+                      size={18}
+                      color={hexToRgba(colors.textPrimary, 0.55)}
+                    />
+                  </View>
+                </View>
+              )}
+            </>
+          )}
+
+          {/* bottom scroll progress bar */}
+          {canScroll && (
+            <View style={s.scrollTrack} pointerEvents="none">
+              {/* thumb width = layout/content, left = scrollX/content */}
+              <View
+                style={[
+                  s.scrollThumb,
+                  {
+                    width: contentW > 0 ? `${(layoutW / contentW) * 100}%` : "0%",
+                    left: contentW > 0 ? `${(scrollX / contentW) * 100}%` : "0%",
+                  },
+                ]}
+              />
             </View>
           )}
-        />
+        </View>
       </View>
     );
   };
 
-  /* ---------- render ---------- */
   return (
     <ScrollView
-      stickyHeaderIndices={[1]}
-      style={{ flex: 1, backgroundColor: colors.background }}
-      contentContainerStyle={{
-        ...s.body,
-        paddingBottom: insets.bottom + spacing.lg * 2,
-      }}
-      scrollEnabled={isAndroid ? outerScrollEnabled : true}
+      style={s.root}
+      contentContainerStyle={s.body}
       showsVerticalScrollIndicator={false}
+      stickyHeaderIndices={[1]} // [0]=Stats, [1]=Legend
+      refreshControl={
+        <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} tintColor={colors.accent} />
+      }
     >
-      <StatsGrid metrics={metrics} />
-      <LegendCard />
+      {/* 0: metrics */}
+      <StatsGrid metrics={metrics ?? []} />
 
-      <FlatList
-        data={floors}
-        keyExtractor={(f) => f.name}
-        renderItem={({ item }) => (
-          <FloorBlock floor={item} setOuterScroll={setOuterScrollEnabled} />
-        )}
-        scrollEnabled={false}
-        contentContainerStyle={{ gap: spacing.lg + 6 }}
-      />
+      {/* 1: sticky legend */}
+      <View style={s.stickyWrap}>
+        <Legend />
+      </View>
+
+      {(!floors || floors.length === 0) && <Text style={s.emptyText}>No layout data</Text>}
+
+      {(floors ?? []).map((floor) => (
+        <FloorBlock key={floor?.name} floor={floor} />
+      ))}
     </ScrollView>
   );
 }

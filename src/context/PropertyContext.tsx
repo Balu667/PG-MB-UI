@@ -1,54 +1,51 @@
 // src/context/PropertyContext.tsx
-import React, { createContext, useContext, useCallback, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { useSelector, useDispatch } from "react-redux";
+import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { useSelector } from "react-redux";
 import { useGetPropertyDetailsList } from "@/src/hooks/propertyHook";
-import { RootState } from "@/src/redux/store"; // adjust the path if needed
-import { setPropertyDetails } from "@/src/redux/slices/propertySlice";
 
-export interface PropertyCtx {
-  properties: { _id: string; propertyName: string }[];
-  selectedId: string | undefined;
-  setSelected: (id: string) => void;
-  loading: boolean;
-}
-
-const Ctx = createContext<PropertyCtx | undefined>(undefined);
-export const useProperty = () => {
-  const ctx = useContext(Ctx);
-  if (!ctx) throw new Error("useProperty must be inside <PropertyProvider>");
-  return ctx;
+type Property = {
+  _id: string;
+  propertyName: string;
+  [k: string]: any;
 };
 
+type Ctx = {
+  properties: Property[];
+  selectedId: string | undefined;
+  setSelected: any;
+  loading: boolean;
+};
+
+const PropertyContext = createContext<Ctx | null>(null);
+
 export const PropertyProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const dispatch = useDispatch();
-  const { profileData } = useSelector((s: RootState) => s.profileDetails);
+  const { profileData } = useSelector((state: any) => state.profileDetails);
+  const { isLoading, data: propertyData = [] } = useGetPropertyDetailsList(profileData);
 
-  // fetch list (react-query caches it)
-  const { data = [], isLoading } = useGetPropertyDetailsList(profileData);
+  const [selectedId, setSelectedId] = useState<any>();
 
-  // selected property id lives in Redux (so other slices can react to it)
-  const selectedId = useSelector((s: RootState) => s?.propertyDetails?.propertyData?._id);
+  // pick first property by default
+  useEffect(() => {
+    if (!selectedId && propertyData?.length) {
+      setSelectedId(propertyData[0]._id);
+    }
+  }, [propertyData, selectedId]);
 
-  const setSelected = useCallback(
-    (id: string) => dispatch(setPropertyDetails({ _id: id })), // you can store more if you need
-    [dispatch]
-  );
-
-  // once the list arrives, make sure we have a default selected id
-  React.useEffect(() => {
-    if (!selectedId && data.length) setSelected(data[0]._id);
-  }, [data, selectedId, setSelected]);
-
-  const value = useMemo(
+  const value = useMemo<Ctx>(
     () => ({
-      properties: data.map(({ _id, propertyName }: any) => ({ _id, propertyName })),
+      properties: propertyData,
       selectedId,
-      setSelected,
+      setSelected: setSelectedId,
       loading: isLoading,
     }),
-    [data, selectedId, isLoading, setSelected]
+    [propertyData, selectedId, isLoading]
   );
 
-  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+  return <PropertyContext.Provider value={value}>{children}</PropertyContext.Provider>;
+};
+
+export const useProperty = () => {
+  const ctx = useContext(PropertyContext);
+  if (!ctx) throw new Error("useProperty must be used within PropertyProvider");
+  return ctx;
 };

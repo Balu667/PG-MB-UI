@@ -23,7 +23,7 @@ const TabBar: React.FC<BottomTabBarProps> = ({ state, descriptors, navigation }:
   const maxVisibleTabs = 4;
   const visibleTabs = state.routes.slice(0, maxVisibleTabs);
   const moreTabs = state.routes.slice(maxVisibleTabs);
-  const { colors, radius, shadow } = useTheme();
+  const { colors, radius } = useTheme();
   const ICON_COLOR = colors.textWhite;
 
   const [showMore, setShowMore] = useState(false);

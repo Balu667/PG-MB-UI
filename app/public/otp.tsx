@@ -21,7 +21,12 @@ import {
   AppState,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useRoute, RouteProp, useNavigation, useFocusEffect } from "@react-navigation/native";
+import {
+  useRoute,
+  RouteProp,
+  useNavigation,
+  useFocusEffect,
+} from "@react-navigation/native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
@@ -38,7 +43,8 @@ import { setProfileDetails } from "@/src/redux/slices/profileSlice";
 import { RootStackParamList } from "@/types/navigation";
 import { hexToRgba } from "@/src/theme";
 const { width, height } = Dimensions.get("window");
-const clamp = (min: number, v: number, max: number) => Math.max(min, Math.min(v, max));
+const clamp = (min: number, v: number, max: number) =>
+  Math.max(min, Math.min(v, max));
 const scale = (n: number) => Math.round((width / 375) * n);
 
 const OTP_LEN = 4;
@@ -58,6 +64,7 @@ const OtpScreen: React.FC = () => {
   const [err, setErr] = useState("");
   const [modal, setModal] = useState(false);
   const [reduceMotion, setReduceMotion] = useState(false);
+  const [otpError, setOtpError] = useState("");
 
   const logoA = useRef(new Animated.Value(0)).current;
   const cardA = useRef(new Animated.Value(0)).current;
@@ -109,7 +116,11 @@ const OtpScreen: React.FC = () => {
       cardA.setValue(1);
     } else {
       Animated.stagger(120, [
-        Animated.spring(logoA, { toValue: 1, bounciness: 8, useNativeDriver: true }),
+        Animated.spring(logoA, {
+          toValue: 1,
+          bounciness: 8,
+          useNativeDriver: true,
+        }),
         Animated.timing(cardA, {
           toValue: 1,
           duration: 550,
@@ -121,33 +132,76 @@ const OtpScreen: React.FC = () => {
   }, [reduceMotion]);
 
   const refs = useRef<Array<TextInput | null>>([]);
-
   const handleChange = (txt: string, idx: number) => {
+    setOtpError("");
     setErr("");
 
-    if (txt.length > 1) {
-      const digs = txt.replace(/\D/g, "").slice(0, OTP_LEN).split("");
-      const filled = Array(OTP_LEN).fill("");
-      digs.forEach((d, i) => (filled[i] = d));
+    const clean = txt.replace(/\D/g, "");
+
+    if (clean.length > 1) {
+      const digits = clean.slice(0, OTP_LEN).split("");
+      const filled = [...boxes];
+      const startIndex = clean.length === OTP_LEN ? 0 : idx;
+
+      digits.forEach((d, i) => {
+        if (startIndex + i < OTP_LEN) filled[startIndex + i] = d;
+      });
+
       setBoxes(filled);
-      digs.length === OTP_LEN && Keyboard.dismiss();
       refs.current.forEach((r, i) => r?.setNativeProps({ text: filled[i] }));
+
+      if (filled.join("").length === OTP_LEN) Keyboard.dismiss();
       return;
     }
 
     const next = [...boxes];
-    next[idx] = txt.replace(/\D/g, "");
+    next[idx] = clean;
     setBoxes(next);
-    if (txt && idx < OTP_LEN - 1) refs.current[idx + 1]?.focus();
-    if (idx === OTP_LEN - 1 && txt) Keyboard.dismiss();
+
+    if (clean && idx < OTP_LEN - 1) refs.current[idx + 1]?.focus();
+    if (next.join("").length === OTP_LEN) Keyboard.dismiss();
   };
 
+  // assume: refs: React.MutableRefObject<Array<TextInput | null>>
+  // boxes: string[] state, setBoxes
+  // OTP_LEN constant
+
+  const clearNativeAndState = (index: number, nextBoxes: string[]) => {
+    // immediate native visual update
+    refs.current[index]?.setNativeProps?.({ text: "" });
+    // update react state
+    setBoxes(nextBoxes);
+  };
+
+  // 🧩 FIXED handleKey — supports long press & smooth deletion
   const handleKey = (e: any, idx: number) => {
-    if (e.nativeEvent.key === "Backspace" && !boxes[idx] && idx > 0) refs.current[idx - 1]?.focus();
+    if (e.nativeEvent?.key !== "Backspace") return;
+
+    const next = [...boxes];
+
+    // If this box has a digit — clear it immediately
+    if (next[idx]) {
+      next[idx] = "";
+      refs.current[idx]?.setNativeProps?.({ text: "" });
+      setBoxes(next);
+      // keep focus on this box so long press continues here
+      refs.current[idx]?.focus?.();
+      return;
+    }
+
+    // If current box is empty and not the first box → go back and clear previous
+    if (!next[idx] && idx > 0) {
+      const prev = idx - 1;
+      refs.current[prev]?.focus?.();
+      refs.current[prev]?.setNativeProps?.({ text: "" });
+      next[prev] = "";
+      setBoxes(next);
+    }
   };
 
   const onBlur = () => {
-    if (boxes.join("").length !== OTP_LEN) setErr("Please enter all 4 digits of the OTP");
+    // if (boxes.join("").length !== OTP_LEN)
+    //   setErr("Please enter all 4 digits of the OTP");
   };
 
   const dispatch = useDispatch();
@@ -165,7 +219,16 @@ const OtpScreen: React.FC = () => {
     );
     router.replace("/protected/(tabs)");
   };
-  const { mutate: verifyOtp } = useVerifyOtp(onVerifySuccess);
+  const { mutate: verifyOtp } = useVerifyOtp(onVerifySuccess, {
+    onError: (err: any) => {
+      const msg =
+        err?.response?.data?.message || "Please enter the correct OTP";
+
+      console.log("OTP ERROR:", msg); // 👈 check in console if it fires
+      setOtpError(msg);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    },
+  });
 
   const { mutate: resendOtp } = useResendOtp((d) => {
     Toast.show({ type: "success", text1: "OTP resent", text2: d.message });
@@ -174,7 +237,8 @@ const OtpScreen: React.FC = () => {
 
   const submit = () => {
     const code = boxes.join("");
-    if (code.length !== OTP_LEN) return setErr("Please enter the complete 4‑digit OTP");
+    if (code.length !== OTP_LEN)
+      return setErr("Please enter the complete 4‑digit OTP");
     Haptics.selectionAsync();
     verifyOtp({ _id: params.userId, otp: code, role: 1 });
   };
@@ -183,7 +247,10 @@ const OtpScreen: React.FC = () => {
   const boxFont = clamp(18, box * 0.45, 30);
   const contentPad = TABLET ? spacing.xl : SMALL ? spacing.sm : spacing.lg;
   const logoH = TABLET ? height * 0.22 : SMALL ? height * 0.19 : height * 0.24;
-  const formatted = `+91 ${params.phoneNumber.slice(0, 5)} ${params.phoneNumber.slice(5)}`;
+  const formatted = `+91 ${params.phoneNumber.slice(
+    0,
+    5
+  )} ${params.phoneNumber.slice(5)}`;
   const st = s(colors, spacing, radius, box, boxFont);
   const cardW = TABLET ? Math.min(width * 1.65, 580) : "100%";
   return (
@@ -193,7 +260,12 @@ const OtpScreen: React.FC = () => {
         onBlur();
       }}
     >
-      <SafeAreaView style={[st.safe, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+      <SafeAreaView
+        style={[
+          st.safe,
+          { paddingTop: insets.top, paddingBottom: insets.bottom },
+        ]}
+      >
         {/* decorative circles */}
         <View style={StyleSheet.absoluteFill} pointerEvents="none">
           <Animated.View style={st.circle1(TABLET, logoA)} />
@@ -220,20 +292,31 @@ const OtpScreen: React.FC = () => {
           <Animated.View style={st.logoWrap(logoA, TABLET)}>
             <Image
               source={require("@/assets/images/otp-image.png")}
-              style={{ width: width * (TABLET ? 0.43 : 0.7), height: logoH, maxHeight: 250 }}
+              style={{
+                width: width * (TABLET ? 0.43 : 0.7),
+                height: logoH,
+                maxHeight: 250,
+              }}
               resizeMode="contain"
             />
           </Animated.View>
 
           {/* card */}
-          <Animated.View style={st.card(cardA, contentPad, TABLET, cardW, hexToRgba)}>
+          <Animated.View
+            style={st.card(cardA, contentPad, TABLET, cardW, hexToRgba)}
+          >
             <Text style={st.h1(TABLET)}>OTP Verification</Text>
-            <Text style={st.sub(TABLET)}>We've sent a verification code to</Text>
+            <Text style={st.sub(TABLET)}>
+              We've sent a verification code to
+            </Text>
 
             {/* phone row */}
             <View style={st.phoneRow}>
               <Text style={st.phone}>{formatted}</Text>
-              <TouchableOpacity onPress={() => setModal(true)} accessibilityRole="button">
+              <TouchableOpacity
+                onPress={() => setModal(true)}
+                accessibilityRole="button"
+              >
                 <Ionicons
                   name="create-outline"
                   size={scale(20)}
@@ -251,16 +334,24 @@ const OtpScreen: React.FC = () => {
                   ref={(r) => (refs.current[i] = r)}
                   autoFocus={i === 0}
                   style={st.box(boxFont, err)}
-                  keyboardType={Platform.OS === "ios" ? "number-pad" : "numeric"}
-                  maxLength={1}
+                  keyboardType={
+                    Platform.OS === "ios" ? "number-pad" : "numeric"
+                  }
+                  // allow multi-char paste (we handle distribution in handleChange)
+                  maxLength={OTP_LEN}
                   value={boxes[i]}
                   onChangeText={(txt) => handleChange(txt, i)}
                   onKeyPress={(e) => handleKey(e, i)}
                   onBlur={onBlur}
                   selectTextOnFocus
                   importantForAutofill="yes"
-                  textContentType={i === 0 && Platform.OS === "ios" ? "oneTimeCode" : "none"}
-                  accessibilityLabel={`OTP digit ${i + 1}`}
+                  blurOnSubmit={false}
+                  textContentType={
+                    Platform.OS === "ios" ? "oneTimeCode" : "none"
+                  }
+                  autoComplete="sms-otp"
+                  returnKeyType="done"
+                  placeholderTextColor="#999"
                 />
               ))}
             </View>
@@ -272,18 +363,36 @@ const OtpScreen: React.FC = () => {
               onPress={submit}
               disabled={boxes.join("").length !== OTP_LEN}
             />
+            {otpError ? (
+              <Text
+                style={{
+                  color: colors.error,
+                  fontSize: 14,
+                  marginTop: 10,
+                  fontWeight: "600",
+                  textAlign: "center",
+                }}
+              >
+                {otpError}
+              </Text>
+            ) : null}
 
             {/* resend */}
             <View style={st.resendRow}>
               {secLeft > 0 ? (
-                <Text style={st.resendTxt}>Resend in 0:{secLeft.toString().padStart(2, "0")}</Text>
+                <Text style={st.resendTxt}>
+                  Resend in 0:{secLeft.toString().padStart(2, "0")}
+                </Text>
               ) : (
                 <>
                   <Text style={st.resendTxt}>Didn't receive code? </Text>
                   <TouchableOpacity
                     onPress={() => {
                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      resendOtp({ id: params.userId, phoneNumber: params.phoneNumber });
+                      resendOtp({
+                        id: params.userId,
+                        phoneNumber: params.phoneNumber,
+                      });
                     }}
                     accessibilityRole="button"
                   >
@@ -313,7 +422,8 @@ const OtpScreen: React.FC = () => {
                   />
                   <Text style={st.modalH}>Edit mobile number?</Text>
                   <Text style={st.modalP}>
-                    You’ll return to the previous screen to enter a different number.
+                    You’ll return to the previous screen to enter a different
+                    number.
                   </Text>
                   <View style={st.modalBtns}>
                     <TouchableOpacity
@@ -325,7 +435,10 @@ const OtpScreen: React.FC = () => {
                     >
                       <Text style={st.modalYesTxt}>Yes</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={st.modalCancel} onPress={() => setModal(false)}>
+                    <TouchableOpacity
+                      style={st.modalCancel}
+                      onPress={() => setModal(false)}
+                    >
                       <Text style={st.modalCancelTxt}>Cancel</Text>
                     </TouchableOpacity>
                   </View>
@@ -381,18 +494,32 @@ const s = (
 
     main: (tab: boolean) => ({
       flex: 1,
-      justifyContent: "center",
+      justifyContent: "flex-start",
       paddingHorizontal: tab ? sp.xl * 1.6 : SMALL ? sp.sm : sp.lg,
+      marginTop: TABLET ? scale(60) : scale(40),
     }),
 
     logoWrap: (a: Animated.Value, tab: boolean) => ({
       alignItems: "center",
       marginTop: tab ? scale(30) : SMALL ? scale(5) : scale(16),
       opacity: a,
-      transform: [{ translateY: a.interpolate({ inputRange: [0, 1], outputRange: [32, 0] }) }],
+      transform: [
+        {
+          translateY: a.interpolate({
+            inputRange: [0, 1],
+            outputRange: [32, 0],
+          }),
+        },
+      ],
     }),
 
-    card: (a: Animated.Value, pad: number, tab: boolean, w: number | string, opacity: any) => ({
+    card: (
+      a: Animated.Value,
+      pad: number,
+      tab: boolean,
+      w: number | string,
+      opacity: any
+    ) => ({
       width: w,
       alignSelf: "center",
       backgroundColor: hexToRgba(c.background2, 0.4),
@@ -401,7 +528,14 @@ const s = (
       borderWidth: 1,
       borderColor: c.borderColor,
       opacity: a,
-      transform: [{ translateY: a.interpolate({ inputRange: [0, 1], outputRange: [48, 0] }) }],
+      transform: [
+        {
+          translateY: a.interpolate({
+            inputRange: [0, 1],
+            outputRange: [48, 0],
+          }),
+        },
+      ],
       alignItems: "center",
     }),
 
@@ -456,7 +590,12 @@ const s = (
       }),
     }),
 
-    err: { color: c.error, fontSize: scale(13), marginBottom: scale(7), textAlign: "center" },
+    err: {
+      color: c.error,
+      fontSize: scale(13),
+      marginBottom: scale(7),
+      textAlign: "center",
+    },
 
     resendRow: {
       flexDirection: "row",
@@ -524,7 +663,11 @@ const s = (
       fontSize: scale(14),
       color: c.white,
     },
-    modalCancelTxt: { color: c.textPrimary, fontWeight: "700", fontSize: scale(14) },
+    modalCancelTxt: {
+      color: c.textPrimary,
+      fontWeight: "700",
+      fontSize: scale(14),
+    },
   });
 };
 

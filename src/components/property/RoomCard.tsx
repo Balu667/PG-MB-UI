@@ -1,235 +1,4 @@
-// import React, { useState, useRef } from "react";
-// import {
-//   View,
-//   Text,
-//   StyleSheet,
-//   Pressable,
-//   Animated,
-//   Platform,
-//   LayoutAnimation,
-//   UIManager,
-//   useWindowDimensions,
-// } from "react-native";
-// import * as Haptics from "expo-haptics";
-// import MaterialIcons from "@expo/vector-icons/MaterialIcons";
-// import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-// import { Room } from "@/src/constants/mockRooms";
-
-// if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
-//   UIManager.setLayoutAnimationEnabledExperimental(true);
-// }
-
-// /* design tokens -------------------------------------------------- */
-// const C = {
-//   primary: "#256D85",
-//   surface: "#FFFFFF",
-//   muted: "#6B7280",
-//   chip: { Available: "#10B981", Partial: "#F59E0B", Filled: "#EF4444" } as const,
-//   shadow: "#000",
-// };
-
-// const BED_COLORS: Record<keyof Room["bedBreakdown"], string> = {
-//   totalBeds: "#3B82F6",
-//   vacantBeds: "#10B981",
-//   occupiedBeds: "#EF4444",
-//   noticeBeds: "#8B5CF6",
-//   bookingBeds: "#F97316",
-// };
-
-// /* helpers -------------------------------------------------------- */
-// const labelMap: Record<keyof Room["bedBreakdown"], string> = {
-//   totalBeds: "Total Beds",
-//   vacantBeds: "Vacant",
-//   occupiedBeds: "Occupied",
-//   noticeBeds: "Notice",
-//   bookingBeds: "Adv. Booking",
-// };
-
-// /* component ------------------------------------------------------ */
-// interface Props {
-//   room: Room;
-// }
-
-// const RoomCard: React.FC<Props> = ({ room }) => {
-//   /* responsive width (same formula you used everywhere) */
-//   const { width } = useWindowDimensions();
-//   const COLS = width >= 1000 ? 3 : width >= 740 ? 2 : 1;
-//   const GAP = 14;
-//   const SIDE = 32;
-//   const cardW = (width - SIDE - GAP * (COLS - 1)) / COLS;
-
-//   /* press / expand state */
-//   const [open, setOpen] = useState(false);
-//   const scale = useRef(new Animated.Value(1)).current;
-
-//   const handlePress = () => {
-//     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-//     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-//     setOpen((p) => !p);
-//     Animated.sequence([
-//       Animated.spring(scale, { toValue: 0.96, useNativeDriver: true, speed: 25 }),
-//       Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 25 }),
-//     ]).start();
-//   };
-
-//   /* badge after first 2 beds */
-//   const extraBeds = room.totalBeds - 2;
-//   const moreBadge =
-//     extraBeds > 0 ? (
-//       <View style={styles.moreBadge}>
-//         <Text style={styles.moreBadgeTxt}>+{extraBeds}</Text>
-//       </View>
-//     ) : null;
-
-//   /* utilisation bar width */
-//   const utilisation = room.totalBeds ? Math.min(room.occupiedBeds / room.totalBeds, 1) : 0;
-
-//   return (
-//     <Animated.View style={[styles.shadowWrap, { width: cardW, transform: [{ scale }] }]}>
-//       <Pressable style={styles.card} onPress={handlePress} android_ripple={{ color: "#E7F4FF" }}>
-//         {/* gradient header strip */}
-//         {/* row 1 • room + status */}
-//         <View style={styles.rowBetween}>
-//           <Text style={styles.roomNo}>Room {room.roomNo}</Text>
-//           <View
-//             style={[
-//               styles.statusChip,
-//               { backgroundColor: C.chip[room.status], shadowColor: C.chip[room.status] },
-//             ]}
-//           >
-//             <Text style={styles.statusTxt}>{room.status}</Text>
-//           </View>
-//         </View>
-
-//         {/* row 2 • floor + beds mini */}
-//         <View style={[styles.rowBetween, { marginTop: 6 }]}>
-//           <View style={styles.floorWrap}>
-//             <MaterialIcons name="stairs" size={16} color={C.primary} />
-//             <Text style={styles.floorTxt}>{room.floor}</Text>
-//           </View>
-//           <View style={styles.bedsWrap}>
-//             <MaterialCommunityIcons name="bed" size={18} color={C.primary} />
-//             <MaterialCommunityIcons name="bed" size={18} color={C.primary} />
-//             {moreBadge}
-//           </View>
-//         </View>
-
-//         {/* row 3 • deposit */}
-//         <Text style={styles.depositTxt}>₹{room.deposit.toLocaleString()} deposit</Text>
-
-//         {/* utilisation bar */}
-//         <View style={styles.utilBarWrap}>
-//           <View style={[styles.utilBarFill, { width: `${utilisation * 100}%` }]} />
-//         </View>
-
-//         {/* expandable details */}
-//         {open && (
-//           <View style={styles.infoBox}>
-//             {Object.entries(room.bedBreakdown).map(([k, v]) => (
-//               <InfoRow
-//                 key={k}
-//                 label={labelMap[k as keyof typeof labelMap]}
-//                 value={v}
-//                 color={BED_COLORS[k as keyof typeof BED_COLORS]}
-//               />
-//             ))}
-//           </View>
-//         )}
-//       </Pressable>
-//     </Animated.View>
-//   );
-// };
-
-// /* ─ sub row ─ */
-// const InfoRow = ({ label, value, color }: { label: string; value: number; color: string }) => (
-//   <View style={styles.infoRow}>
-//     <MaterialCommunityIcons name="bed" size={15} color={color} style={{ width: 22 }} />
-//     <Text style={styles.infoLabel}>{label}</Text>
-//     <Text style={styles.infoValue}>{value}</Text>
-//   </View>
-// );
-
-// /* styles --------------------------------------------------------- */
-// const styles = StyleSheet.create({
-//   shadowWrap: {
-//     borderRadius: 20,
-//     shadowColor: C.shadow,
-//     shadowOffset: { width: 0, height: 7 },
-//     shadowOpacity: 0.09,
-//     shadowRadius: 12,
-//     elevation: 5,
-//   },
-//   card: {
-//     backgroundColor: C.surface,
-//     borderRadius: 20,
-//     padding: 18,
-//     overflow: "hidden",
-//   },
-//   headerStrip: {
-//     position: "absolute",
-//     top: 0,
-//     left: 0,
-//     right: 0,
-//     height: 6,
-//     borderTopLeftRadius: 20,
-//     borderTopRightRadius: 20,
-//   },
-
-//   rowBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-
-//   roomNo: { fontSize: 18, fontWeight: "700", color: C.primary },
-//   statusChip: {
-//     borderRadius: 12,
-//     paddingHorizontal: 10,
-//     paddingVertical: 3,
-//     shadowOffset: { width: 0, height: 2 },
-//     shadowOpacity: 0.25,
-//     shadowRadius: 3,
-//     elevation: 3,
-//   },
-//   statusTxt: { color: "#fff", fontSize: 11, fontWeight: "700", textTransform: "uppercase" },
-
-//   floorWrap: { flexDirection: "row", alignItems: "center", gap: 4 },
-//   floorTxt: { fontSize: 14, color: C.muted },
-
-//   bedsWrap: { flexDirection: "row", alignItems: "center", gap: 2 },
-//   moreBadge: {
-//     backgroundColor: "#DBEAFE",
-//     borderRadius: 8,
-//     paddingHorizontal: 4,
-//     marginLeft: 2,
-//   },
-//   moreBadgeTxt: { fontSize: 11, color: C.primary, fontWeight: "600" },
-
-//   depositTxt: { marginTop: 8, fontSize: 13, color: C.muted },
-
-//   /* utilisation bar */
-//   utilBarWrap: {
-//     height: 5,
-//     backgroundColor: "#E5E7EB",
-//     borderRadius: 3,
-//     marginTop: 10,
-//     overflow: "hidden",
-//   },
-//   utilBarFill: {
-//     height: 5,
-//     backgroundColor: C.primary,
-//   },
-
-//   /* expandable panel */
-//   infoBox: {
-//     marginTop: 14,
-//     borderTopWidth: StyleSheet.hairlineWidth,
-//     borderColor: "#E5E7EB",
-//     paddingTop: 12,
-//     gap: 8,
-//   },
-//   infoRow: { flexDirection: "row", alignItems: "center" },
-//   infoLabel: { flex: 1, fontSize: 14, color: C.muted, fontWeight: "600" },
-//   infoValue: { fontSize: 14, color: C.primary, fontWeight: "700" },
-// });
-
-// export default RoomCard;
+// src/components/property/RoomCard.tsx
 import React, { useState, useRef, useMemo } from "react";
 import {
   View,
@@ -245,8 +14,8 @@ import {
 import * as Haptics from "expo-haptics";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-
-import { Room } from "@/src/constants/mockRooms";
+import { useRouter } from "expo-router";
+import { useProperty } from "@/src/context/PropertyContext";
 import { useTheme } from "@/src/theme/ThemeContext";
 import { hexToRgba } from "@/src/theme";
 
@@ -254,9 +23,6 @@ if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-/* ------------------------------------------------------------------ */
-/*  Chip / util-bar colours come from the theme so they adapt          */
-/* ------------------------------------------------------------------ */
 const chipTint = (colors: any) => ({
   Available: colors.availableBeds,
   Partial: colors.advBookedBeds,
@@ -279,24 +45,23 @@ const labelMap = {
   bookingBeds: "Adv. Booking",
 } as const;
 
-/* ------------------------------------------------------------------ */
-/*  Component                                                          */
-/* ------------------------------------------------------------------ */
+const num = (v: any, fallback = 0) => (typeof v === "number" ? v : Number(v ?? fallback)) || 0;
+const str = (v: any, fallback = "") => (v == null ? fallback : String(v));
+
 interface Props {
-  room: Room;
+  room: any;
 }
 
 const RoomCard: React.FC<Props> = ({ room }) => {
+  const router = useRouter();
   const { width } = useWindowDimensions();
   const { colors, spacing, radius, shadow } = useTheme();
-
-  /* responsive cols (same rule used elsewhere) */
+  const { selectedId } = useProperty();
   const COLS = width >= 1000 ? 3 : width >= 740 ? 2 : 1;
   const GAP = spacing.md - 2;
   const SIDE = spacing.md * 2;
   const cardW = (width - SIDE - GAP * (COLS - 1)) / COLS;
 
-  /* animated press */
   const [open, setOpen] = useState(false);
   const scale = useRef(new Animated.Value(1)).current;
 
@@ -310,17 +75,62 @@ const RoomCard: React.FC<Props> = ({ room }) => {
     ]).start();
   };
 
-  /* colour maps (theme-aware) */
+  // ---- Normalized fields ----
+  const roomNoRaw = str(room?.roomNo ?? room?.roomNumber ?? room?.name ?? room?.code, "—");
+  const roomNo = roomNoRaw.toString().toUpperCase();
+  const floor = str(room?.floor ?? room?.floorLabel ?? room?.floorNo, "—");
+
+  const totalBeds =
+    num(room?.totalBeds) ||
+    num(room?.bedsTotal) ||
+    num(room?.bedCount) ||
+    num(room?.capacity) ||
+    num(room?.beds) ||
+    0;
+
+  const occupiedBeds = num(room?.occupiedBeds);
+  const underNotice = num(room?.underNotice);
+  const advanceBookings = num(room?.advancedBookings) || num(room?.advanceBookingBeds);
+  const hasVacantField = room?.vacantBeds !== undefined && room?.vacantBeds !== null;
+  const vacantBeds = hasVacantField
+    ? num(room?.vacantBeds)
+    : Math.max(totalBeds - (occupiedBeds + underNotice + advanceBookings), 0);
+
+  const bedPrice = num(room?.bedPrice ?? room?.rentAmount ?? 0);
+  const deposit = num(room?.securityDeposit ?? room?.deposit ?? 0);
+
+  const usedCount = Math.min(occupiedBeds + underNotice + advanceBookings, totalBeds);
+  const derivedStatus =
+    totalBeds <= 0
+      ? "Available"
+      : vacantBeds <= 0
+      ? "Filled"
+      : vacantBeds >= totalBeds
+      ? "Available"
+      : "Partial";
+
+  const utilisation = totalBeds ? Math.min(usedCount / totalBeds, 1) : 0;
+
   const CHIP = useMemo(() => chipTint(colors), [colors]);
   const BED_COLORS = useMemo(() => bedTint(colors), [colors]);
 
-  /* extra-beds badge (after the first 2 icons) */
-  const extraBeds = room.totalBeds - 2;
+  const extraBeds = Math.max(totalBeds - 2, 0);
 
-  /* utilisation bar width */
-  const utilisation = room.totalBeds ? Math.min(room.occupiedBeds / room.totalBeds, 1) : 0;
+  const bedBreakdown = {
+    totalBeds,
+    vacantBeds,
+    occupiedBeds,
+    noticeBeds: underNotice,
+    bookingBeds: advanceBookings,
+  };
 
-  /* ---------- styles (memoised) ---------- */
+  const progressColor =
+    derivedStatus === "Filled"
+      ? colors.filledBeds
+      : derivedStatus === "Partial"
+      ? colors.advBookedBeds
+      : colors.availableBeds;
+
   const s = useMemo(
     () =>
       StyleSheet.create({
@@ -331,7 +141,6 @@ const RoomCard: React.FC<Props> = ({ room }) => {
           shadowOffset: { width: 0, height: 7 },
           shadowOpacity: 0.09,
           shadowRadius: 12,
-          // elevation: 5,
           borderWidth: 1,
           borderColor: colors.borderColor,
         },
@@ -341,18 +150,10 @@ const RoomCard: React.FC<Props> = ({ room }) => {
           padding: spacing.md + 2,
           overflow: "hidden",
         },
+        rowBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
 
-        rowBetween: {
-          flexDirection: "row",
-          justifyContent: "space-between",
-          alignItems: "center",
-        },
-
-        roomNo: {
-          fontSize: 18,
-          fontWeight: "700",
-          color: colors.accent,
-        },
+        roomLabel: { fontSize: 18, fontWeight: "600", color: colors.textPrimary },
+        roomNo: { fontSize: 18, fontWeight: "800", color: colors.accent },
 
         statusChip: (bg: string) => ({
           backgroundColor: bg,
@@ -372,37 +173,43 @@ const RoomCard: React.FC<Props> = ({ room }) => {
           textTransform: "uppercase",
         },
 
-        floorWrap: { flexDirection: "row", alignItems: "center", gap: 4 },
+        // New: small Edit icon next to status chip
+        headerRight: { flexDirection: "row", alignItems: "center", gap: 8 },
+        editBtn: {
+          width: 28,
+          height: 28,
+          borderRadius: 14,
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: hexToRgba(colors.accent, 0.12),
+        },
+
+        floorWrap: { flexDirection: "row", alignItems: "center", gap: 6 },
         floorTxt: { fontSize: 14, color: colors.textSecondary },
 
         bedsWrap: { flexDirection: "row", alignItems: "center", gap: 2 },
-
         moreBadge: {
           backgroundColor: hexToRgba(colors.primary, 0.15),
           borderRadius: 8,
           paddingHorizontal: 4,
           marginLeft: 2,
         },
-        moreBadgeTxt: {
-          fontSize: 11,
-          color: colors.accent,
-          fontWeight: "600",
-        },
+        moreBadgeTxt: { fontSize: 11, color: colors.accent, fontWeight: "600" },
 
-        depositTxt: {
-          marginTop: 8,
-          fontSize: 13,
-          color: colors.textSecondary,
-        },
+        rentTxt: { marginTop: 6, fontSize: 13, color: colors.textSecondary },
+        rentBold: { fontWeight: "700", color: colors.textPrimary },
+
+        depositTxt: { marginTop: 4, fontSize: 13, color: colors.textSecondary },
+        depositBold: { fontWeight: "800", color: colors.textPrimary },
 
         utilBarWrap: {
-          height: 5,
+          height: 6,
           backgroundColor: hexToRgba(colors.textSecondary, 0.25),
           borderRadius: 3,
           marginTop: 10,
           overflow: "hidden",
         },
-        utilBarFill: { height: 5, backgroundColor: colors.accent },
+        utilBarFill: { height: 6 },
 
         infoBox: {
           marginTop: spacing.md - 2,
@@ -411,24 +218,13 @@ const RoomCard: React.FC<Props> = ({ room }) => {
           paddingTop: spacing.sm,
           gap: 8,
         },
-
         infoRow: { flexDirection: "row", alignItems: "center" },
-        infoLabel: {
-          flex: 1,
-          fontSize: 14,
-          color: colors.textSecondary,
-          fontWeight: "600",
-        },
-        infoValue: {
-          fontSize: 14,
-          color: colors.accent,
-          fontWeight: "700",
-        },
+        infoLabel: { flex: 1, fontSize: 14, color: colors.textSecondary, fontWeight: "600" },
+        infoValue: { fontSize: 14, color: colors.accent, fontWeight: "700" },
       }),
     [colors, spacing, radius, cardW, shadow]
   );
 
-  /* ---------- render ---------- */
   return (
     <Animated.View style={[s.shadowWrap, { transform: [{ scale }] }]}>
       <Pressable
@@ -436,20 +232,44 @@ const RoomCard: React.FC<Props> = ({ room }) => {
         onPress={handlePress}
         android_ripple={{ color: hexToRgba(colors.primary, 0.07) }}
       >
-        {/* row 1 – room & status */}
+        {/* header */}
         <View style={s.rowBetween}>
-          <Text style={s.roomNo}>Room {room.roomNo}</Text>
+          <Text style={s.roomLabel}>
+            Room - <Text style={s.roomNo}>{roomNo}</Text>
+          </Text>
 
-          <View style={s.statusChip(CHIP[room.status])}>
-            <Text style={s.statusTxt}>{room.status}</Text>
+          <View style={s.headerRight}>
+            <View style={s.statusChip(CHIP[derivedStatus as keyof typeof CHIP] ?? colors.accent)}>
+              <Text style={s.statusTxt}>{derivedStatus}</Text>
+            </View>
+
+            {/* EDIT */}
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                const rid = String(room?._id ?? room?.id ?? "");
+                if (!rid) return;
+                // include pid so /rooms/[id] can resolve property even if context is late
+                router.push({
+                  pathname: `/protected/rooms/${rid}`,
+                  params: { pid: String(selectedId || "") },
+                });
+              }}
+              style={({ pressed }) => [s.editBtn, pressed && { opacity: 0.8 }]}
+              hitSlop={10}
+              accessibilityRole="button"
+              accessibilityLabel={`Edit Room ${roomNo}`}
+            >
+              <MaterialIcons name="edit" size={16} color={colors.accent} />
+            </Pressable>
           </View>
         </View>
 
-        {/* row 2 – floor & beds mini-icons */}
+        {/* row 2 */}
         <View style={[s.rowBetween, { marginTop: 6 }]}>
           <View style={s.floorWrap}>
             <MaterialIcons name="stairs" size={16} color={colors.accent} />
-            <Text style={s.floorTxt}>{room.floor}</Text>
+            <Text style={s.floorTxt}>Floor {floor}</Text>
           </View>
 
           <View style={s.bedsWrap}>
@@ -463,18 +283,30 @@ const RoomCard: React.FC<Props> = ({ room }) => {
           </View>
         </View>
 
-        {/* row 3 – deposit */}
-        <Text style={s.depositTxt}>₹{room.deposit.toLocaleString()} deposit</Text>
+        {!!bedPrice && (
+          <Text style={s.rentTxt}>
+            <Text style={s.rentBold}>₹{bedPrice.toLocaleString()}</Text> - Rent
+          </Text>
+        )}
 
-        {/* utilisation bar */}
+        {!!deposit && (
+          <Text style={s.depositTxt}>
+            <Text style={s.depositBold}>₹{deposit.toLocaleString()}</Text> - Security Deposit
+          </Text>
+        )}
+
         <View style={s.utilBarWrap}>
-          <View style={[s.utilBarFill, { width: `${utilisation * 100}%` }]} />
+          <View
+            style={[
+              s.utilBarFill,
+              { width: `${utilisation * 100}%`, backgroundColor: progressColor },
+            ]}
+          />
         </View>
 
-        {/* expandable panel */}
         {open && (
           <View style={s.infoBox}>
-            {Object.entries(room.bedBreakdown).map(([k, v]) => (
+            {Object.entries(bedBreakdown).map(([k, v]) => (
               <View key={k} style={s.infoRow}>
                 <MaterialCommunityIcons
                   name="bed"
@@ -482,7 +314,7 @@ const RoomCard: React.FC<Props> = ({ room }) => {
                   color={BED_COLORS[k as keyof typeof BED_COLORS]}
                   style={{ width: 22 }}
                 />
-                <Text style={s.infoLabel}>{labelMap[k as keyof typeof labelMap]}</Text>
+                <Text style={s.infoLabel}>{labelMap[k as keyof typeof labelMap] ?? k}</Text>
                 <Text style={s.infoValue}>{v}</Text>
               </View>
             ))}

@@ -44,4 +44,5 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     url: "https://u.expo.dev/cc062d73-005b-4bee-8da1-f12f51827572",
   },
   owner: "maheshguna",
+  jsEngine: "hermes",
 });
