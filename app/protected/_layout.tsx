@@ -13,6 +13,7 @@ export default function ProtectedLayout() {
     "/protected/AddandEditProperty",
     "/protected/rooms", // ✅ hide header for Add/Edit Room screen
     "/protected/advancedBooking",
+    "/protected/tenant", // ⬅️ NEW: hide header for Add/Edit Tenant screen
   ]);
 
   const isPropertyDetail = pathname.startsWith("/protected/property/");
@@ -24,7 +25,7 @@ export default function ProtectedLayout() {
   const expensePropertyId = isExpenseScreen ? pathname.split("/")[3] : null;
   const employeePropertyId = isEmployeeScreen ? pathname.split("/")[3] : null;
 
-  const handleBack = () => {
+const handleBack = () => {
     if (isExpenseScreen && expensePropertyId) {
       router.replace({
         pathname: `/protected/property/${expensePropertyId}`,

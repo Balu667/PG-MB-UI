@@ -31,7 +31,7 @@ const useInsertTenant = (onSuccessFunctions: (data: any) => void) => {
         body: data,
       }),
     onError: (error: Error) => {
-      Alert.alert("Error", error.message);
+      // Alert.alert("Error", error.message); // Handled by UI Toast
     },
     onSuccess: (data: any) => {
       onSuccessFunctions(data);
@@ -53,7 +53,7 @@ const useUpdateTenant = (onSuccessFunctions: (data: any) => void) => {
         body: formData,
       }),
     onError: (error: Error) => {
-      Alert.alert("Error", error.message);
+      // Alert.alert("Error", error.message); // Handled by UI Toast
     },
     onSuccess: (data: any) => {
       onSuccessFunctions(data);
