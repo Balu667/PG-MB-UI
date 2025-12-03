@@ -460,8 +460,8 @@ const parsePropertyLayout = (raw: any): UILayout => {
           const idx = bedIndexFromLetter(b?.bedNumber);
           if (idx < 0 || idx >= sharing) return;
           const codes = (Array.isArray(b?.tenantsPerBed) ? b.tenantsPerBed : [])
-            .map((t) => num(t?.tenantStatus))
-            .filter((c) => c > 0);
+            .map((t: { tenantStatus?: number }) => num(t?.tenantStatus))
+            .filter((c: number) => c > 0);
           const st = statusFromTenantCodes(codes);
           statuses[idx] = st;
         });
@@ -573,24 +573,24 @@ export default function PropertyDetails() {
   const layoutQuery = useGetPropertyDetails(id as string);
   const layout = useMemo(() => parsePropertyLayout(layoutQuery?.data), [layoutQuery?.data]);
 
-  // ⬇️ NEW: employees list (owner-scoped), then filter to this property
-  const ownerId =
-    String(profileData?.ownerId || profileData?.userId || profileData?._id || "") || "";
+  // ⬇️ Employees list (owner-scoped) - show ALL employees, no property filtering
+  const ownerId = String(
+    profileData?.ownerId || profileData?.userId || profileData?._id || ""
+  );
   const employeesQuery = useGetAllEmployees(ownerId);
 
-  const staffForProperty = useMemo(() => {
-    const rows = Array.isArray(employeesQuery?.data)
-      ? employeesQuery?.data
-      : Array.isArray(employeesQuery?.data?.data)
-      ? employeesQuery?.data?.data
-      : [];
-    if (!id) return rows;
-    // show employees assigned to this property id (fallback to all if field missing)
-    return rows.filter((e: any) => {
-      const props = Array.isArray(e?.assignedProperties) ? e.assignedProperties : [];
-      return !props.length || props.some((p) => String(p) === String(id));
-    });
-  }, [employeesQuery?.data, id]);
+  /**
+   * Extract employees array from API response.
+   * API returns: { success, data: [...employees] }
+   * Hook returns response.data, so employeesQuery.data = [...employees]
+   */
+  const staffList = useMemo(() => {
+    const raw = employeesQuery?.data;
+    // Handle all possible response shapes
+    if (Array.isArray(raw)) return raw;
+    if (raw && typeof raw === "object" && Array.isArray(raw.data)) return raw.data;
+    return [];
+  }, [employeesQuery?.data]);
 
   // Dues should consider both active & advance lists (dedupe by _id/id)
   const dueTenants = useMemo(() => {
@@ -673,7 +673,7 @@ export default function PropertyDetails() {
         />
       ) : activeTab === "Staff" ? (
         <StaffTab
-          data={staffForProperty}
+          data={staffList}
           refreshing={!!employeesQuery?.isFetching}
           onRefresh={employeesQuery?.refetch}
           propertyId={id as string}
