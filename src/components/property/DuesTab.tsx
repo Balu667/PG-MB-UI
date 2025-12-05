@@ -87,7 +87,14 @@ type Props = {
 };
 
 /* ------------------------- filter defs ----------------------- */
-const sections: Section[] = [{ key: "dueDate", label: "Due Date", mode: "date" }];
+const sections: Section[] = [
+  {
+    key: "dueDate",
+    label: "Due Date",
+    mode: "date",
+    dateConfig: { allowFuture: true, fromLabel: "From", toLabel: "To" }, // Dues can be future
+  },
+];
 
 /* --------------------------- component ----------------------- */
 export default function DuesTab({ data, metrics = [], refreshing, onRefresh }: Props) {

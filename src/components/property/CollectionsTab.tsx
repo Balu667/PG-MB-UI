@@ -158,7 +158,16 @@ const getInitials = (name?: string): string => {
 };
 
 const sections: Section[] = [
-  { key: "paymentDate", label: "Payment Date", mode: "date" },
+  {
+    key: "paymentDate",
+    label: "Payment Date",
+    mode: "date",
+    dateConfig: {
+      allowFuture: false, // Only past dates allowed
+      fromLabel: "From Date",
+      toLabel: "To Date",
+    },
+  },
 ];
 
 /* ─────────────────────────────────────────────────────────────────────────────

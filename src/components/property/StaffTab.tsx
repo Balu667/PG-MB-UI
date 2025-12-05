@@ -146,7 +146,7 @@ const normalizeEmployees = (rows: RawEmployee[]): StaffCardItem[] => {
 };
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   STAFF CARD COMPONENT
+   STAFF CARD COMPONENT - Premium Swiggy/Zomato inspired design
 ───────────────────────────────────────────────────────────────────────────── */
 
 interface StaffCardProps {
@@ -171,16 +171,14 @@ const StaffCard: React.FC<StaffCardProps> = React.memo(
 
     // Responsive sizing
     const isTablet = width >= 768;
-    const avatarSize = isTablet ? 56 : 48;
-    const nameFontSize = isTablet ? 17 : 15;
-    const phoneFontSize = isTablet ? 14 : 12;
+    const avatarSize = isTablet ? 52 : 44;
 
     const handlePressIn = useCallback(() => {
       Animated.spring(scaleAnim, {
-        toValue: 0.98,
+        toValue: 0.985,
         useNativeDriver: true,
-        tension: 300,
-        friction: 10,
+        tension: 400,
+        friction: 12,
       }).start();
     }, [scaleAnim]);
 
@@ -188,142 +186,202 @@ const StaffCard: React.FC<StaffCardProps> = React.memo(
       Animated.spring(scaleAnim, {
         toValue: 1,
         useNativeDriver: true,
-        tension: 300,
-        friction: 10,
+        tension: 400,
+        friction: 12,
       }).start();
     }, [scaleAnim]);
+
+    // Status colors
+    const statusColor = isActive ? "#22C55E" : "#94A3B8";
+    const statusBg = isActive ? "#DCFCE7" : "#F1F5F9";
+    const statusText = isActive ? "#15803D" : "#64748B";
 
     const styles = useMemo(
       () =>
         StyleSheet.create({
-          cardContainer: {
-            borderRadius: radius.xl,
+          cardOuter: {
+            borderRadius: radius.lg + 4,
             backgroundColor: colors.cardBackground,
-            borderWidth: 1,
-            borderColor: isActive
-              ? hexToRgba(colors.accent, 0.2)
-              : hexToRgba(colors.textMuted, 0.15),
-            shadowColor: colors.shadow ?? "#000",
-            shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.08,
-            shadowRadius: 12,
-            elevation: 4,
+            shadowColor: "#000",
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.06,
+            shadowRadius: 8,
+            elevation: 3,
             overflow: "hidden",
           },
-          gradientTop: {
-            height: 4,
-            backgroundColor: isActive
-              ? hexToRgba(colors.accent, 0.6)
-              : hexToRgba(colors.textMuted, 0.3),
+          // Left accent bar for status indication (Swiggy style)
+          statusBar: {
+            position: "absolute",
+            [I18nManager.isRTL ? "right" : "left"]: 0,
+            top: 0,
+            bottom: 0,
+            width: 4,
+            backgroundColor: statusColor,
           },
-          contentRow: {
+          cardInner: {
+            paddingLeft: I18nManager.isRTL ? spacing.md : spacing.md + 8,
+            paddingRight: I18nManager.isRTL ? spacing.md + 8 : spacing.md,
+            paddingVertical: spacing.md,
+          },
+          // Top row: Avatar + Info + Status chip
+          topRow: {
             flexDirection: "row",
-            alignItems: "flex-start",
-            padding: spacing.md,
-            gap: spacing.md,
+            alignItems: "center",
+            gap: spacing.md - 2,
           },
           avatar: {
             width: avatarSize,
             height: avatarSize,
             borderRadius: avatarSize / 2,
-            backgroundColor: hexToRgba(colors.accent, 0.12),
+            backgroundColor: roleColors.bg,
             alignItems: "center",
             justifyContent: "center",
-            borderWidth: 2,
-            borderColor: isActive
-              ? hexToRgba(colors.accent, 0.3)
-              : hexToRgba(colors.textMuted, 0.2),
           },
           avatarText: {
-            fontSize: avatarSize * 0.4,
+            fontSize: avatarSize * 0.38,
             fontWeight: "700",
-            color: colors.accent,
+            color: roleColors.text,
+            letterSpacing: 0.5,
           },
-          infoSection: {
+          infoBlock: {
             flex: 1,
             minWidth: 0,
           },
           nameRow: {
             flexDirection: "row",
             alignItems: "center",
-            gap: spacing.sm,
-            marginBottom: 4,
+            gap: spacing.xs,
+            marginBottom: 2,
           },
           name: {
-            fontSize: nameFontSize,
+            fontSize: isTablet ? 16 : 15,
             fontWeight: "700",
             color: colors.textPrimary,
+            letterSpacing: 0.1,
             flex: 1,
           },
-          statusDot: {
-            width: 8,
-            height: 8,
-            borderRadius: 4,
-            backgroundColor: isActive ? "#10B981" : "#EF4444",
-          },
-          phone: {
-            fontSize: phoneFontSize,
-            color: colors.textSecondary,
-            marginBottom: spacing.sm,
-          },
-          roleBadge: {
-            alignSelf: I18nManager.isRTL ? "flex-end" : "flex-start",
+          roleChip: {
             backgroundColor: roleColors.bg,
-            paddingHorizontal: spacing.sm + 2,
-            paddingVertical: 5,
+            paddingHorizontal: spacing.sm,
+            paddingVertical: 3,
             borderRadius: radius.full,
-            marginBottom: spacing.sm,
           },
           roleText: {
-            fontSize: 11,
+            fontSize: 10,
             fontWeight: "700",
             color: roleColors.text,
-            letterSpacing: 0.3,
+            letterSpacing: 0.4,
             textTransform: "uppercase",
           },
+          phoneRow: {
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 4,
+          },
+          phone: {
+            fontSize: isTablet ? 13 : 12,
+            color: colors.textSecondary,
+            fontWeight: "500",
+          },
+          // Status chip (right side)
+          statusChip: {
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 4,
+            backgroundColor: statusBg,
+            paddingHorizontal: spacing.sm + 2,
+            paddingVertical: 6,
+            borderRadius: radius.full,
+          },
+          statusDot: {
+            width: 6,
+            height: 6,
+            borderRadius: 3,
+            backgroundColor: statusColor,
+          },
+          statusLabel: {
+            fontSize: 11,
+            fontWeight: "600",
+            color: statusText,
+            letterSpacing: 0.2,
+          },
+          // Divider
+          divider: {
+            height: 1,
+            backgroundColor: hexToRgba(colors.borderColor ?? colors.textMuted, 0.08),
+            marginVertical: spacing.sm + 2,
+          },
+          // Actions row - clean horizontal layout
           actionsRow: {
             flexDirection: "row",
-            flexWrap: "wrap",
-            gap: spacing.sm,
+            alignItems: "center",
+            justifyContent: "space-between",
+          },
+          actionGroup: {
+            flexDirection: "row",
+            alignItems: "center",
+            gap: spacing.xs,
           },
           actionBtn: {
             flexDirection: "row",
             alignItems: "center",
-            gap: 4,
-            paddingHorizontal: spacing.sm + 2,
-            paddingVertical: 8,
-            backgroundColor: colors.surface,
-            borderRadius: radius.lg,
-            borderWidth: 1,
-            borderColor: hexToRgba(colors.textSecondary, 0.1),
-            minWidth: 44,
-            minHeight: 44,
             justifyContent: "center",
+            gap: 5,
+            paddingHorizontal: spacing.sm + 4,
+            paddingVertical: spacing.sm,
+            borderRadius: radius.md + 2,
+            backgroundColor: hexToRgba(colors.accent, 0.08),
+            minHeight: 36,
           },
           actionBtnPressed: {
-            backgroundColor: hexToRgba(colors.accent, 0.08),
+            backgroundColor: hexToRgba(colors.accent, 0.15),
+            transform: [{ scale: 0.97 }],
+          },
+          actionIcon: {
+            // Icon styling handled by component
           },
           actionText: {
             fontSize: 12,
             fontWeight: "600",
-            color: colors.link,
+            color: colors.accent,
+            letterSpacing: 0.1,
+          },
+          // Call button - special highlight
+          callBtn: {
+            backgroundColor: hexToRgba("#22C55E", 0.1),
+          },
+          callBtnPressed: {
+            backgroundColor: hexToRgba("#22C55E", 0.2),
+          },
+          callText: {
+            color: "#16A34A",
+          },
+          // Delete button - subtle danger
+          deleteBtn: {
+            backgroundColor: hexToRgba(colors.error, 0.08),
+          },
+          deleteBtnPressed: {
+            backgroundColor: hexToRgba(colors.error, 0.15),
           },
           deleteText: {
-            fontSize: 12,
-            fontWeight: "700",
             color: colors.error,
           },
+          // Toggle section
           toggleSection: {
+            flexDirection: "row",
             alignItems: "center",
-            justifyContent: "flex-start",
-            paddingTop: 4,
+            gap: spacing.sm,
+            backgroundColor: hexToRgba(colors.surface, 0.6),
+            paddingHorizontal: spacing.sm,
+            paddingVertical: 4,
+            borderRadius: radius.lg,
+            borderWidth: 1,
+            borderColor: hexToRgba(colors.borderColor ?? colors.textMuted, 0.1),
           },
           toggleLabel: {
             fontSize: 11,
             fontWeight: "600",
-            color: isActive ? colors.success ?? "#10B981" : colors.textMuted,
-            marginTop: 4,
-            textAlign: "center",
+            color: colors.textSecondary,
           },
         }),
       [
@@ -333,8 +391,10 @@ const StaffCard: React.FC<StaffCardProps> = React.memo(
         isActive,
         roleColors,
         avatarSize,
-        nameFontSize,
-        phoneFontSize,
+        isTablet,
+        statusColor,
+        statusBg,
+        statusText,
       ]
     );
 
@@ -369,53 +429,76 @@ const StaffCard: React.FC<StaffCardProps> = React.memo(
           accessibilityLabel={`Staff member ${item.name}, ${item.roleLabel}, ${isActive ? "Active" : "Inactive"}`}
           accessibilityHint="Double tap to see options"
         >
-          <View style={styles.cardContainer}>
-            {/* Premium gradient accent at top */}
-            <View style={styles.gradientTop} />
+          <View style={styles.cardOuter}>
+            {/* Status indicator bar (left edge) */}
+            <View style={styles.statusBar} />
 
-            <View style={styles.contentRow}>
-              {/* Avatar */}
-              <View
-                style={styles.avatar}
-                accessible
-                accessibilityLabel={`Avatar for ${item.name}`}
-              >
-                <Text style={styles.avatarText}>{initials}</Text>
-              </View>
+            <View style={styles.cardInner}>
+              {/* Top Row: Avatar + Info + Status */}
+              <View style={styles.topRow}>
+                {/* Avatar with initials */}
+                <View
+                  style={styles.avatar}
+                  accessible
+                  accessibilityLabel={`Avatar for ${item.name}`}
+                >
+                  <Text style={styles.avatarText}>{initials}</Text>
+                </View>
 
-              {/* Info Section */}
-              <View style={styles.infoSection}>
-                <View style={styles.nameRow}>
-                  <Text
-                    style={styles.name}
-                    numberOfLines={1}
-                    ellipsizeMode="tail"
-                    accessible
-                    accessibilityLabel={`Name: ${item.name}`}
-                  >
-                    {item.name}
+                {/* Name, Role & Phone */}
+                <View style={styles.infoBlock}>
+                  <View style={styles.nameRow}>
+                    <Text
+                      style={styles.name}
+                      numberOfLines={1}
+                      ellipsizeMode="tail"
+                      accessible
+                      accessibilityLabel={`Name: ${item.name}`}
+                    >
+                      {item.name}
+                    </Text>
+                    <View style={styles.roleChip}>
+                      <Text style={styles.roleText}>{item.roleLabel}</Text>
+                    </View>
+                  </View>
+                  <View style={styles.phoneRow}>
+                    <MaterialCommunityIcons
+                      name="phone-outline"
+                      size={13}
+                      color={colors.textSecondary}
+                    />
+                    <Text
+                      style={styles.phone}
+                      numberOfLines={1}
+                      accessible
+                      accessibilityLabel={`Phone: ${item.phone}`}
+                    >
+                      {item.phone}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Status Chip */}
+                <View style={styles.statusChip}>
+                  <View style={styles.statusDot} />
+                  <Text style={styles.statusLabel}>
+                    {isActive ? "Active" : "Inactive"}
                   </Text>
                 </View>
+              </View>
 
-                <Text
-                  style={styles.phone}
-                  numberOfLines={1}
-                  accessible
-                  accessibilityLabel={`Phone: ${item.phone}`}
-                >
-                  {item.phone}
-                </Text>
+              {/* Divider */}
+              <View style={styles.divider} />
 
-                <View style={styles.roleBadge}>
-                  <Text style={styles.roleText}>{item.roleLabel}</Text>
-                </View>
-
-                {/* Action Buttons */}
-                <View style={styles.actionsRow}>
+              {/* Actions Row */}
+              <View style={styles.actionsRow}>
+                {/* Left: Action buttons */}
+                <View style={styles.actionGroup}>
                   <Pressable
                     style={({ pressed }) => [
                       styles.actionBtn,
-                      pressed && styles.actionBtnPressed,
+                      styles.callBtn,
+                      pressed && styles.callBtnPressed,
                     ]}
                     onPress={handleCall}
                     accessible
@@ -426,9 +509,11 @@ const StaffCard: React.FC<StaffCardProps> = React.memo(
                     <MaterialCommunityIcons
                       name="phone"
                       size={14}
-                      color={colors.link}
+                      color="#16A34A"
                     />
-                    <Text style={styles.actionText}>Call</Text>
+                    <Text style={[styles.actionText, styles.callText]}>
+                      Call
+                    </Text>
                   </Pressable>
 
                   <Pressable
@@ -443,9 +528,9 @@ const StaffCard: React.FC<StaffCardProps> = React.memo(
                     accessibilityHint="Opens edit form"
                   >
                     <MaterialCommunityIcons
-                      name="pencil"
+                      name="pencil-outline"
                       size={14}
-                      color={colors.link}
+                      color={colors.accent}
                     />
                     <Text style={styles.actionText}>Edit</Text>
                   </Pressable>
@@ -453,7 +538,8 @@ const StaffCard: React.FC<StaffCardProps> = React.memo(
                   <Pressable
                     style={({ pressed }) => [
                       styles.actionBtn,
-                      pressed && styles.actionBtnPressed,
+                      styles.deleteBtn,
+                      pressed && styles.deleteBtnPressed,
                     ]}
                     onPress={handleDelete}
                     accessible
@@ -466,26 +552,26 @@ const StaffCard: React.FC<StaffCardProps> = React.memo(
                       size={14}
                       color={colors.error}
                     />
-                    <Text style={styles.deleteText}>Delete</Text>
+                    <Text style={[styles.actionText, styles.deleteText]}>
+                      Delete
+                    </Text>
                   </Pressable>
                 </View>
-              </View>
 
-              {/* Toggle Section */}
-              <View style={styles.toggleSection}>
-                <Switch
-                  value={isActive}
-                  onValueChange={handleToggle}
-                  color={colors.accent}
-                  disabled={disabled}
-                  accessible
-                  accessibilityRole="switch"
-                  accessibilityLabel={`Toggle ${item.name} status`}
-                  accessibilityState={{ checked: isActive }}
-                />
-                <Text style={styles.toggleLabel}>
-                  {isActive ? "Active" : "Inactive"}
-                </Text>
+                {/* Right: Toggle */}
+                <View style={styles.toggleSection}>
+                  {/* <Text style={styles.toggleLabel}>Status</Text> */}
+                  <Switch
+                    value={isActive}
+                    onValueChange={handleToggle}
+                    color={colors.accent}
+                    disabled={disabled}
+                    accessible
+                    accessibilityRole="switch"
+                    accessibilityLabel={`Toggle ${item.name} status`}
+                    accessibilityState={{ checked: isActive }}
+                  />
+                </View>
               </View>
             </View>
           </View>
@@ -498,7 +584,7 @@ const StaffCard: React.FC<StaffCardProps> = React.memo(
 StaffCard.displayName = "StaffCard";
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   EMPTY STATE COMPONENT
+   EMPTY STATE COMPONENT - Premium design
 ───────────────────────────────────────────────────────────────────────────── */
 
 interface EmptyStateProps {
@@ -506,7 +592,7 @@ interface EmptyStateProps {
 }
 
 const EmptyState: React.FC<EmptyStateProps> = React.memo(({ searchQuery }) => {
-  const { colors, spacing } = useTheme();
+  const { colors, spacing, radius } = useTheme();
 
   const styles = useMemo(
     () =>
@@ -514,33 +600,58 @@ const EmptyState: React.FC<EmptyStateProps> = React.memo(({ searchQuery }) => {
         container: {
           alignItems: "center",
           justifyContent: "center",
-          paddingVertical: spacing.xl * 2,
-          paddingHorizontal: spacing.lg,
+          paddingVertical: spacing.xl * 2.5,
+          paddingHorizontal: spacing.xl,
         },
-        iconContainer: {
-          width: 80,
-          height: 80,
-          borderRadius: 40,
-          backgroundColor: hexToRgba(colors.accent, 0.1),
+        iconOuter: {
+          width: 100,
+          height: 100,
+          borderRadius: 50,
+          backgroundColor: hexToRgba(colors.accent, 0.06),
           alignItems: "center",
           justifyContent: "center",
           marginBottom: spacing.lg,
         },
+        iconInner: {
+          width: 72,
+          height: 72,
+          borderRadius: 36,
+          backgroundColor: hexToRgba(colors.accent, 0.12),
+          alignItems: "center",
+          justifyContent: "center",
+        },
         title: {
-          fontSize: 18,
+          fontSize: 20,
           fontWeight: "700",
           color: colors.textPrimary,
           marginBottom: spacing.sm,
           textAlign: "center",
+          letterSpacing: 0.2,
         },
         subtitle: {
           fontSize: 14,
           color: colors.textSecondary,
           textAlign: "center",
-          lineHeight: 20,
+          lineHeight: 22,
+          maxWidth: 280,
+        },
+        ctaHint: {
+          marginTop: spacing.lg,
+          flexDirection: "row",
+          alignItems: "center",
+          gap: spacing.xs,
+          backgroundColor: hexToRgba(colors.accent, 0.08),
+          paddingHorizontal: spacing.md,
+          paddingVertical: spacing.sm,
+          borderRadius: radius.full,
+        },
+        ctaText: {
+          fontSize: 13,
+          fontWeight: "600",
+          color: colors.accent,
         },
       }),
-    [colors, spacing]
+    [colors, spacing, radius]
   );
 
   const isFiltered = searchQuery.trim().length > 0;
@@ -553,21 +664,33 @@ const EmptyState: React.FC<EmptyStateProps> = React.memo(({ searchQuery }) => {
         isFiltered ? "No staff matching your search" : "No staff members yet"
       }
     >
-      <View style={styles.iconContainer}>
-        <MaterialCommunityIcons
-          name={isFiltered ? "magnify-close" : "account-group-outline"}
-          size={40}
-          color={colors.accent}
-        />
+      <View style={styles.iconOuter}>
+        <View style={styles.iconInner}>
+          <MaterialCommunityIcons
+            name={isFiltered ? "account-search-outline" : "account-group-outline"}
+            size={36}
+            color={colors.accent}
+          />
+        </View>
       </View>
       <Text style={styles.title}>
-        {isFiltered ? "No Results Found" : "No Staff Members"}
+        {isFiltered ? "No Results Found" : "No Staff Members Yet"}
       </Text>
       <Text style={styles.subtitle}>
         {isFiltered
-          ? "Try adjusting your search terms or clear the filter."
-          : "Add your first staff member by tapping the + button below."}
+          ? "We couldn't find anyone matching your search. Try different keywords."
+          : "Your team directory is empty. Add staff members to manage access and roles."}
       </Text>
+      {!isFiltered && (
+        <View style={styles.ctaHint}>
+          <MaterialCommunityIcons
+            name="plus-circle"
+            size={16}
+            color={colors.accent}
+          />
+          <Text style={styles.ctaText}>Tap + to add staff</Text>
+        </View>
+      )}
     </View>
   );
 });
@@ -575,7 +698,7 @@ const EmptyState: React.FC<EmptyStateProps> = React.memo(({ searchQuery }) => {
 EmptyState.displayName = "EmptyState";
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   HEADER COMPONENT
+   HEADER COMPONENT - Premium design with clean sections
 ───────────────────────────────────────────────────────────────────────────── */
 
 interface HeaderProps {
@@ -595,31 +718,55 @@ const ListHeader: React.FC<HeaderProps> = React.memo(
       () =>
         StyleSheet.create({
           container: {
-            paddingBottom: spacing.sm,
+            paddingBottom: spacing.md,
+          },
+          sectionHeader: {
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "space-between",
+            marginTop: spacing.md,
+            marginBottom: spacing.sm,
+            paddingHorizontal: spacing.xs,
+          },
+          sectionTitleRow: {
+            flexDirection: "row",
+            alignItems: "center",
+            gap: spacing.sm,
+          },
+          sectionIcon: {
+            width: 32,
+            height: 32,
+            borderRadius: 8,
+            backgroundColor: hexToRgba(colors.accent, 0.1),
+            alignItems: "center",
+            justifyContent: "center",
           },
           sectionTitle: {
             fontSize: isTablet ? 18 : 16,
             fontWeight: "700",
             color: colors.textPrimary,
-            marginHorizontal: spacing.sm,
-            marginTop: spacing.sm,
-            marginBottom: spacing.sm,
+            letterSpacing: 0.2,
           },
           searchContainer: {
-            backgroundColor: hexToRgba(colors.accent, 0.06),
-            // marginHorizontal: spacing.md,
-            paddingVertical: spacing.sm + 4,
+            backgroundColor: colors.cardBackground,
+            paddingVertical: spacing.md,
             paddingHorizontal: spacing.md,
-            borderRadius: radius.xl,
+            borderRadius: radius.lg + 2,
             borderWidth: 1,
-            borderColor: hexToRgba(colors.accent, 0.1),
+            borderColor: hexToRgba(colors.borderColor ?? colors.textMuted, 0.1),
+            shadowColor: "#000",
+            shadowOffset: { width: 0, height: 1 },
+            shadowOpacity: 0.04,
+            shadowRadius: 4,
+            elevation: 1,
           },
           searchLabel: {
-            fontSize: 13,
+            fontSize: 12,
             fontWeight: "600",
-            color: colors.accent,
-            marginBottom: spacing.xs,
-            letterSpacing: 0.2,
+            color: colors.textSecondary,
+            marginBottom: spacing.xs + 2,
+            letterSpacing: 0.3,
+            textTransform: "uppercase",
           },
         }),
       [colors, spacing, radius, isTablet]
@@ -630,17 +777,29 @@ const ListHeader: React.FC<HeaderProps> = React.memo(
         {/* Stats Grid */}
         <StatsGrid metrics={metrics} minVisible={2} />
 
-        {/* Search Section */}
-        <Text
-          style={styles.sectionTitle}
-          accessible
-          accessibilityRole="header"
-        >
-          Staff Directory
-        </Text>
+        {/* Section Header */}
+        <View style={styles.sectionHeader}>
+          <View style={styles.sectionTitleRow}>
+            <View style={styles.sectionIcon}>
+              <MaterialCommunityIcons
+                name="account-group"
+                size={18}
+                color={colors.accent}
+              />
+            </View>
+            <Text
+              style={styles.sectionTitle}
+              accessible
+              accessibilityRole="header"
+            >
+              Staff Directory
+            </Text>
+          </View>
+        </View>
 
+        {/* Search Section */}
         <View style={styles.searchContainer}>
-          <Text style={styles.searchLabel}>Search Staff</Text>
+          <Text style={styles.searchLabel}>Find Staff Member</Text>
           <SearchBar
             placeholder="Search by name, phone, or role..."
             onSearch={onSearchChange}

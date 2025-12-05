@@ -46,8 +46,18 @@ const sections: Section[] = [
       { label: "Cancelled", value: 6 },
     ],
   },
-  { key: "bookingDate", label: "Booking Date", mode: "date" },
-  { key: "joiningDate", label: "Joining Date", mode: "date" },
+  {
+    key: "bookingDate",
+    label: "Booking Date",
+    mode: "date",
+    dateConfig: { allowFuture: false, fromLabel: "From", toLabel: "To" },
+  },
+  {
+    key: "joiningDate",
+    label: "Joining Date",
+    mode: "date",
+    dateConfig: { allowFuture: true, fromLabel: "From", toLabel: "To" }, // Joining can be future
+  },
 ];
 
 /* ------------------------------ Helpers ------------------------------ */

@@ -50,7 +50,12 @@ const tenantSections: Section[] = [
     // includes "Dues" as a pseudo-status (due > 0)
     options: ["Active", "Under Notice", "Dues"].map((s) => ({ label: s, value: s })),
   },
-  { key: "joinDate", label: "Joining Date", mode: "date" },
+  {
+    key: "joinDate",
+    label: "Joining Date",
+    mode: "date",
+    dateConfig: { allowFuture: false, fromLabel: "From", toLabel: "To" },
+  },
   {
     key: "downloadStatus",
     label: "Download Status",

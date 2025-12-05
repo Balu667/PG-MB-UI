@@ -1,4 +1,5 @@
 // src/components/property/ExpensesTab.tsx
+// Premium Expenses Tab - Modern design with rich UI elements
 import React, { useState, useMemo, useCallback } from "react";
 import {
   FlatList,
@@ -8,50 +9,78 @@ import {
   View,
   ListRenderItemInfo,
   RefreshControl,
+  Pressable,
+  Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
+import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
+import * as Haptics from "expo-haptics";
 
 import SearchBar from "@/src/components/SearchBar";
 import FilterSheet, { Section } from "@/src/components/FilterSheet";
 import ExpenseCard from "./ExpenseCard";
 import AddButton from "@/src/components/Common/AddButton";
-import * as Haptics from "expo-haptics";
 
 import { ExpenseFilter, emptyExpenseFilter } from "@/src/constants/expenseFilter";
 import { useTheme } from "@/src/theme/ThemeContext";
 import { hexToRgba } from "@/src/theme";
 
-// ⬇️ NEW: dialog & buttons
 import { Portal, Dialog, Button } from "react-native-paper";
-
-// ⬇️ NEW: update hook to reuse for delete
 import { useUpdateDailyExpenses } from "@/src/hooks/dailyExpenses";
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   TYPES
+───────────────────────────────────────────────────────────────────────────── */
 
 export type ExpenseItem = {
   id: string;
-  date: string; // dd/MM/yyyy for display
+  date: string;
   amount: number;
   category: string;
   description: string;
-  _dateObj: Date; // internal for comparisons
+  _dateObj: Date;
 };
 
 type Props = {
-  data: any[]; // raw API rows
+  data: any[];
   refreshing: boolean;
   onRefresh: () => void;
-  propertyId: string; // <-- passed by parent
+  propertyId: string;
 };
 
-const sections: Section[] = [{ key: "dateRange", label: "Date Range", mode: "date" }];
+/* ─────────────────────────────────────────────────────────────────────────────
+   FILTER SECTIONS CONFIG
+───────────────────────────────────────────────────────────────────────────── */
 
-const toDDMMYYYY = (d: Date) =>
-  d.toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" });
+const sections: Section[] = [
+  {
+    key: "dateRange",
+    label: "Date Range",
+    mode: "date",
+    dateConfig: {
+      allowFuture: false,
+      fromLabel: "From Date",
+      toLabel: "To Date",
+    },
+  },
+];
 
-const startOfDayLocal = (d: Date) =>
+/* ─────────────────────────────────────────────────────────────────────────────
+   HELPER FUNCTIONS
+───────────────────────────────────────────────────────────────────────────── */
+
+const toDDMMYYYY = (d: Date): string =>
+  d.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+
+const startOfDayLocal = (d: Date): Date =>
   new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
-const endOfDayLocal = (d: Date) =>
+
+const endOfDayLocal = (d: Date): Date =>
   new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
 
 const normalizeRange = (from?: Date, to?: Date) => {
@@ -61,18 +90,378 @@ const normalizeRange = (from?: Date, to?: Date) => {
   return { from, to };
 };
 
-export default function ExpensesTab({ data, refreshing, onRefresh, propertyId }: Props) {
+const formatCurrency = (amount: number): string => {
+  return `₹${amount.toLocaleString("en-IN")}`;
+};
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   STATS CARD COMPONENT
+───────────────────────────────────────────────────────────────────────────── */
+
+interface StatsCardProps {
+  icon: keyof typeof MaterialCommunityIcons.glyphMap;
+  label: string;
+  value: string;
+  iconBg: string;
+  iconColor: string;
+}
+
+const StatsCard: React.FC<StatsCardProps> = ({
+  icon,
+  label,
+  value,
+  iconBg,
+  iconColor,
+}) => {
+  const { colors, spacing, radius } = useTheme();
+
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        card: {
+          flex: 1,
+          backgroundColor: colors.cardBackground,
+          borderRadius: radius.lg + 2,
+          padding: spacing.md,
+          // iOS shadow - more prominent
+          shadowColor: "#000000",
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: Platform.OS === "ios" ? 0.12 : 0.06,
+          shadowRadius: Platform.OS === "ios" ? 12 : 8,
+          elevation: 4,
+          // Border for iOS definition
+          borderWidth: 1,
+          borderColor: Platform.OS === "ios" 
+            ? hexToRgba(colors.textMuted, 0.12) 
+            : hexToRgba(colors.textMuted, 0.08),
+        },
+        iconWrap: {
+          width: 40,
+          height: 40,
+          borderRadius: 12,
+          backgroundColor: iconBg,
+          alignItems: "center",
+          justifyContent: "center",
+          marginBottom: spacing.sm,
+        },
+        label: {
+          fontSize: 11,
+          fontWeight: "600",
+          color: colors.textMuted,
+          textTransform: "uppercase",
+          letterSpacing: 0.5,
+          marginBottom: 4,
+        },
+        value: {
+          fontSize: 18,
+          fontWeight: "800",
+          color: colors.textPrimary,
+          letterSpacing: 0.3,
+        },
+      }),
+    [colors, spacing, radius, iconBg]
+  );
+
+  return (
+    <View style={styles.card}>
+      <View style={styles.iconWrap}>
+        <MaterialCommunityIcons name={icon} size={20} color={iconColor} />
+      </View>
+      <Text style={styles.label}>{label}</Text>
+      <Text style={styles.value} numberOfLines={1} adjustsFontSizeToFit>
+        {value}
+      </Text>
+    </View>
+  );
+};
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   EMPTY STATE COMPONENT
+───────────────────────────────────────────────────────────────────────────── */
+
+interface EmptyStateProps {
+  hasFilter: boolean;
+}
+
+const EmptyState: React.FC<EmptyStateProps> = ({ hasFilter }) => {
+  const { colors, spacing, radius } = useTheme();
+
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        container: {
+          alignItems: "center",
+          justifyContent: "center",
+          paddingVertical: spacing.xl * 2.5,
+          paddingHorizontal: spacing.xl,
+        },
+        iconOuter: {
+          width: 100,
+          height: 100,
+          borderRadius: 50,
+          backgroundColor: hexToRgba(colors.accent, 0.06),
+          alignItems: "center",
+          justifyContent: "center",
+          marginBottom: spacing.lg,
+        },
+        iconInner: {
+          width: 72,
+          height: 72,
+          borderRadius: 36,
+          backgroundColor: hexToRgba(colors.accent, 0.12),
+          alignItems: "center",
+          justifyContent: "center",
+        },
+        title: {
+          fontSize: 20,
+          fontWeight: "700",
+          color: colors.textPrimary,
+          marginBottom: spacing.sm,
+          textAlign: "center",
+          letterSpacing: 0.2,
+        },
+        subtitle: {
+          fontSize: 14,
+          color: colors.textSecondary,
+          textAlign: "center",
+          lineHeight: 22,
+          maxWidth: 280,
+        },
+        ctaHint: {
+          marginTop: spacing.lg,
+          flexDirection: "row",
+          alignItems: "center",
+          gap: spacing.xs,
+          backgroundColor: hexToRgba(colors.accent, 0.08),
+          paddingHorizontal: spacing.md,
+          paddingVertical: spacing.sm,
+          borderRadius: radius.full,
+        },
+        ctaText: {
+          fontSize: 13,
+          fontWeight: "600",
+          color: colors.accent,
+        },
+      }),
+    [colors, spacing, radius]
+  );
+
+  return (
+    <View
+      style={styles.container}
+      accessible
+      accessibilityLabel={
+        hasFilter ? "No expenses match your filter" : "No expenses recorded"
+      }
+    >
+      <View style={styles.iconOuter}>
+        <View style={styles.iconInner}>
+          <MaterialCommunityIcons
+            name={hasFilter ? "file-search-outline" : "receipt"}
+            size={36}
+            color={colors.accent}
+          />
+        </View>
+      </View>
+      <Text style={styles.title}>
+        {hasFilter ? "No Results Found" : "No Expenses Yet"}
+      </Text>
+      <Text style={styles.subtitle}>
+        {hasFilter
+          ? "Try adjusting your filters or search terms to find what you're looking for."
+          : "Track your property expenses by adding your first expense record."}
+      </Text>
+      {!hasFilter && (
+        <View style={styles.ctaHint}>
+          <MaterialCommunityIcons
+            name="plus-circle"
+            size={16}
+            color={colors.accent}
+          />
+          <Text style={styles.ctaText}>Tap + to add expense</Text>
+        </View>
+      )}
+    </View>
+  );
+};
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   LIST HEADER COMPONENT
+───────────────────────────────────────────────────────────────────────────── */
+
+interface ListHeaderProps {
+  totalExpenses: number;
+  expenseCount: number;
+  thisMonthExpenses: number;
+  query: string;
+  onQueryChange: (q: string) => void;
+  onFilterPress: () => void;
+  filterActive: boolean;
+}
+
+const ListHeader: React.FC<ListHeaderProps> = ({
+  totalExpenses,
+  expenseCount,
+  thisMonthExpenses,
+  query,
+  onQueryChange,
+  onFilterPress,
+  filterActive,
+}) => {
+  const { colors, spacing, radius } = useTheme();
+  const { width } = useWindowDimensions();
+  const isTablet = width >= 768;
+
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        container: {
+          paddingBottom: spacing.md,
+        },
+        statsRow: {
+          flexDirection: "row",
+          gap: spacing.sm + 2,
+          marginBottom: spacing.md,
+        },
+        sectionHeader: {
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          marginBottom: spacing.sm,
+        },
+        sectionTitleRow: {
+          flexDirection: "row",
+          alignItems: "center",
+          gap: spacing.sm,
+        },
+        sectionIcon: {
+          width: 32,
+          height: 32,
+          borderRadius: 10,
+          backgroundColor: hexToRgba(colors.accent, 0.12),
+          alignItems: "center",
+          justifyContent: "center",
+        },
+        sectionTitle: {
+          fontSize: isTablet ? 18 : 16,
+          fontWeight: "700",
+          color: colors.textPrimary,
+          letterSpacing: 0.2,
+        },
+        countBadge: {
+          backgroundColor: hexToRgba(colors.accent, 0.1),
+          paddingHorizontal: spacing.sm,
+          paddingVertical: 4,
+          borderRadius: radius.full,
+        },
+        countText: {
+          fontSize: 12,
+          fontWeight: "700",
+          color: colors.accent,
+        },
+        searchContainer: {
+          backgroundColor: colors.cardBackground,
+          paddingVertical: spacing.md,
+          paddingHorizontal: spacing.md,
+          borderRadius: radius.lg + 2,
+          borderWidth: 1,
+          borderColor: Platform.OS === "ios"
+            ? hexToRgba(colors.textMuted, 0.15)
+            : hexToRgba(colors.textMuted, 0.1),
+          shadowColor: "#000000",
+          shadowOffset: { width: 0, height: 3 },
+          shadowOpacity: Platform.OS === "ios" ? 0.1 : 0.05,
+          shadowRadius: Platform.OS === "ios" ? 8 : 4,
+          elevation: 3,
+        },
+        searchLabel: {
+          fontSize: 12,
+          fontWeight: "600",
+          color: colors.textSecondary,
+          marginBottom: spacing.xs + 2,
+          letterSpacing: 0.3,
+          textTransform: "uppercase",
+        },
+      }),
+    [colors, spacing, radius, isTablet]
+  );
+
+  return (
+    <View style={styles.container}>
+      {/* Stats Row */}
+      <View style={styles.statsRow}>
+        <StatsCard
+          icon="cash-multiple"
+          label="Total Spent"
+          value={formatCurrency(totalExpenses)}
+          iconBg="#FEE2E2"
+          iconColor="#DC2626"
+        />
+        <StatsCard
+          icon="calendar-month"
+          label="This Month"
+          value={formatCurrency(thisMonthExpenses)}
+          iconBg="#DBEAFE"
+          iconColor="#2563EB"
+        />
+      </View>
+
+      {/* Section Header */}
+      <View style={styles.sectionHeader}>
+        <View style={styles.sectionTitleRow}>
+          <View style={styles.sectionIcon}>
+            <MaterialCommunityIcons
+              name="receipt"
+              size={18}
+              color={colors.accent}
+            />
+          </View>
+          <Text style={styles.sectionTitle}>Expense History</Text>
+        </View>
+        <View style={styles.countBadge}>
+          <Text style={styles.countText}>{expenseCount} records</Text>
+        </View>
+      </View>
+
+      {/* Search */}
+      <View style={styles.searchContainer}>
+        <Text style={styles.searchLabel}>Search Expenses</Text>
+        <SearchBar
+          placeholder="Search by category or description..."
+          onSearch={onQueryChange}
+          onFilter={onFilterPress}
+          filterActive={filterActive}
+        />
+      </View>
+    </View>
+  );
+};
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   MAIN COMPONENT
+───────────────────────────────────────────────────────────────────────────── */
+
+export default function ExpensesTab({
+  data,
+  refreshing,
+  onRefresh,
+  propertyId,
+}: Props) {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const { colors, spacing, radius } = useTheme();
 
+  // Responsive columns
   const columns = width >= 1000 ? 3 : width >= 740 ? 2 : 1;
 
+  // Parse raw data to expense items
   const baseList: ExpenseItem[] = useMemo(() => {
     if (!Array.isArray(data)) return [];
+
     return data
-      .map((e) => {
+      .map((e): ExpenseItem | null => {
         const statusNum = Number(e?.status ?? 0);
+        // Only show active expenses (status === 1)
         if (statusNum !== 1) return null;
 
         const dateIso = e?.date as string | undefined;
@@ -86,42 +475,38 @@ export default function ExpensesTab({ data, refreshing, onRefresh, propertyId }:
           category: String(e?.category ?? "Other"),
           description: String(e?.description ?? ""),
           _dateObj: dateObj,
-        } as ExpenseItem;
+        };
       })
-      .filter(Boolean) as ExpenseItem[];
+      .filter((item): item is ExpenseItem => item !== null)
+      .sort((a, b) => b._dateObj.getTime() - a._dateObj.getTime()); // Sort by date desc
   }, [data]);
 
+  // State
   const [query, setQuery] = useState("");
   const [sheetOpen, setSheetOpen] = useState(false);
   const [filter, setFilter] = useState<ExpenseFilter>(emptyExpenseFilter);
-
-  // ⬇️ NEW: delete confirmation dialog state
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
-  // ⬇️ NEW: reuse update hook for delete
+  // Delete mutation
   const updateExpense = useUpdateDailyExpenses(() => {
-    // success callback
     setConfirmOpen(false);
     setDeleteId(null);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    onRefresh(); // refresh the Expenses tab data
+    onRefresh();
   });
 
+  // Handlers
   const askDelete = useCallback((id: string) => {
     setDeleteId(id);
     setConfirmOpen(true);
-    if (typeof Haptics?.selectionAsync === "function") {
-      Haptics.selectionAsync();
-    }
+    Haptics.selectionAsync();
   }, []);
 
   const handleConfirmDelete = useCallback(() => {
     if (!deleteId) return;
 
     const fd = new FormData();
-    // Backend screenshot shows lowercase "status".
-    // If your backend expects "Status" (capital S), change the key below.
     fd.append("status", "0");
 
     updateExpense.mutate(
@@ -130,25 +515,42 @@ export default function ExpensesTab({ data, refreshing, onRefresh, propertyId }:
         onError: () => {
           setConfirmOpen(false);
           setDeleteId(null);
-          // keep UX minimal – avoid extra libs
-          // eslint-disable-next-line no-alert
-          console.log("Delete failed: updateDailyExpenses(status=0)"); // leave console for debug
         },
       }
     );
   }, [deleteId, updateExpense]);
 
+  const handleAddExpense = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    router.push(`/protected/expenses/${propertyId}`);
+  }, [propertyId]);
+
+  const handleEditExpense = useCallback(
+    (expId: string) => {
+      router.push(`/protected/expenses/${propertyId}?expenseId=${expId}`);
+    },
+    [propertyId]
+  );
+
+  // Filtered expenses
   const expenses = useMemo(() => {
     let list = baseList;
 
+    // Search filter
     if (query.trim()) {
       const q = query.trim().toLowerCase();
       list = list.filter(
-        (e) => e.category?.toLowerCase?.().includes(q) || e.description?.toLowerCase?.().includes(q)
+        (e) =>
+          e.category?.toLowerCase?.().includes(q) ||
+          e.description?.toLowerCase?.().includes(q)
       );
     }
 
-    const { from, to } = normalizeRange(filter?.dateRange?.from, filter?.dateRange?.to);
+    // Date range filter
+    const { from, to } = normalizeRange(
+      filter?.dateRange?.from,
+      filter?.dateRange?.to
+    );
     const F = from ? startOfDayLocal(from) : undefined;
     const T = to ? endOfDayLocal(to) : undefined;
 
@@ -165,96 +567,126 @@ export default function ExpensesTab({ data, refreshing, onRefresh, propertyId }:
     return list;
   }, [query, filter, baseList]);
 
-  const totalAll = useMemo(() => expenses.reduce((sum, e) => sum + e.amount, 0), [expenses]);
+  // Calculate totals
+  const totalExpenses = useMemo(
+    () => expenses.reduce((sum, e) => sum + e.amount, 0),
+    [expenses]
+  );
 
-  const s = useMemo(
+  const thisMonthExpenses = useMemo(() => {
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+
+    return expenses
+      .filter((e) => {
+        const d = e._dateObj;
+        return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+      })
+      .reduce((sum, e) => sum + e.amount, 0);
+  }, [expenses]);
+
+  const filterIsActive =
+    !!filter?.dateRange?.from || !!filter?.dateRange?.to || !!query.trim();
+
+  // Styles
+  const styles = useMemo(
     () =>
       StyleSheet.create({
-        columnGap: { gap: spacing.md - 2 },
+        columnGap: {
+          gap: spacing.md,
+        },
         listContent: {
           paddingHorizontal: spacing.md,
-          paddingTop: spacing.md,
-          paddingBottom: insets.bottom + spacing.lg * 2,
-          rowGap: spacing.md - 2,
+          paddingTop: spacing.sm,
+          paddingBottom: insets.bottom + spacing.lg * 3,
+          gap: spacing.md,
         },
-        emptyText: {
-          textAlign: "center",
-          color: colors.textMuted,
-          fontSize: 16,
-          marginTop: 60,
+        dialogStyle: {
+          backgroundColor: colors.cardBackground,
+          borderRadius: radius.xl,
         },
-        summaryWrap: {
-          flexDirection: "row",
-          justifyContent: "space-between",
-          alignItems: "center",
-          backgroundColor: hexToRgba(colors.accent, 0.08),
-          paddingVertical: spacing.sm + 2,
-          paddingHorizontal: spacing.md,
-          borderRadius: radius.lg,
-          marginBottom: spacing.md - 2,
+        dialogTitle: {
+          color: colors.textPrimary,
+          fontWeight: "700",
         },
-        summaryLabel: { fontSize: 14, fontWeight: "600", color: colors.accent },
-        summaryVal: { fontSize: 18, fontWeight: "700", color: colors.textPrimary },
+        dialogText: {
+          color: colors.textSecondary,
+          lineHeight: 22,
+        },
       }),
     [colors, spacing, radius, insets.bottom]
   );
 
-  const renderExpense = ({ item }: ListRenderItemInfo<ExpenseItem>) => (
-    <ExpenseCard
-      data={item}
-      onEdit={(expId) => router.push(`/protected/expenses/${propertyId}?expenseId=${expId}`)}
-      onDelete={(expId) => askDelete(expId)} // ⬅️ wire delete
-    />
+  // Render item
+  const renderExpense = useCallback(
+    ({ item }: ListRenderItemInfo<ExpenseItem>) => (
+      <ExpenseCard
+        data={item}
+        onEdit={handleEditExpense}
+        onDelete={askDelete}
+      />
+    ),
+    [handleEditExpense, askDelete]
   );
 
-  const filterIsActive = !!filter?.dateRange?.from || !!filter?.dateRange?.to;
+  const keyExtractor = useCallback((item: ExpenseItem) => item.id, []);
+
+  // List header
+  const ListHeaderMemo = useMemo(
+    () => (
+      <ListHeader
+        totalExpenses={totalExpenses}
+        expenseCount={expenses.length}
+        thisMonthExpenses={thisMonthExpenses}
+        query={query}
+        onQueryChange={setQuery}
+        onFilterPress={() => setSheetOpen(true)}
+        filterActive={filterIsActive}
+      />
+    ),
+    [totalExpenses, expenses.length, thisMonthExpenses, query, filterIsActive]
+  );
+
+  // Empty state
+  const ListEmptyMemo = useMemo(
+    () => <EmptyState hasFilter={filterIsActive} />,
+    [filterIsActive]
+  );
 
   return (
     <>
       <FlatList
         data={expenses}
-        keyExtractor={(e) => e.id}
+        keyExtractor={keyExtractor}
         numColumns={columns}
-        columnWrapperStyle={columns > 1 ? s.columnGap : undefined}
+        key={`expenses-list-${columns}`}
+        columnWrapperStyle={columns > 1 ? styles.columnGap : undefined}
         renderItem={renderExpense}
-        contentContainerStyle={s.listContent}
+        contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
-        ListHeaderComponent={
-          <>
-            <View style={s.summaryWrap}>
-              <Text style={s.summaryLabel}>Today's Expense</Text>
-              <Text style={s.summaryVal}>₹{totalAll.toLocaleString("en-IN")}</Text>
-            </View>
-
-            <SearchBar
-              placeholder="Search expense"
-              onSearch={setQuery}
-              onFilter={() => setSheetOpen(true)}
-              filterActive={filterIsActive}
-            />
-          </>
-        }
-        ListEmptyComponent={<Text style={s.emptyText}>No expenses yet</Text>}
+        ListHeaderComponent={ListHeaderMemo}
+        ListEmptyComponent={ListEmptyMemo}
         refreshControl={
           <RefreshControl
             refreshing={!!refreshing}
             onRefresh={onRefresh}
             tintColor={colors.accent}
+            colors={[colors.accent]}
           />
         }
         removeClippedSubviews
         initialNumToRender={10}
-        windowSize={10}
+        maxToRenderPerBatch={10}
+        windowSize={11}
+        accessibilityLabel="Expenses list"
+        accessibilityRole="list"
       />
 
-      {/* FAB to add expense */}
-      <AddButton
-        onPress={() => {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          router.push(`/protected/expenses/${propertyId}`);
-        }}
-      />
+      {/* FAB */}
+      <AddButton onPress={handleAddExpense} />
 
+      {/* Filter Sheet */}
       <FilterSheet<ExpenseFilter>
         visible={sheetOpen}
         value={filter}
@@ -262,23 +694,28 @@ export default function ExpensesTab({ data, refreshing, onRefresh, propertyId }:
         onClose={() => setSheetOpen(false)}
         sections={sections}
         resetValue={emptyExpenseFilter}
+        title="Filter Expenses"
       />
 
-      {/* ⬇️ NEW: Delete confirmation dialog */}
+      {/* Delete Confirmation Dialog */}
       <Portal>
         <Dialog
           visible={confirmOpen}
           onDismiss={() => setConfirmOpen(false)}
-          style={{ backgroundColor: colors.cardBackground }}
+          style={styles.dialogStyle}
         >
-          <Dialog.Title style={{ color: colors.textPrimary }}>Delete expense?</Dialog.Title>
+          <Dialog.Title style={styles.dialogTitle}>Delete Expense?</Dialog.Title>
           <Dialog.Content>
-            <Text style={{ color: colors.textSecondary }}>
-              This will mark the expense as deleted.
+            <Text style={styles.dialogText}>
+              This expense will be permanently removed from your records. This
+              action cannot be undone.
             </Text>
           </Dialog.Content>
           <Dialog.Actions>
-            <Button onPress={() => setConfirmOpen(false)} textColor={colors.textPrimary}>
+            <Button
+              onPress={() => setConfirmOpen(false)}
+              textColor={colors.textSecondary}
+            >
               Cancel
             </Button>
             <Button
