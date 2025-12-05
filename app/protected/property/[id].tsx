@@ -670,6 +670,7 @@ export default function PropertyDetails() {
           metrics={collectionsMetrics}
           refreshing={!!paymentsQuery?.isFetching}
           onRefresh={paymentsQuery?.refetch}
+          propertyName={propName}
         />
       ) : activeTab === "Staff" ? (
         <StaffTab

@@ -45,4 +45,5 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   owner: "maheshguna",
   jsEngine: "hermes",
+  plugins: ["expo-asset"],
 });
