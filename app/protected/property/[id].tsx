@@ -609,6 +609,17 @@ export default function PropertyDetails() {
   const propName = str(currentProperty?.propertyName, "—");
   const propArea = str(currentProperty?.area, "—");
   const propCity = str(currentProperty?.city, "—");
+  
+  // Property address for receipts
+  const propAddress = useMemo(() => {
+    const parts = [
+      str(currentProperty?.address),
+      propArea !== "—" ? propArea : "",
+      propCity !== "—" ? propCity : "",
+      str(currentProperty?.pincode),
+    ].filter(Boolean);
+    return parts.join(", ");
+  }, [currentProperty, propArea, propCity]);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["left", "right"]}>
@@ -671,6 +682,7 @@ export default function PropertyDetails() {
           refreshing={!!paymentsQuery?.isFetching}
           onRefresh={paymentsQuery?.refetch}
           propertyName={propName}
+          propertyAddress={propAddress}
         />
       ) : activeTab === "Staff" ? (
         <StaffTab

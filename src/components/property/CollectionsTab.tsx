@@ -63,6 +63,8 @@ interface Props {
   onRefresh: () => void;
   /** Property name for receipt generation */
   propertyName?: string;
+  /** Property address for receipt generation */
+  propertyAddress?: string;
 }
 
 interface DateFilter {
@@ -899,6 +901,7 @@ const CollectionsTab: React.FC<Props> = ({
   refreshing,
   onRefresh,
   propertyName = "PGMS",
+  propertyAddress = "",
 }) => {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -961,11 +964,15 @@ const CollectionsTab: React.FC<Props> = ({
         setDownloadingId(itemId);
 
         // Create receipt data from collection item
-        const receiptData = createReceiptDataFromCollection(item, propertyName);
+        const receiptData = createReceiptDataFromCollection(
+          item,
+          propertyName,
+          propertyAddress
+        );
 
         // Generate and share the receipt PDF
         const result = await generatePaymentReceipt(receiptData, {
-          fileName: `Payment_Receipt_${itemId}`,
+          fileName: "Payment_Receipt",
           shareAfterGenerate: true,
         });
 
@@ -988,7 +995,7 @@ const CollectionsTab: React.FC<Props> = ({
         setDownloadingId(null);
       }
     },
-    [downloadingId, propertyName]
+    [downloadingId, propertyName, propertyAddress]
   );
 
   const handleFilterOpen = useCallback(() => {
