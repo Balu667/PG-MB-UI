@@ -395,11 +395,6 @@ const StaffCard: React.FC<StaffCardProps> = React.memo(
                   >
                     {item.name}
                   </Text>
-                  <View
-                    style={styles.statusDot}
-                    accessible
-                    accessibilityLabel={isActive ? "Active status" : "Inactive status"}
-                  />
                 </View>
 
                 <Text

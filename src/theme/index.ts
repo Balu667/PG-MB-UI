@@ -79,6 +79,7 @@ export const lightTheme = {
     fontSizeLg: 22,
     weightLight: "300",
     weightNormal: "400",
+    weightMedium: "500",
     weightBold: "700",
   },
 
