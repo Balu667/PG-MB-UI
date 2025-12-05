@@ -15,31 +15,22 @@ export default function ProtectedLayout() {
     "/protected/advancedBooking",
     "/protected/tenant", // hide header for Add/Edit Tenant screen
     "/protected/employees", // hide header for Add/Edit Employee screen
+    "/protected/expenses", // hide header for Add/Edit Expense screen
   ]);
 
   const isPropertyDetail = pathname.startsWith("/protected/property/");
-  const isExpenseScreen = pathname.startsWith("/protected/expenses/");
 
   const hideHeader = [...HEADERLESS].some((p) => pathname.startsWith(p));
 
-  const expensePropertyId = isExpenseScreen ? pathname.split("/")[3] : null;
-
   const handleBack = () => {
-    if (isExpenseScreen && expensePropertyId) {
-      router.replace({
-        pathname: `/protected/property/${expensePropertyId}`,
-        params: { tab: "Expenses" },
-      });
-    } else {
-      router.push("/protected/(tabs)/Properties");
-    }
+    router.push("/protected/(tabs)/Properties");
   };
 
   return (
     <PropertyProvider>
       {!hideHeader && (
         <AppHeader
-          showBack={isPropertyDetail || isExpenseScreen}
+          showBack={isPropertyDetail}
           onBackPress={handleBack}
         />
       )}

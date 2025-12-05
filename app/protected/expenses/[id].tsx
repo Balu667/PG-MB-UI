@@ -1,7 +1,9 @@
-/* eslint-disable no-console */
+// app/protected/expenses/[id].tsx
+// Add/Edit Expense Screen - Premium design with proper validation
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import {
   Alert,
+  BackHandler,
   Image,
   KeyboardAvoidingView,
   Platform,
@@ -10,15 +12,28 @@ import {
   View,
   Keyboard,
   TouchableWithoutFeedback,
+  Text,
+  StyleSheet,
+  I18nManager,
+  Modal,
+  useWindowDimensions,
 } from "react-native";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { Button, Text as PaperText, TextInput, Divider, Portal, Dialog } from "react-native-paper";
+import {
+  Button,
+  Text as PaperText,
+  TextInput,
+  Divider,
+  Portal,
+  Dialog,
+} from "react-native-paper";
 import * as ImagePicker from "expo-image-picker";
-import DateTimePicker from "@react-native-community/datetimepicker";
+import DateTimePicker, { DateTimePickerEvent } from "@react-native-community/datetimepicker";
 import * as Haptics from "expo-haptics";
 import { useQueryClient } from "@tanstack/react-query";
 import Constants from "expo-constants";
-import MaterialIcons from "@expo/vector-icons/MaterialIcons";
+import { MaterialIcons } from "@expo/vector-icons";
 import { useSelector } from "react-redux";
 
 import { useTheme } from "@/src/theme/ThemeContext";
@@ -29,16 +44,26 @@ import {
   useUpdateDailyExpenses,
   useDeleteDailyExpensesImage,
 } from "@/src/hooks/dailyExpenses";
+import { useProperty } from "@/src/context/PropertyContext";
 
-// ---------------- Types ----------------
-type PhotoItem = { uri: string; filePath?: string; isNew?: boolean };
-type FormValues = {
-  category?: string;
-  amount: string; // numeric string
+/* ─────────────────────────────────────────────────────────────────────────────
+   TYPES & CONSTANTS
+───────────────────────────────────────────────────────────────────────────── */
+
+interface PhotoItem {
+  uri: string;
+  filePath?: string;
+  isNew: boolean;
+  fileName?: string;
+}
+
+interface FormValues {
+  category: string;
+  amount: string;
   date: Date;
-  photos: PhotoItem[]; // <== now objects, not strings
-  description?: string; // optional (API accepts if present)
-};
+  photos: PhotoItem[];
+  description: string;
+}
 
 const CATEGORY_OPTIONS = [
   "Building Rent",
@@ -49,50 +74,71 @@ const CATEGORY_OPTIONS = [
   "Other",
 ] as const;
 
-const ALLOWED_EXT = new Set(["jpg", "jpeg", "png"]);
+// Allowed image extensions (including Apple formats)
+const ALLOWED_EXT = new Set(["jpg", "jpeg", "png", "heic", "heif", "webp"]);
 
-// ---------------- File base ----------------
+// File base URL for images
+const getExpoFileUrl = (): string => {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const extra = (Constants as any)?.expoConfig?.extra;
+    return extra?.fileUrl || "";
+  } catch {
+    return "";
+  }
+};
+
 const FILE_BASES = [
   (process.env.FILE_URL || "").trim(),
-  (Constants?.expoConfig as any)?.extra?.fileUrl || "",
+  getExpoFileUrl(),
   (process.env.EXPO_PUBLIC_IMAGE_BASE_URL || "").trim(),
   (process.env.EXPO_PUBLIC_FILE_BASE_URL || "").trim(),
 ]
   .filter(Boolean)
   .map((b) => String(b).replace(/\/+$/, ""));
 
-function toAbsoluteFileUrl(p?: string) {
+function toAbsoluteFileUrl(p?: string): string {
   if (!p) return "";
   if (/^https?:\/\//i.test(p)) return p;
   return FILE_BASES.length ? `${FILE_BASES[0]}/${p.replace(/^\/+/, "")}` : p;
 }
 
-const toDDMMYYYY = (d: Date) =>
-  d.toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" });
+const formatDisplayDate = (d: Date): string =>
+  d.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
 
-// Small, pure subcomponents (memoized) to avoid re-creations
-const Title = React.memo(({ children }: { children: React.ReactNode }) => {
-  const { colors, spacing } = useTheme();
-  return (
-    <PaperText
-      style={{
-        color: colors.textSecondary,
-        fontWeight: "700",
-        marginBottom: 8,
-        letterSpacing: 0.2,
-        marginTop: spacing.lg,
-      }}
-    >
-      {children}
-    </PaperText>
-  );
-});
+// Format number to Indian currency format (2,34,567)
+const formatIndianNumber = (num: string): string => {
+  const cleaned = num.replace(/[^0-9]/g, "");
+  if (!cleaned) return "";
+  
+  const number = parseInt(cleaned, 10);
+  if (isNaN(number)) return cleaned;
+  
+  return number.toLocaleString("en-IN");
+};
+
+// Parse formatted number back to raw digits
+const parseFormattedNumber = (formatted: string): string => {
+  return formatted.replace(/[^0-9]/g, "");
+};
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   LABELED COMPONENT
+───────────────────────────────────────────────────────────────────────────── */
 
 const Labeled = React.memo(({ label, children }: { label: string; children: React.ReactNode }) => {
   const { colors } = useTheme();
   return (
     <View style={{ marginTop: 8, marginBottom: 10 }}>
-      <PaperText style={{ color: colors.textPrimary, fontWeight: "600", marginBottom: 6 }}>
+      <PaperText
+        style={{ color: colors.textPrimary, fontWeight: "600", marginBottom: 6 }}
+        accessible
+        accessibilityRole="text"
+      >
         {label}
       </PaperText>
       {children}
@@ -100,22 +146,27 @@ const Labeled = React.memo(({ label, children }: { label: string; children: Reac
   );
 });
 
-// Dropdown (memoized)
+Labeled.displayName = "Labeled";
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   SHEET SELECT COMPONENT
+───────────────────────────────────────────────────────────────────────────── */
+
+interface SheetSelectProps {
+  value?: string;
+  options: readonly string[];
+  placeholder: string;
+  onChange: (v: string) => void;
+  disabled?: boolean;
+}
+
 const SheetSelect = React.memo(function SheetSelect({
   value,
   options,
   placeholder,
   onChange,
   disabled,
-  loading,
-}: {
-  value?: string;
-  options: string[];
-  placeholder: string;
-  onChange: (v: string) => void;
-  disabled?: boolean;
-  loading?: boolean;
-}) {
+}: SheetSelectProps) {
   const { colors, radius, spacing, typography } = useTheme();
   const [open, setOpen] = useState(false);
 
@@ -135,24 +186,31 @@ const SheetSelect = React.memo(function SheetSelect({
           paddingVertical: 12,
           paddingHorizontal: 12,
           opacity: disabled ? 0.6 : 1,
-          minHeight: 44,
+          minHeight: 55,
           flexDirection: "row",
           alignItems: "center",
           justifyContent: "space-between",
         }}
         accessibilityRole="button"
         accessibilityLabel={placeholder}
+        accessibilityHint="Opens selection menu"
+        accessible
       >
         <PaperText
           style={{
             color: value ? colors.textPrimary : colors.textMuted,
             fontSize: typography.fontSizeMd,
+            flex: 1,
           }}
           numberOfLines={1}
         >
-          {value || (loading ? "Loading..." : placeholder)}
+          {value || placeholder}
         </PaperText>
-        <MaterialIcons name="expand-more" size={20} color={colors.textSecondary} />
+        <MaterialIcons
+          name={open ? "keyboard-arrow-up" : "keyboard-arrow-down"}
+          size={20}
+          color={colors.textSecondary}
+        />
       </Pressable>
 
       <Portal>
@@ -163,28 +221,27 @@ const SheetSelect = React.memo(function SheetSelect({
             backgroundColor: colors.cardBackground,
             borderTopLeftRadius: 18,
             borderTopRightRadius: 18,
-            marginTop: "auto",
           }}
         >
-          <Dialog.Title style={{ color: colors.textPrimary, marginBottom: -6 }}>
+          <Dialog.Title
+            style={{
+              color: colors.textPrimary,
+              marginBottom: 6,
+              fontWeight: typography.weightMedium,
+              fontSize: typography.fontSizeMd,
+            }}
+          >
             {placeholder}
           </Dialog.Title>
           <Dialog.ScrollArea>
             <ScrollView
               style={{ maxHeight: 360 }}
-              contentContainerStyle={{ paddingHorizontal: spacing.md, paddingBottom: spacing.md }}
+              contentContainerStyle={{ padding: spacing.sm }}
               keyboardShouldPersistTaps="always"
             >
-              {loading ? (
-                <PaperText style={{ color: colors.textMuted, paddingVertical: 8 }}>
-                  Loading...
-                </PaperText>
-              ) : options.length === 0 ? (
-                <PaperText style={{ color: colors.textMuted, paddingVertical: 8 }}>
-                  No options
-                </PaperText>
-              ) : (
-                options.map((opt) => (
+              {options.map((opt) => {
+                const isSelected = opt === value;
+                return (
                   <Pressable
                     key={opt}
                     onPress={() => {
@@ -193,19 +250,34 @@ const SheetSelect = React.memo(function SheetSelect({
                       setOpen(false);
                     }}
                     style={{
-                      paddingVertical: 12,
+                      paddingVertical: 14,
                       borderBottomWidth: 1,
                       borderColor: hexToRgba(colors.textSecondary, 0.12),
-                      minHeight: 44,
+                      minHeight: 48,
                       justifyContent: "center",
+                      backgroundColor: isSelected
+                        ? hexToRgba(colors.accent, 0.1)
+                        : "transparent",
+                      borderRadius: isSelected ? 10 : 0,
+                      paddingHorizontal: 8,
+                      marginBottom: 4,
                     }}
                     accessibilityRole="button"
                     accessibilityLabel={opt}
+                    accessibilityState={{ selected: isSelected }}
+                    accessible
                   >
-                    <PaperText style={{ color: colors.textPrimary }}>{opt}</PaperText>
+                    <PaperText
+                      style={{
+                        color: colors.textPrimary,
+                        fontWeight: isSelected ? "700" : "400",
+                      }}
+                    >
+                      {opt}
+                    </PaperText>
                   </Pressable>
-                ))
-              )}
+                );
+              })}
             </ScrollView>
           </Dialog.ScrollArea>
           <Dialog.Actions>
@@ -219,269 +291,409 @@ const SheetSelect = React.memo(function SheetSelect({
   );
 });
 
-// ---------------- Screen ----------------
+/* ─────────────────────────────────────────────────────────────────────────────
+   MAIN SCREEN COMPONENT
+───────────────────────────────────────────────────────────────────────────── */
+
 export default function AddOrEditExpense() {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
   const { colors, spacing, radius, typography } = useTheme();
 
-  // optional: profile for createdBy (if available in your RN store)
-  const profileData = useSelector((state: any) => state?.profileDetails?.profileData);
-
+  // Params
   const params = useLocalSearchParams<{ id: string; expenseId?: string }>();
-  const propertyId = (params?.id ?? "") as string;
-  const expenseId = (params?.expenseId ?? "") as string;
+  const propertyId = String(params?.id ?? "");
+  const expenseId = String(params?.expenseId ?? "");
   const isEditMode = !!expenseId;
 
-  // read list only to prefill edit mode
+  // Profile data
+  const profileData = useSelector(
+    (state: { profileDetails?: { profileData?: Record<string, unknown> } }) =>
+      state?.profileDetails?.profileData
+  );
+  const createdBy = String(
+    (profileData as Record<string, unknown>)?.userId ||
+    (profileData as Record<string, unknown>)?._id ||
+    ""
+  );
+
+  // Properties from context for subtitle
+  const { properties } = useProperty();
+  const currentPropertyName = useMemo(() => {
+    const prop = properties.find((p) => String(p._id) === propertyId);
+    return prop?.propertyName ?? "";
+  }, [properties, propertyId]);
+
+  // Fetch expense list to prefill in edit mode
   const { data: listResp } = useGetDailyExpensesList(propertyId);
   const existing = useMemo(() => {
-    const arr: any[] = Array.isArray(listResp) ? listResp : [];
-    return arr.find((x) => String(x?._id) === String(expenseId));
+    const arr: Record<string, unknown>[] = Array.isArray(listResp) ? listResp : [];
+    return arr.find((x) => String(x?._id) === expenseId);
   }, [listResp, expenseId]);
 
-  const [values, setValues] = useState<FormValues>({
-    category: undefined,
-    amount: "",
-    date: new Date(),
-    photos: [],
-    description: "",
-  });
+  // Form state
+  const [category, setCategory] = useState("");
+  const [amount, setAmount] = useState("");
+  const [date, setDate] = useState<Date>(() => new Date());
+  const [description, setDescription] = useState("");
+  const [photos, setPhotos] = useState<PhotoItem[]>([]);
 
-  // --- mutations
-  const insertExpense = useInsertDailyExpenses(() => {
-    navigateBackToExpenses();
-  });
-  const updateExpense = useUpdateDailyExpenses(() => {
-    navigateBackToExpenses();
-  });
+  // Track initial values for dirty check
+  const initialValues = useRef<FormValues | null>(null);
+
+  // Date picker state
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [tempDate, setTempDate] = useState<Date>(() => new Date());
+
+  // Mutations
+  const insertExpense = useInsertDailyExpenses(() => {});
+  const updateExpense = useUpdateDailyExpenses(() => {});
   const deleteImage = useDeleteDailyExpensesImage(() => {});
 
-  // prefill in edit mode safely
+  // Prefill in edit mode
   const prefilled = useRef(false);
   useEffect(() => {
-    if (!isEditMode || prefilled.current) return;
-    if (!existing || typeof existing !== "object") return;
+    if (!isEditMode || prefilled.current || !existing) return;
 
-    const d = existing?.date ? new Date(existing.date) : new Date();
+    const expCategory = String(existing?.category ?? "");
+    const expAmount = String(existing?.amount ?? "");
+    const expDate = existing?.date ? new Date(String(existing.date)) : new Date();
+    const expDesc = String(existing?.description ?? "");
 
-    const imgs: PhotoItem[] = Array.isArray(existing?.images)
-      ? (existing.images
-          .map((img: any) => {
-            const fp =
-              typeof img === "string" ? img : typeof img?.filePath === "string" ? img.filePath : "";
-            const uri = toAbsoluteFileUrl(fp);
-            return fp ? ({ uri, filePath: fp, isNew: false } as PhotoItem) : null;
-          })
-          .filter(Boolean) as PhotoItem[])
-      : [];
+    // Parse images - handle nested arrays and flat arrays
+    const rawImages = existing?.images;
+    const parsedPhotos: PhotoItem[] = [];
 
-    setValues({
-      category: typeof existing?.category === "string" ? existing.category : undefined,
-      amount:
-        typeof existing?.amount === "number"
-          ? String(existing.amount)
-          : String(existing?.amount ?? ""),
-      date: isNaN(d.getTime()) ? new Date() : d,
-      photos: imgs,
-      description: existing?.description ? String(existing.description) : "",
-    });
+    if (Array.isArray(rawImages)) {
+      rawImages.forEach((img) => {
+        // Handle nested array structure: [[{fileName, filePath}]]
+        if (Array.isArray(img)) {
+          img.forEach((nestedImg) => {
+            if (nestedImg && typeof nestedImg === "object" && nestedImg.filePath) {
+              parsedPhotos.push({
+                uri: toAbsoluteFileUrl(String(nestedImg.filePath)),
+                filePath: String(nestedImg.filePath),
+                fileName: String(nestedImg.fileName ?? ""),
+                isNew: false,
+              });
+            }
+          });
+        } else if (img && typeof img === "object") {
+          // Handle flat array structure: [{fileName, filePath}]
+          const imgObj = img as { filePath?: string; fileName?: string };
+          if (imgObj.filePath) {
+            parsedPhotos.push({
+              uri: toAbsoluteFileUrl(String(imgObj.filePath)),
+              filePath: String(imgObj.filePath),
+              fileName: String(imgObj.fileName ?? ""),
+              isNew: false,
+            });
+          }
+        }
+      });
+    }
+
+    setCategory(expCategory);
+    setAmount(expAmount);
+    setDate(isNaN(expDate.getTime()) ? new Date() : expDate);
+    setDescription(expDesc);
+    setPhotos(parsedPhotos);
+
+    // Store initial values
+    initialValues.current = {
+      category: expCategory,
+      amount: expAmount,
+      date: isNaN(expDate.getTime()) ? new Date() : expDate,
+      description: expDesc,
+      photos: parsedPhotos,
+    };
 
     prefilled.current = true;
   }, [isEditMode, existing]);
 
-  // Date dialog state
-  const [dateOpen, setDateOpen] = useState(false);
-  const [tempDate, setTempDate] = useState<Date>(values.date);
+  // Set initial values for add mode
+  useEffect(() => {
+    if (!isEditMode && !initialValues.current) {
+      const now = new Date();
+      initialValues.current = {
+        category: "",
+        amount: "",
+        date: now,
+        description: "",
+        photos: [],
+      };
+    }
+  }, [isEditMode]);
 
-  // styles
-  const s = useMemo(
-    () => ({
-      container: { flex: 1, backgroundColor: colors.background },
-      header: {
-        paddingHorizontal: spacing.md,
-        paddingBottom: spacing.sm,
-        backgroundColor: colors.background,
-        borderBottomWidth: 1,
-        borderColor: hexToRgba(colors.textSecondary, 0.12),
-      },
-      headerTitle: {
-        color: colors.textPrimary,
-        fontSize: typography.fontSizeLg,
-        fontWeight: "700" as const,
-      },
-      body: { flex: 1, paddingHorizontal: spacing.md, paddingTop: spacing.md },
-      input: { backgroundColor: colors.cardSurface } as const,
-      photosGrid: {
-        flexDirection: "row" as const,
-        flexWrap: "wrap" as const,
-        gap: 8,
-        marginTop: spacing.sm,
-      },
-      thumbWrap: {
-        width: 100,
-        height: 100,
-        borderRadius: radius.md,
-        overflow: "hidden" as const,
-        borderWidth: 1,
-        borderColor: hexToRgba(colors.textSecondary, 0.18),
-      },
-      removeBadge: {
-        position: "absolute" as const,
-        right: 4,
-        top: 4,
-        backgroundColor: hexToRgba(colors.error, 0.9),
-        borderRadius: radius.full,
-        paddingHorizontal: 6,
-        paddingVertical: 2,
-      },
-      footerRow: {
-        flexDirection: "row" as const,
-        gap: spacing.md,
-        marginTop: spacing.lg,
-        paddingBottom: Platform.OS === "android" ? 72 : 36,
-      },
-      secondaryBtn: {
-        flex: 1,
-        borderRadius: radius.lg,
-        backgroundColor: colors.surface,
-        borderWidth: 1,
-        borderColor: colors.borderColor,
-        minHeight: 44,
-        justifyContent: "center" as const,
-      },
-      primaryBtn: { flex: 1, borderRadius: radius.lg, minHeight: 44, justifyContent: "center" },
-      dateBtn: {
-        borderWidth: 1,
-        borderColor: colors.borderColor,
-        borderRadius: radius.lg,
-        backgroundColor: colors.cardSurface,
-        paddingVertical: 12,
-        paddingHorizontal: 12,
-        minHeight: 44,
-        justifyContent: "center" as const,
-        flexDirection: "row" as const,
-        alignItems: "center" as const,
-        gap: 10,
-      },
-    }),
-    [colors, spacing, radius, typography]
-  );
+  // Check if form has unsaved changes
+  const hasUnsavedChanges = useCallback((): boolean => {
+    if (!initialValues.current) {
+      return !!(category || amount || description || photos.length > 0);
+    }
 
-  const headerTitle = isEditMode ? "Edit Expense" : "Add Expense";
-  const inputContent = { minHeight: 44, paddingVertical: 8 };
-
-  // --- IMPORTANT: pure check (no mutation of Date object)
-  const hasUnsavedChanges = useMemo(() => {
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-    const valueStart = new Date(values.date.getTime());
-    valueStart.setHours(0, 0, 0, 0);
-    const dateChanged = valueStart.getTime() !== todayStart.getTime();
+    const initial = initialValues.current;
+    const dateChanged =
+      date.toISOString().split("T")[0] !== initial.date.toISOString().split("T")[0];
 
     return (
-      !!values.category ||
-      !!values.amount ||
-      !!values.description ||
-      (values.photos?.length ?? 0) > 0 ||
-      dateChanged
+      category !== initial.category ||
+      amount !== initial.amount ||
+      description !== initial.description ||
+      dateChanged ||
+      photos.length !== initial.photos.length
     );
-  }, [values.category, values.amount, values.description, values.photos, values.date]);
+  }, [category, amount, description, date, photos]);
 
-  const navigateBackToExpenses = () => {
+  // Navigation back to ExpensesTab with refresh
+  const navigateBackToExpenses = useCallback(() => {
     try {
       queryClient.invalidateQueries({ queryKey: ["expensesList", propertyId] });
-    } catch {}
+    } catch {
+      // Ignore
+    }
     router.replace({
       pathname: `/protected/property/${propertyId}`,
       params: { tab: "Expenses", refresh: String(Date.now()) },
     });
-  };
+  }, [queryClient, router, propertyId]);
 
+  // Show unsaved changes alert
+  const showUnsavedChangesAlert = useCallback(
+    (onConfirm: () => void) => {
+      if (hasUnsavedChanges()) {
+        Alert.alert(
+          "Unsaved Changes",
+          "You have unsaved changes. They will not be saved. Are you sure you want to leave?",
+          [
+            { text: "No", style: "cancel" },
+            { text: "Yes", style: "destructive", onPress: onConfirm },
+          ],
+          { cancelable: true }
+        );
+      } else {
+        onConfirm();
+      }
+    },
+    [hasUnsavedChanges]
+  );
+
+  // Handle back button
+  const handleBack = useCallback(() => {
+    showUnsavedChangesAlert(navigateBackToExpenses);
+  }, [showUnsavedChangesAlert, navigateBackToExpenses]);
+
+  // Handle cancel button
   const onCancel = useCallback(() => {
-    if (hasUnsavedChanges) {
-      Alert.alert("Discard changes?", "Your unsaved changes will be lost.", [
-        { text: "No", style: "cancel" },
-        { text: "Discard", style: "destructive", onPress: () => navigateBackToExpenses() },
-      ]);
-    } else {
-      navigateBackToExpenses();
-    }
-  }, [hasUnsavedChanges]);
+    showUnsavedChangesAlert(navigateBackToExpenses);
+  }, [showUnsavedChangesAlert, navigateBackToExpenses]);
 
-  const validateNow = useCallback(() => {
-    const errs: string[] = [];
-    if (!values.category) errs.push("Expense category is required.");
-    const amtNum = Number(values.amount || 0);
-    if (!values.amount || isNaN(amtNum) || amtNum <= 0) errs.push("Enter a valid amount.");
-    if (!(values.date instanceof Date) || isNaN(values.date.getTime()))
-      errs.push("Pick a valid date.");
-    return errs;
-  }, [values]);
+  // Android hardware back button
+  useEffect(() => {
+    const backHandler = BackHandler.addEventListener("hardwareBackPress", () => {
+      handleBack();
+      return true;
+    });
+    return () => backHandler.remove();
+  }, [handleBack]);
 
-  // stable handler: Amount input (prevents rebinds)
-  const onAmountChange = useCallback((t: string) => {
-    setValues((p) => ({ ...p, amount: t.replace(/[^0-9]/g, "").slice(0, 9) }));
+  // Input handlers - store raw digits but display formatted
+  const onAmountChange = useCallback((text: string) => {
+    const digitsOnly = parseFormattedNumber(text).slice(0, 9);
+    setAmount(digitsOnly);
   }, []);
 
-  // submit with API integration
+  // Formatted amount for display
+  const displayAmount = useMemo(() => {
+    return amount ? formatIndianNumber(amount) : "";
+  }, [amount]);
+
+  // Validation
+  const validate = useCallback((): string[] => {
+    const errs: string[] = [];
+
+    // Category validation
+    if (!category || !category.trim()) {
+      errs.push("• Expense category is required.");
+    }
+
+    // Amount validation
+    const amtNum = Number(amount || 0);
+    if (!amount) {
+      errs.push("• Amount is required.");
+    } else if (isNaN(amtNum) || amtNum <= 0) {
+      errs.push("• Please enter a valid amount greater than 0.");
+    } else if (amtNum > 99999999) {
+      errs.push("• Amount cannot exceed ₹9,99,99,999.");
+    }
+
+    // Date validation
+    if (!date) {
+      errs.push("• Please select a date.");
+    } else if (!(date instanceof Date) || isNaN(date.getTime())) {
+      errs.push("• Please select a valid date.");
+    }
+
+    // Description validation (optional but check length if provided)
+    if (description && description.trim().length > 500) {
+      errs.push("• Description cannot exceed 500 characters.");
+    }
+
+    return errs;
+  }, [category, amount, date, description]);
+
+  // Submit handler
   const onSubmit = useCallback(async () => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    const errs = validateNow();
+    const errs = validate();
     if (errs.length) {
-      Alert.alert("Please fix", errs.join("\n"));
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Alert.alert(
+        "Missing Required Fields",
+        errs.join("\n"),
+        [{ text: "OK", style: "default" }],
+        { cancelable: true }
+      );
       return;
     }
 
-    const fd = new FormData();
-    if (values.category) fd.append("category", values.category);
-    fd.append("amount", String(Number(values.amount)));
-    fd.append("date", values.date.toISOString());
-    if (values.description) fd.append("description", values.description);
-    fd.append("propertyId", propertyId);
-    if (profileData?.userId) fd.append("createdBy", String(profileData.userId));
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
-    // append only new images
-    for (let i = 0; i < values.photos.length; i++) {
-      const p = values.photos[i];
-      if (!p?.isNew) continue;
-      const uri = p.uri;
-      if (!uri) continue;
-      const name = (uri.split("/").pop() || `bill_${i}.jpg`).split("?")[0];
-      const ext = (name.split(".").pop() || "jpg").toLowerCase();
-      const type =
-        ext === "png" ? "image/png" : ext === "jpg" || ext === "jpeg" ? "image/jpeg" : "image/jpeg";
+    try {
+      const fd = new FormData();
+      
+      // Append text fields - ensure proper string encoding
+      fd.append("category", category.trim());
+      fd.append("amount", String(parseInt(amount, 10) || 0));
+      fd.append("date", date.toISOString());
+      fd.append("description", description.trim() || "");
+      fd.append("propertyId", propertyId);
+      fd.append("createdBy", createdBy || "");
 
-      if (Platform.OS === "web") {
-        const resp = await fetch(uri);
-        const blob = await resp.blob();
-        // @ts-ignore - RN web supports File in this environment
-        const file = new File([blob], name, { type });
-        // server expects `images` key (matches web)
-        // @ts-ignore
-        fd.append("images", file);
-      } else {
-        // @ts-ignore
-        fd.append("images", { uri, name, type });
+      // Append only NEW images
+      const newPhotos = photos.filter((p) => p.isNew && p.uri);
+      
+      for (let i = 0; i < newPhotos.length; i++) {
+        const photo = newPhotos[i];
+        let imageUri = photo.uri;
+
+        // Extract filename from URI or use provided fileName
+        let fileName = photo.fileName || "";
+        if (!fileName) {
+          const uriParts = imageUri.split("/");
+          fileName = uriParts[uriParts.length - 1] || `bill_${Date.now()}_${i}.jpg`;
+        }
+        // Remove query params from filename
+        fileName = fileName.split("?")[0];
+        // Clean filename - remove special characters that might cause issues
+        fileName = fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
+        // Ensure filename has extension
+        if (!fileName.includes(".")) {
+          fileName = `${fileName}.jpg`;
+        }
+        
+        // Determine MIME type from extension
+        const ext = (fileName.split(".").pop() || "jpg").toLowerCase();
+        let mimeType = "image/jpeg";
+        if (ext === "png") {
+          mimeType = "image/png";
+        } else if (ext === "gif") {
+          mimeType = "image/gif";
+        } else if (ext === "heic" || ext === "heif") {
+          mimeType = "image/heic";
+        } else if (ext === "webp") {
+          mimeType = "image/webp";
+        }
+
+        if (Platform.OS === "web") {
+          try {
+            const resp = await fetch(imageUri);
+            const blob = await resp.blob();
+            const file = new File([blob], fileName, { type: mimeType });
+            // @ts-ignore
+            fd.append("images", file);
+          } catch {
+            // Skip failed image silently
+          }
+        } else if (Platform.OS === "android") {
+          // Android-specific handling
+          // Ensure URI has proper format
+          if (!imageUri.startsWith("file://") && !imageUri.startsWith("content://")) {
+            imageUri = `file://${imageUri}`;
+          }
+          // @ts-ignore - React Native FormData accepts this format
+          fd.append("images", {
+            uri: imageUri,
+            name: fileName,
+            type: mimeType,
+          });
+        } else {
+          // iOS handling
+          // @ts-ignore - React Native FormData accepts this format
+          fd.append("images", {
+            uri: imageUri,
+            name: fileName,
+            type: mimeType,
+          });
+        }
       }
-    }
 
-    if (isEditMode) {
-      updateExpense.mutate({ formData: fd, expenseId });
-    } else {
-      insertExpense.mutate(fd);
+      if (isEditMode && expenseId) {
+        updateExpense.mutate(
+          { formData: fd, expenseId },
+          {
+            onSuccess: () => {
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              navigateBackToExpenses();
+            },
+            onError: () => {
+              Alert.alert(
+                "Update Failed",
+                "Could not update expense. Please check your connection and try again.",
+                [{ text: "OK" }]
+              );
+            },
+          }
+        );
+      } else {
+        insertExpense.mutate(fd, {
+          onSuccess: () => {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            navigateBackToExpenses();
+          },
+          onError: () => {
+            Alert.alert(
+              "Add Failed",
+              "Could not add expense. Please check your connection and try again.",
+              [{ text: "OK" }]
+            );
+          },
+        });
+      }
+    } catch {
+      Alert.alert(
+        "Error",
+        "Something went wrong. Please try again.",
+        [{ text: "OK" }]
+      );
     }
   }, [
-    validateNow,
-    values,
-    isEditMode,
+    validate,
+    category,
+    amount,
+    date,
+    description,
     propertyId,
-    profileData,
+    createdBy,
+    photos,
+    isEditMode,
+    expenseId,
     insertExpense,
     updateExpense,
-    expenseId,
+    navigateBackToExpenses,
   ]);
 
+  // Pick photos
   const pickPhotos = useCallback(async () => {
     try {
       if (Platform.OS !== "web") {
@@ -496,257 +708,570 @@ export default function AddOrEditExpense() {
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsMultipleSelection: true,
         selectionLimit: 0,
-        quality: 0.9,
+        quality: 0.85,
+        exif: false,
       });
 
-      if (!res?.canceled) {
-        const filtered = (res.assets || [])
-          .map((a) => a?.uri)
-          .filter(Boolean)
-          .filter((uri) => {
-            const name = (uri!.split("/").pop() || "").split("?")[0].toLowerCase();
-            const ext = name.split(".").pop() || "";
-            return ALLOWED_EXT.has(ext);
-          }) as string[];
+      if (!res.canceled && res.assets?.length) {
+        // Filter valid extensions
+        const validAssets = res.assets.filter((a) => {
+          if (!a.uri) return false;
+          const ext = (a.uri.split(".").pop() || "").toLowerCase().split("?")[0];
+          // Also check mimeType if available
+          if (a.mimeType) {
+            const validMimes = ["image/jpeg", "image/png", "image/heic", "image/heif", "image/webp", "image/gif"];
+            if (validMimes.some((m) => a.mimeType?.includes(m))) return true;
+          }
+          return ALLOWED_EXT.has(ext);
+        });
 
-        if ((filtered?.length ?? 0) < (res.assets?.length ?? 0)) {
-          Alert.alert("Some files skipped", "Only jpg, jpeg, png are allowed.");
+        if (validAssets.length < res.assets.length) {
+          Alert.alert("Some files skipped", "Only JPG, PNG, HEIC, and WEBP images are allowed.");
         }
 
-        setValues((p) => ({
-          ...p,
-          photos: [
-            ...(p.photos || []),
-            ...(filtered || []).map((u) => ({ uri: u, isNew: true } as PhotoItem)),
-          ],
-        }));
+        const newPhotos: PhotoItem[] = validAssets.map((a) => {
+          let fileName = a.fileName || a.uri.split("/").pop() || `image_${Date.now()}.jpg`;
+          // Remove query params
+          fileName = fileName.split("?")[0];
+          
+          return {
+            uri: a.uri,
+            isNew: true,
+            fileName,
+          };
+        });
+
+        setPhotos((prev) => [...prev, ...newPhotos]);
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
-    } catch (e) {
-      console.log("Image picker error:", e);
-      Alert.alert("Could not open gallery", "Please try again.");
+    } catch {
+      Alert.alert("Error", "Could not open gallery. Please try again.");
     }
   }, []);
 
+  // Remove photo
   const removePhoto = useCallback(
-    (item: PhotoItem) => {
-      // existing server image -> hit delete endpoint (only in edit mode)
-      if (isEditMode && item.filePath && expenseId) {
+    (photo: PhotoItem, index: number) => {
+      Haptics.selectionAsync();
+
+      // If existing server image in edit mode, call delete API
+      if (isEditMode && photo.filePath && expenseId && !photo.isNew) {
         deleteImage.mutate(
-          { payload: { filePath: item.filePath }, expenseId },
+          { payload: { filePath: photo.filePath }, expenseId },
           {
             onSuccess: () => {
-              setValues((p) => ({
-                ...p,
-                photos: (p.photos || []).filter((x) => x.uri !== item.uri),
-              }));
+              setPhotos((prev) => prev.filter((_, i) => i !== index));
+            },
+            onError: () => {
+              Alert.alert("Error", "Failed to delete image. Please try again.");
             },
           }
         );
         return;
       }
-      // local image -> just remove
-      setValues((p) => ({ ...p, photos: (p.photos || []).filter((x) => x.uri !== item.uri) }));
-      Haptics.selectionAsync();
+
+      // Local image - just remove from state
+      setPhotos((prev) => prev.filter((_, i) => i !== index));
     },
-    [deleteImage, isEditMode, expenseId]
+    [isEditMode, expenseId, deleteImage]
   );
 
+  // Date picker handlers
+  const openDatePicker = useCallback(() => {
+    // Ensure we have a valid date before opening
+    const validDate = date instanceof Date && !isNaN(date.getTime()) ? date : new Date();
+    setTempDate(new Date(validDate.getTime()));
+    setShowDatePicker(true);
+  }, [date]);
+
+  const handleDateChange = useCallback(
+    (event: DateTimePickerEvent, selectedDate?: Date) => {
+      if (Platform.OS === "android") {
+        // Android: Close immediately after any action
+        setShowDatePicker(false);
+        if (event.type === "set" && selectedDate && !isNaN(selectedDate.getTime())) {
+          setDate(new Date(selectedDate.getTime()));
+        }
+      } else {
+        // iOS: Update temp date (spinner mode, user is still selecting)
+        if (selectedDate && !isNaN(selectedDate.getTime())) {
+          setTempDate(new Date(selectedDate.getTime()));
+        }
+      }
+    },
+    []
+  );
+
+  const confirmIosDate = useCallback(() => {
+    if (tempDate instanceof Date && !isNaN(tempDate.getTime())) {
+      setDate(new Date(tempDate.getTime()));
+    }
+    setShowDatePicker(false);
+  }, [tempDate]);
+
+  const cancelIosDate = useCallback(() => {
+    setShowDatePicker(false);
+  }, []);
+
+  // Styles
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        safeArea: {
+          flex: 1,
+          backgroundColor: colors.background,
+        },
+        header: {
+          paddingHorizontal: spacing.md,
+          paddingTop: spacing.sm,
+          paddingBottom: spacing.sm,
+          backgroundColor: colors.background,
+          borderBottomWidth: 1,
+          borderColor: hexToRgba(colors.textSecondary, 0.12),
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 8,
+        },
+        backBtn: {
+          width: 44,
+          height: 44,
+          alignItems: "center",
+          justifyContent: "center",
+          borderRadius: radius.full,
+        },
+        headerTitle: {
+          color: colors.textPrimary,
+          fontSize: typography.fontSizeLg,
+          fontWeight: "700",
+          flexShrink: 1,
+        },
+        headerSubtitle: {
+          color: colors.textSecondary,
+          fontSize: 13,
+          marginTop: 2,
+        },
+        body: {
+          flex: 1,
+          paddingHorizontal: spacing.md,
+          paddingTop: spacing.md,
+        },
+        sectionCard: {
+          borderWidth: 1,
+          borderColor: colors.borderColor,
+          borderRadius: radius.xl,
+          backgroundColor: colors.cardBackground,
+          padding: spacing.md,
+          marginBottom: spacing.md,
+          // iOS shadow
+          shadowColor: "#000000",
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: Platform.OS === "ios" ? 0.1 : 0.05,
+          shadowRadius: Platform.OS === "ios" ? 10 : 6,
+          elevation: 4,
+        },
+        sectionTitle: {
+          color: colors.textPrimary,
+          fontWeight: "700",
+          marginBottom: 8,
+          fontSize: typography.fontSizeMd,
+        },
+        input: {
+          backgroundColor: colors.cardSurface,
+        },
+        dateBtn: {
+          borderWidth: 1,
+          borderColor: colors.borderColor,
+          borderRadius: radius.lg,
+          backgroundColor: colors.cardSurface,
+          paddingVertical: 14,
+          paddingHorizontal: 12,
+          minHeight: 55,
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 10,
+        },
+        photosGrid: {
+          flexDirection: "row",
+          flexWrap: "wrap",
+          gap: 10,
+          marginTop: spacing.sm,
+        },
+        thumbWrap: {
+          width: 100,
+          height: 100,
+          borderRadius: radius.md,
+          overflow: "hidden",
+          borderWidth: 1,
+          borderColor: hexToRgba(colors.textSecondary, 0.18),
+          backgroundColor: colors.surface,
+        },
+        thumbImage: {
+          width: "100%",
+          height: "100%",
+        },
+        removeBadge: {
+          position: "absolute",
+          right: 4,
+          top: 4,
+          backgroundColor: hexToRgba(colors.error, 0.95),
+          borderRadius: radius.full,
+          width: 24,
+          height: 24,
+          alignItems: "center",
+          justifyContent: "center",
+        },
+        footerRow: {
+          flexDirection: "row",
+          gap: spacing.md,
+          marginTop: spacing.lg,
+          paddingBottom: Platform.OS === "android" ? 72 : 36,
+        },
+        secondaryBtn: {
+          flex: 1,
+          borderRadius: radius.lg,
+          backgroundColor: colors.surface,
+          borderWidth: 1,
+          borderColor: colors.borderColor,
+          minHeight: 48,
+          justifyContent: "center",
+        },
+        primaryBtn: {
+          flex: 1,
+          borderRadius: radius.lg,
+          minHeight: 48,
+          justifyContent: "center",
+        },
+        amountRow: {
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 8,
+        },
+        currencyPrefix: {
+          padding: spacing.sm,
+          height: 55,
+          borderWidth: 1,
+          borderColor: colors.borderColor,
+          backgroundColor: colors.cardSurface,
+          borderRadius: radius.lg,
+          justifyContent: "center",
+          minWidth: 48,
+          alignItems: "center",
+        },
+        currencyText: {
+          color: colors.textPrimary,
+          fontWeight: "700",
+          fontSize: 16,
+        },
+        amountInputWrap: {
+          flex: 1,
+        },
+        // iOS Date Picker Modal
+        datePickerModal: {
+          flex: 1,
+          justifyContent: "flex-end",
+          backgroundColor: "rgba(0,0,0,0.4)",
+        },
+        datePickerContainer: {
+          backgroundColor: colors.cardBackground,
+          borderTopLeftRadius: 20,
+          borderTopRightRadius: 20,
+          paddingBottom: insets.bottom + 10,
+        },
+        datePickerHeader: {
+          flexDirection: "row",
+          justifyContent: "space-between",
+          alignItems: "center",
+          paddingHorizontal: spacing.md,
+          paddingVertical: spacing.sm + 4,
+          borderBottomWidth: 1,
+          borderColor: hexToRgba(colors.textSecondary, 0.12),
+        },
+        datePickerTitle: {
+          fontSize: 17,
+          fontWeight: "600",
+          color: colors.textPrimary,
+        },
+        datePickerBtn: {
+          paddingHorizontal: spacing.sm,
+          paddingVertical: spacing.xs,
+        },
+        datePickerBtnText: {
+          fontSize: 16,
+          fontWeight: "600",
+        },
+      }),
+    [colors, spacing, radius, typography, insets.bottom]
+  );
+
+  const headerTitle = isEditMode ? "Edit Expense" : "Add Expense";
+  const isSubmitting = insertExpense.isPending || updateExpense.isPending;
+
   return (
-    <View style={s.container}>
-      {/* Header (title only; AppHeader back is enabled via layout) */}
-      <View style={s.header}>
-        <PaperText style={s.headerTitle} numberOfLines={1}>
-          {headerTitle}
-        </PaperText>
-      </View>
-
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        style={{ flex: 1 }}
-      >
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-          <ScrollView
-            style={{ flex: 1, paddingHorizontal: spacing.md, paddingTop: spacing.md }}
-            keyboardShouldPersistTaps="handled"
-            keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
-            contentContainerStyle={{ paddingBottom: 32 }}
-            showsVerticalScrollIndicator={false}
+    <SafeAreaView style={styles.safeArea} edges={["top", "left", "right", "bottom"]}>
+      <View style={{ flex: 1 }}>
+        {/* Custom Header with Back Button */}
+        <View style={styles.header}>
+          <Pressable
+            style={styles.backBtn}
+            onPress={handleBack}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+            accessibilityHint="Navigate back to expenses list"
+            accessible
+            android_ripple={{
+              color: hexToRgba(colors.textSecondary, 0.2),
+              borderless: true,
+            }}
           >
-            {/* Category */}
-            <Title>Expense</Title>
-            <Labeled label="Category *">
-              <SheetSelect
-                value={values.category}
-                placeholder="Select category"
-                options={[...CATEGORY_OPTIONS]}
-                onChange={(v) => setValues((p) => ({ ...p, category: v }))}
-              />
-            </Labeled>
+            <MaterialIcons
+              name={I18nManager.isRTL ? "arrow-forward" : "arrow-back"}
+              size={24}
+              color={colors.textPrimary}
+            />
+          </Pressable>
+          <View style={{ flex: 1 }}>
+            <PaperText
+              style={styles.headerTitle}
+              numberOfLines={1}
+              accessible
+              accessibilityRole="header"
+            >
+              {headerTitle}
+            </PaperText>
+            {!!currentPropertyName && (
+              <PaperText style={styles.headerSubtitle} numberOfLines={1}>
+                {currentPropertyName}
+              </PaperText>
+            )}
+          </View>
+        </View>
 
-            {/* Amount & Date */}
-            <View style={{ flexDirection: "row", gap: spacing.md - 8, flexWrap: "wrap" }}>
-              <View style={{ flex: 1, minWidth: 220 }}>
-                <Labeled label="Amount (₹) *">
-                  <TextInput
-                    value={values.amount}
-                    onChangeText={onAmountChange}
-                    placeholder="e.g., 1200"
-                    keyboardType={Platform.OS === "ios" ? "number-pad" : "numeric"}
-                    autoCorrect={false}
-                    autoCapitalize="none"
-                    blurOnSubmit={false}
-                    mode="outlined"
-                    outlineColor={hexToRgba(colors.textSecondary, 0.22)}
-                    activeOutlineColor={colors.accent}
-                    style={s.input}
-                    textColor={colors.textPrimary}
-                    placeholderTextColor={colors.textMuted}
-                    contentStyle={{ minHeight: 44, paddingVertical: 8 }}
-                    accessibilityLabel="Expense amount"
-                    returnKeyType="done"
-                    onSubmitEditing={() => Keyboard.dismiss()}
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={{ flex: 1 }}
+          keyboardVerticalOffset={Platform.OS === "ios" ? insets.top + 56 : 0}
+        >
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+            <ScrollView
+              style={styles.body}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+              contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}
+              showsVerticalScrollIndicator={false}
+            >
+              {/* Expense Details Section */}
+              <View style={styles.sectionCard}>
+                <Text style={styles.sectionTitle} accessible accessibilityRole="header">
+                  Expense Details
+                </Text>
+
+                {/* Category */}
+                <Labeled label="Category *">
+                  <SheetSelect
+                    value={category}
+                    placeholder="Select category"
+                    options={CATEGORY_OPTIONS}
+                    onChange={setCategory}
                   />
                 </Labeled>
-              </View>
 
-              <View style={{ flex: 1, minWidth: 220 }}>
+                {/* Amount */}
+                <Labeled label="Amount *">
+                  <View style={styles.amountRow}>
+                    <View style={styles.currencyPrefix}>
+                      <Text style={styles.currencyText}>₹</Text>
+                    </View>
+                    <View style={styles.amountInputWrap}>
+                      <TextInput
+                        value={displayAmount}
+                        onChangeText={onAmountChange}
+                        placeholder="e.g., 2,34,567"
+                        keyboardType={Platform.OS === "ios" ? "number-pad" : "numeric"}
+                        autoCorrect={false}
+                        autoCapitalize="none"
+                        mode="outlined"
+                        theme={{ roundness: radius.lg }}
+                        outlineColor={hexToRgba(colors.textSecondary, 0.22)}
+                        activeOutlineColor={colors.accent}
+                        style={styles.input}
+                        textColor={colors.textPrimary}
+                        placeholderTextColor={colors.textMuted}
+                        contentStyle={{ minHeight: 48, padding: spacing.sm }}
+                        accessibilityLabel="Expense amount"
+                        accessibilityHint="Enter the expense amount in rupees"
+                        returnKeyType="done"
+                        onSubmitEditing={() => Keyboard.dismiss()}
+                      />
+                    </View>
+                  </View>
+                </Labeled>
+
+                {/* Date */}
                 <Labeled label="Date *">
                   <Pressable
-                    style={s.dateBtn}
-                    onPress={() => {
-                      setTempDate(values.date);
-                      setDateOpen(true);
-                    }}
+                    style={styles.dateBtn}
+                    onPress={openDatePicker}
                     accessibilityRole="button"
-                    accessibilityLabel="Select date"
+                    accessibilityLabel={`Select date, current: ${formatDisplayDate(date)}`}
+                    accessible
                   >
-                    <MaterialIcons name="event" size={18} color={colors.textSecondary} />
-                    <PaperText>
-                      {values?.date instanceof Date && !isNaN(values.date.getTime())
-                        ? toDDMMYYYY(values.date)
-                        : "Select date"}
+                    <MaterialIcons name="event" size={20} color={colors.textSecondary} />
+                    <PaperText
+                      style={{
+                        color: colors.textPrimary,
+                        fontSize: typography.fontSizeMd,
+                        flex: 1,
+                      }}
+                    >
+                      {formatDisplayDate(date)}
                     </PaperText>
+                    <MaterialIcons name="keyboard-arrow-down" size={20} color={colors.textSecondary} />
                   </Pressable>
                 </Labeled>
-              </View>
-            </View>
 
-            {/* Optional description (kept simple / optional) */}
-            <Labeled label="Description (optional)">
-              <TextInput
-                value={values.description}
-                onChangeText={(t) => setValues((p) => ({ ...p, description: t }))}
-                placeholder="Add a note"
-                mode="outlined"
-                outlineColor={hexToRgba(colors.textSecondary, 0.22)}
-                activeOutlineColor={colors.accent}
-                style={s.input}
-                textColor={colors.textPrimary}
-                placeholderTextColor={colors.textMuted}
-                contentStyle={{ minHeight: 44, paddingVertical: 8 }}
-                accessibilityLabel="Description"
-              />
-            </Labeled>
-
-            {/* Date dialog */}
-            <Portal>
-              <Dialog
-                visible={dateOpen}
-                onDismiss={() => setDateOpen(false)}
-                style={{ backgroundColor: colors.cardBackground }}
-              >
-                <Dialog.Title style={{ color: colors.textPrimary }}>Pick date</Dialog.Title>
-                <Dialog.Content>
-                  <DateTimePicker
-                    value={
-                      tempDate instanceof Date && !isNaN(tempDate.getTime()) ? tempDate : new Date()
-                    }
-                    mode="date"
-                    display={Platform.OS === "ios" ? "inline" : "default"}
-                    onChange={(_, d) => {
-                      if (d && !isNaN(d.getTime())) setTempDate(d);
-                    }}
+                {/* Description */}
+                <Labeled label="Description (optional)">
+                  <TextInput
+                    value={description}
+                    onChangeText={setDescription}
+                    placeholder="Add a note about this expense"
+                    mode="outlined"
+                    theme={{ roundness: radius.lg }}
+                    outlineColor={hexToRgba(colors.textSecondary, 0.22)}
+                    activeOutlineColor={colors.accent}
+                    style={styles.input}
+                    textColor={colors.textPrimary}
+                    placeholderTextColor={colors.textMuted}
+                    contentStyle={{ minHeight: 48, padding: spacing.sm }}
+                    accessibilityLabel="Expense description"
+                    accessibilityHint="Optional description for the expense"
+                    multiline
+                    numberOfLines={2}
                   />
-                </Dialog.Content>
-                <Dialog.Actions>
-                  <Button onPress={() => setDateOpen(false)} textColor={colors.textPrimary}>
-                    Cancel
-                  </Button>
-                  <Button
-                    onPress={() => {
-                      setValues((p) => ({ ...p, date: tempDate }));
-                      setDateOpen(false);
-                    }}
-                    textColor={colors.accent}
-                  >
-                    Done
-                  </Button>
-                </Dialog.Actions>
-              </Dialog>
-            </Portal>
+                </Labeled>
+              </View>
 
-            <Divider style={{ marginVertical: spacing.sm, backgroundColor: colors.borderColor }} />
+              {/* Bill Photos Section */}
+              <View style={styles.sectionCard}>
+                <Text style={styles.sectionTitle} accessible accessibilityRole="header">
+                  Bill Photos (optional)
+                </Text>
 
-            {/* Photos */}
-            <PaperText style={{ color: colors.textSecondary, fontWeight: "700", marginBottom: 8 }}>
-              Bill photos (optional)
-            </PaperText>
-            <Button
-              mode="outlined"
-              onPress={pickPhotos}
-              style={{
-                marginTop: 4,
-                borderRadius: radius.lg,
-                minHeight: 44,
-                justifyContent: "center",
-              }}
-              textColor={colors.textPrimary}
-              accessibilityLabel="Pick images"
-            >
-              Pick images (jpg, jpeg, png)
-            </Button>
+                <Button
+                  mode="outlined"
+                  onPress={pickPhotos}
+                  icon="camera"
+                  style={{
+                    borderRadius: radius.lg,
+                    minHeight: 48,
+                    justifyContent: "center",
+                    borderColor: colors.borderColor,
+                  }}
+                  textColor={colors.textPrimary}
+                  accessibilityLabel="Pick images"
+                  accessibilityHint="Opens gallery to select bill images"
+                >
+                  Pick Images
+                </Button>
 
-            <View style={s.photosGrid}>
-              {(values.photos || []).map((ph) => (
-                <View key={ph.uri} style={s.thumbWrap}>
-                  <Image source={{ uri: ph.uri }} style={{ width: "100%", height: "100%" }} />
-                  <Pressable
-                    onPress={() => removePhoto(ph)}
-                    style={s.removeBadge}
-                    accessibilityLabel="Remove photo"
-                  >
-                    <PaperText style={{ color: colors.white, fontWeight: "700" }}>×</PaperText>
-                  </Pressable>
-                </View>
-              ))}
-            </View>
+                {photos.length > 0 && (
+                  <View style={styles.photosGrid}>
+                    {photos.map((photo, index) => (
+                      <View key={`${photo.uri}-${index}`} style={styles.thumbWrap}>
+                        <Image
+                          source={{ uri: photo.uri }}
+                          style={styles.thumbImage}
+                          resizeMode="cover"
+                        />
+                        <Pressable
+                          onPress={() => removePhoto(photo, index)}
+                          style={styles.removeBadge}
+                          accessibilityLabel="Remove photo"
+                          accessibilityHint="Removes this photo from the expense"
+                          accessible
+                        >
+                          <MaterialIcons name="close" size={16} color={colors.white} />
+                        </Pressable>
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </View>
 
-            {/* Footer */}
-            <View style={s.footerRow}>
-              <Button
-                mode="outlined"
-                style={s.secondaryBtn}
+              <Divider style={{ marginVertical: spacing.sm, backgroundColor: colors.borderColor }} />
+
+              {/* Footer Buttons */}
+              <View style={styles.footerRow}>
+                <Button
+                  mode="outlined"
+                  style={styles.secondaryBtn}
+                  textColor={colors.textPrimary}
+                  onPress={onCancel}
+                  accessibilityLabel="Cancel and go back"
+                  accessibilityHint="Discards changes and returns to expenses list"
+                  disabled={isSubmitting}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  mode="contained"
+                  style={styles.primaryBtn}
+                  onPress={onSubmit}
+                  loading={isSubmitting}
+                  disabled={isSubmitting}
+                  accessibilityLabel={isEditMode ? "Update expense" : "Submit expense"}
+                  accessibilityHint={isEditMode ? "Saves changes to expense" : "Creates new expense"}
+                >
+                  {isEditMode ? "Update" : "Submit"}
+                </Button>
+              </View>
+            </ScrollView>
+          </TouchableWithoutFeedback>
+        </KeyboardAvoidingView>
+      </View>
+
+      {/* Date Picker - Platform specific */}
+      {Platform.OS === "android" && showDatePicker && (
+        <DateTimePicker
+          value={date}
+          mode="date"
+          display="default"
+          onChange={handleDateChange}
+        />
+      )}
+
+      {/* iOS Date Picker Modal */}
+      {Platform.OS === "ios" && showDatePicker && (
+        <Modal
+          visible={showDatePicker}
+          transparent
+          animationType="slide"
+          onRequestClose={cancelIosDate}
+        >
+          <Pressable style={styles.datePickerModal} onPress={cancelIosDate}>
+            <Pressable style={styles.datePickerContainer} onPress={() => {}}>
+              <View style={styles.datePickerHeader}>
+                <Pressable onPress={cancelIosDate} style={styles.datePickerBtn}>
+                  <Text style={[styles.datePickerBtnText, { color: colors.error }]}>Cancel</Text>
+                </Pressable>
+                <Text style={styles.datePickerTitle}>Select Date</Text>
+                <Pressable onPress={confirmIosDate} style={styles.datePickerBtn}>
+                  <Text style={[styles.datePickerBtnText, { color: colors.accent }]}>Done</Text>
+                </Pressable>
+              </View>
+              <DateTimePicker
+                value={tempDate instanceof Date && !isNaN(tempDate.getTime()) ? tempDate : new Date()}
+                mode="date"
+                display="spinner"
+                onChange={handleDateChange}
+                style={{ height: 200 }}
                 textColor={colors.textPrimary}
-                onPress={onCancel}
-                accessibilityLabel="Cancel and go back"
-              >
-                Cancel
-              </Button>
-              <Button
-                mode="contained"
-                style={s.primaryBtn}
-                onPress={onSubmit}
-                loading={insertExpense.isPending || updateExpense.isPending}
-                disabled={insertExpense.isPending || updateExpense.isPending}
-                accessibilityLabel={isEditMode ? "Update expense" : "Submit expense"}
-              >
-                {isEditMode ? "Update" : "Submit"}
-              </Button>
-            </View>
-          </ScrollView>
-        </TouchableWithoutFeedback>
-      </KeyboardAvoidingView>
-    </View>
+                themeVariant="light"
+              />
+            </Pressable>
+          </Pressable>
+        </Modal>
+      )}
+    </SafeAreaView>
   );
 }

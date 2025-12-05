@@ -1,5 +1,6 @@
 // src/components/property/DuesTab.tsx
-import React, { useMemo, useState, useCallback } from "react";
+// Premium Dues Tab - Rich, user-friendly design inspired by Swiggy/Zomato
+import React, { useMemo, useState, useCallback, useRef } from "react";
 import {
   FlatList,
   StyleSheet,
@@ -8,11 +9,13 @@ import {
   RefreshControl,
   Pressable,
   Platform,
+  Animated,
+  useWindowDimensions,
+  ListRenderItemInfo,
 } from "react-native";
-import { useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
-import MaterialIcons from "@expo/vector-icons/MaterialIcons";
+import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 
 import { useTheme } from "@/src/theme/ThemeContext";
 import { hexToRgba } from "@/src/theme";
@@ -20,37 +23,125 @@ import SearchBar from "@/src/components/SearchBar";
 import FilterSheet, { Section } from "@/src/components/FilterSheet";
 import StatsGrid, { Metric } from "@/src/components/StatsGrid";
 
-/* -------------------------- helpers -------------------------- */
+/* ─────────────────────────────────────────────────────────────────────────────
+   TYPES & HELPERS
+───────────────────────────────────────────────────────────────────────────── */
+
 type DateRange = { from?: Date; to?: Date };
 
-const str = (v: any, f = "") => (v == null ? f : String(v));
-const num = (v: any, f = 0) => (typeof v === "number" ? v : Number(v ?? f)) || 0;
-const toDate = (s?: any): Date | null => {
+interface DueItem {
+  _id: string;
+  status: number;
+  tenantId: string;
+  amount: number;
+  totalAmount: number;
+  dueDate: string;
+  paymentCategory: string;
+  paymentMode: string;
+  description?: string;
+  tenantDetails?: {
+    _id: string;
+    name: string;
+    email?: string | null;
+    phoneNumber: string;
+    roomNumber: string;
+    sharingType: number;
+  };
+}
+
+interface Props {
+  data: DueItem[];
+  metrics?: Metric[];
+  refreshing: boolean;
+  onRefresh: () => void;
+}
+
+const str = (v: unknown, fallback = ""): string =>
+  v == null ? fallback : String(v);
+
+const num = (v: unknown, fallback = 0): number =>
+  typeof v === "number" ? v : Number(v ?? fallback) || fallback;
+
+const toDate = (s?: unknown): Date | null => {
   if (!s) return null;
-  const d = new Date(s);
+  const d = new Date(String(s));
   return isNaN(d.getTime()) ? null : d;
 };
-const inr = (n: any) => `₹ ${num(n).toLocaleString("en-IN")}`;
 
-/** local date display */
-const fmtDate = (iso?: string) => {
+const formatCurrency = (amount: number): string =>
+  `₹${amount.toLocaleString("en-IN")}`;
+
+const formatDate = (iso?: string): string => {
   const d = toDate(iso);
   return d
-    ? d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
+    ? d.toLocaleDateString("en-IN", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      })
     : "—";
 };
-/** month-year like "Oct 2025" */
-const monthOf = (iso?: string) => {
+
+const formatShortDate = (iso?: string): string => {
   const d = toDate(iso);
-  return d ? d.toLocaleDateString("en-IN", { month: "short", year: "numeric" }) : "—";
+  return d
+    ? d.toLocaleDateString("en-IN", { day: "2-digit", month: "short" })
+    : "—";
 };
 
-/** inclusive within [from..to], on local day boundary */
-const withinRange = (dtISO?: string, range?: DateRange) => {
+const getMonthYear = (iso?: string): string => {
+  const d = toDate(iso);
+  return d
+    ? d.toLocaleDateString("en-IN", { month: "short", year: "numeric" })
+    : "—";
+};
+
+// Get due urgency: overdue, due-soon (within 7 days), upcoming
+type DueUrgency = "overdue" | "due-soon" | "upcoming" | "future";
+
+const getDueUrgency = (dueDateIso?: string): DueUrgency => {
+  const dueDate = toDate(dueDateIso);
+  if (!dueDate) return "upcoming";
+
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const due = new Date(
+    dueDate.getFullYear(),
+    dueDate.getMonth(),
+    dueDate.getDate()
+  );
+
+  const diffDays = Math.ceil(
+    (due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+  );
+
+  if (diffDays < 0) return "overdue";
+  if (diffDays <= 7) return "due-soon";
+  if (diffDays <= 30) return "upcoming";
+  return "future";
+};
+
+const getDaysOverdue = (dueDateIso?: string): number => {
+  const dueDate = toDate(dueDateIso);
+  if (!dueDate) return 0;
+
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const due = new Date(
+    dueDate.getFullYear(),
+    dueDate.getMonth(),
+    dueDate.getDate()
+  );
+
+  return Math.ceil((today.getTime() - due.getTime()) / (1000 * 60 * 60 * 24));
+};
+
+const withinRange = (dtISO?: string, range?: DateRange): boolean => {
   if (!range || (!range.from && !range.to)) return true;
   const d = toDate(dtISO);
   if (!d) return false;
   const t = d.getTime();
+
   if (range.from) {
     const from0 = new Date(
       range.from.getFullYear(),
@@ -63,6 +154,7 @@ const withinRange = (dtISO?: string, range?: DateRange) => {
     ).getTime();
     if (t < from0) return false;
   }
+
   if (range.to) {
     const toEnd = new Date(
       range.to.getFullYear(),
@@ -75,166 +167,931 @@ const withinRange = (dtISO?: string, range?: DateRange) => {
     ).getTime();
     if (t > toEnd) return false;
   }
+
   return true;
 };
 
-/* --------------------------- types --------------------------- */
-type Props = {
-  data: any[]; // payments array from API
-  metrics?: Metric[]; // dues summary metrics
-  refreshing: boolean;
-  onRefresh: () => void;
+const getInitials = (name?: string): string => {
+  return str(name)
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((w) => w?.[0]?.toUpperCase() || "")
+    .join("") || "PG";
 };
 
-/* ------------------------- filter defs ----------------------- */
+const getCategoryIcon = (
+  category?: string
+): keyof typeof MaterialCommunityIcons.glyphMap => {
+  const cat = str(category).toLowerCase();
+  if (cat.includes("rent")) return "home-city";
+  if (cat.includes("security") || cat.includes("deposit")) return "shield-check";
+  if (cat.includes("maintenance")) return "wrench";
+  if (cat.includes("electricity")) return "lightning-bolt";
+  if (cat.includes("water")) return "water";
+  return "cash";
+};
+
+const getCategoryColor = (category?: string): string => {
+  const cat = str(category).toLowerCase();
+  if (cat.includes("rent")) return "#0EA5E9"; // Sky blue
+  if (cat.includes("security") || cat.includes("deposit")) return "#8B5CF6"; // Purple
+  if (cat.includes("maintenance")) return "#F59E0B"; // Amber
+  if (cat.includes("electricity")) return "#EAB308"; // Yellow
+  if (cat.includes("water")) return "#06B6D4"; // Cyan
+  return "#6B7280"; // Gray
+};
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   FILTER SECTIONS
+───────────────────────────────────────────────────────────────────────────── */
+
 const sections: Section[] = [
   {
     key: "dueDate",
     label: "Due Date",
     mode: "date",
-    dateConfig: { allowFuture: true, fromLabel: "From", toLabel: "To" }, // Dues can be future
+    dateConfig: { allowFuture: true, fromLabel: "From Date", toLabel: "To Date" },
   },
 ];
 
-/* --------------------------- component ----------------------- */
-export default function DuesTab({ data, metrics = [], refreshing, onRefresh }: Props) {
-  const { width } = useWindowDimensions();
-  const insets = useSafeAreaInsets();
-  const { colors, spacing, typography, radius } = useTheme();
+/* ─────────────────────────────────────────────────────────────────────────────
+   STATS CARD COMPONENT
+───────────────────────────────────────────────────────────────────────────── */
 
-  const [query, setQuery] = useState("");
-  const [sheetOpen, setSheetOpen] = useState(false);
-  const [filter, setFilter] = useState<{ dueDate?: DateRange }>({});
+interface StatsCardProps {
+  icon: keyof typeof MaterialCommunityIcons.glyphMap;
+  label: string;
+  value: string;
+  iconBg: string;
+  iconColor: string;
+  highlight?: boolean;
+}
 
-  const s = useMemo(
+const StatsCard: React.FC<StatsCardProps> = ({
+  icon,
+  label,
+  value,
+  iconBg,
+  iconColor,
+  highlight,
+}) => {
+  const { colors, spacing, radius } = useTheme();
+
+  const styles = useMemo(
     () =>
       StyleSheet.create({
-        listContent: {
-          paddingHorizontal: spacing.md,
-          paddingBottom: insets.bottom + spacing.lg * 2,
-          rowGap: spacing.md - 2,
-        },
-
-        /* header pack (Stats + Search) */
-        headerWrap: {
-          paddingTop: spacing.md - 2,
-          marginBottom: spacing.sm - 2,
-          gap: spacing.md - 2,
-        },
-
-        /* card */
         card: {
-          borderRadius: 18,
-          padding: spacing.md + 2,
-          backgroundColor: colors.cardBackground,
-          borderWidth: 1,
-          borderColor: colors.borderColor,
-          shadowColor: colors.shadow,
-          shadowOffset: { width: 0, height: 6 },
-          shadowOpacity: 0.08,
-          shadowRadius: 12,
+          flex: 1,
+          backgroundColor: highlight
+            ? hexToRgba(iconColor, 0.08)
+            : colors.cardBackground,
+          borderRadius: radius.lg + 2,
+          padding: spacing.md,
+          shadowColor: "#000000",
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: Platform.OS === "ios" ? 0.1 : 0.06,
+          shadowRadius: Platform.OS === "ios" ? 10 : 6,
           elevation: 4,
+          borderWidth: highlight ? 1.5 : 1,
+          borderColor: highlight
+            ? hexToRgba(iconColor, 0.3)
+            : Platform.OS === "ios"
+            ? hexToRgba(colors.textMuted, 0.12)
+            : hexToRgba(colors.textMuted, 0.08),
         },
-        headerRow: {
-          flexDirection: "row",
-          alignItems: "center",
-          justifyContent: "space-between",
-          marginBottom: spacing.sm,
-        },
-        leftWrap: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1 },
-        avatar: {
-          width: 44,
-          height: 44,
-          borderRadius: 22,
+        iconWrap: {
+          width: 38,
+          height: 38,
+          borderRadius: 12,
+          backgroundColor: iconBg,
           alignItems: "center",
           justifyContent: "center",
-          backgroundColor: hexToRgba(colors.accent, 0.12),
+          marginBottom: spacing.sm,
         },
-        avatarTxt: { color: colors.accent, fontWeight: "800", fontSize: 16 },
-        titleWrap: { flex: 1 },
-        title: { color: colors.textPrimary, fontWeight: "800", fontSize: typography.fontSizeMd },
-        subTitle: { color: colors.textSecondary, marginTop: 2, fontWeight: "600" },
+        label: {
+          fontSize: 11,
+          fontWeight: "600",
+          color: colors.textMuted,
+          textTransform: "uppercase",
+          letterSpacing: 0.5,
+          marginBottom: 4,
+        },
+        value: {
+          fontSize: 16,
+          fontWeight: "800",
+          color: highlight ? iconColor : colors.textPrimary,
+          letterSpacing: 0.2,
+        },
+      }),
+    [colors, spacing, radius, iconBg, iconColor, highlight]
+  );
 
-        amountBig: { color: colors.textPrimary, fontWeight: "800", fontSize: 18 },
+  return (
+    <View style={styles.card}>
+      <View style={styles.iconWrap}>
+        <MaterialCommunityIcons name={icon} size={18} color={iconColor} />
+      </View>
+      <Text style={styles.label}>{label}</Text>
+      <Text style={styles.value} numberOfLines={1} adjustsFontSizeToFit>
+        {value}
+      </Text>
+    </View>
+  );
+};
 
-        row: {
+/* ─────────────────────────────────────────────────────────────────────────────
+   DUE CARD COMPONENT
+───────────────────────────────────────────────────────────────────────────── */
+
+interface DueCardProps {
+  item: DueItem;
+  onPayNow: (item: DueItem) => void;
+  onEdit: (item: DueItem) => void;
+  cardWidth: number;
+}
+
+const DueCard: React.FC<DueCardProps> = ({
+  item,
+  onPayNow,
+  onEdit,
+  cardWidth,
+}) => {
+  const { colors, spacing, radius, typography } = useTheme();
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+
+  const tenant = item.tenantDetails;
+  const name = str(tenant?.name, "Unknown");
+  const room = str(tenant?.roomNumber, "—");
+  const phone = str(tenant?.phoneNumber, "—");
+  const amount = num(item?.amount);
+  const totalAmount = num(item?.totalAmount);
+  const category = str(item?.paymentCategory, "Payment");
+  const dueDate = item?.dueDate;
+  const urgency = getDueUrgency(dueDate);
+  const daysOverdue = getDaysOverdue(dueDate);
+
+  // Urgency colors
+  const urgencyConfig = useMemo(() => {
+    switch (urgency) {
+      case "overdue":
+        return {
+          barColor: "#DC2626",
+          badgeBg: "#FEE2E2",
+          badgeText: "#991B1B",
+          label: daysOverdue === 1 ? "1 day overdue" : `${daysOverdue} days overdue`,
+          icon: "alert-circle" as const,
+        };
+      case "due-soon":
+        return {
+          barColor: "#F59E0B",
+          badgeBg: "#FEF3C7",
+          badgeText: "#92400E",
+          label: "Due soon",
+          icon: "clock-alert-outline" as const,
+        };
+      case "upcoming":
+        return {
+          barColor: "#0EA5E9",
+          badgeBg: "#E0F2FE",
+          badgeText: "#0369A1",
+          label: "Upcoming",
+          icon: "calendar-clock" as const,
+        };
+      default:
+        return {
+          barColor: "#10B981",
+          badgeBg: "#D1FAE5",
+          badgeText: "#065F46",
+          label: "Future",
+          icon: "calendar-month" as const,
+        };
+    }
+  }, [urgency, daysOverdue]);
+
+  const categoryColor = getCategoryColor(category);
+  const categoryIcon = getCategoryIcon(category);
+
+  const handlePressIn = useCallback(() => {
+    Animated.spring(scaleAnim, {
+      toValue: 0.98,
+      useNativeDriver: true,
+      speed: 50,
+      bounciness: 4,
+    }).start();
+  }, [scaleAnim]);
+
+  const handlePressOut = useCallback(() => {
+    Animated.spring(scaleAnim, {
+      toValue: 1,
+      useNativeDriver: true,
+      speed: 50,
+      bounciness: 4,
+    }).start();
+  }, [scaleAnim]);
+
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        cardOuter: {
+          width: cardWidth,
+          borderRadius: radius.xl,
+          backgroundColor: colors.cardBackground,
+          shadowColor: "#000000",
+          shadowOffset: { width: 0, height: 6 },
+          shadowOpacity: Platform.OS === "ios" ? 0.12 : 0.08,
+          shadowRadius: Platform.OS === "ios" ? 14 : 10,
+          elevation: 5,
+          borderWidth: Platform.OS === "ios" ? 1 : 0,
+          borderColor: hexToRgba(colors.textMuted, 0.1),
+        },
+        cardWrapper: {
+          overflow: "hidden",
+          borderRadius: radius.xl,
+        },
+        // Urgency bar at top
+        urgencyBar: {
+          height: 4,
+          backgroundColor: urgencyConfig.barColor,
+        },
+        cardContent: {
+          padding: spacing.md,
+        },
+        // Header row: Avatar + Info + Amount
+        headerRow: {
           flexDirection: "row",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginTop: 6,
-          gap: 12,
+          alignItems: "flex-start",
+          marginBottom: spacing.sm + 2,
         },
-        label: { color: colors.textSecondary, fontWeight: "700" },
-        value: { color: colors.textPrimary, fontWeight: "800" },
-
+        avatar: {
+          width: 48,
+          height: 48,
+          borderRadius: 14,
+          backgroundColor: hexToRgba(colors.accent, 0.12),
+          alignItems: "center",
+          justifyContent: "center",
+          marginRight: spacing.sm + 2,
+        },
+        avatarText: {
+          fontSize: 16,
+          fontWeight: "800",
+          color: colors.accent,
+        },
+        infoWrap: {
+          flex: 1,
+        },
+        nameRow: {
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 8,
+          marginBottom: 4,
+        },
+        name: {
+          fontSize: typography.fontSizeMd,
+          fontWeight: "700",
+          color: colors.textPrimary,
+          flex: 1,
+        },
+        roomBadge: {
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 4,
+          backgroundColor: hexToRgba(colors.accent, 0.1),
+          paddingHorizontal: 8,
+          paddingVertical: 3,
+          borderRadius: radius.full,
+        },
+        roomText: {
+          fontSize: 11,
+          fontWeight: "700",
+          color: colors.accent,
+        },
+        phone: {
+          fontSize: 13,
+          color: colors.textSecondary,
+          fontWeight: "500",
+        },
+        amountWrap: {
+          alignItems: "flex-end",
+        },
+        amountLabel: {
+          fontSize: 10,
+          fontWeight: "600",
+          color: colors.textMuted,
+          textTransform: "uppercase",
+          letterSpacing: 0.5,
+          marginBottom: 2,
+        },
+        amount: {
+          fontSize: 20,
+          fontWeight: "800",
+          color: urgency === "overdue" ? "#DC2626" : colors.textPrimary,
+        },
+        // Divider
+        divider: {
+          height: 1,
+          backgroundColor: hexToRgba(colors.textMuted, 0.1),
+          marginVertical: spacing.sm,
+        },
+        // Info chips row
         chipsRow: {
           flexDirection: "row",
           flexWrap: "wrap",
           gap: 8,
-          marginTop: spacing.sm,
           marginBottom: spacing.sm,
         },
         chip: {
           flexDirection: "row",
           alignItems: "center",
-          gap: 6,
+          gap: 5,
           paddingHorizontal: 10,
           paddingVertical: 6,
-          borderRadius: 999,
+          borderRadius: radius.full,
           backgroundColor: colors.surface,
           borderWidth: 1,
-          borderColor: hexToRgba(colors.textSecondary, 0.15),
+          borderColor: hexToRgba(colors.textMuted, 0.12),
         },
-        chipTxt: { color: colors.textPrimary, fontWeight: "700" },
-
-        sep: {
-          height: 1,
-          backgroundColor: hexToRgba(colors.textSecondary, 0.1),
-          marginVertical: spacing.sm,
+        categoryChip: {
+          backgroundColor: hexToRgba(categoryColor, 0.1),
+          borderColor: hexToRgba(categoryColor, 0.25),
         },
-
-        actions: {
+        chipText: {
+          fontSize: 12,
+          fontWeight: "600",
+          color: colors.textPrimary,
+        },
+        categoryChipText: {
+          color: categoryColor,
+        },
+        // Urgency badge
+        urgencyBadge: {
           flexDirection: "row",
-          justifyContent: "flex-end",
-          marginTop: spacing.sm,
+          alignItems: "center",
+          gap: 5,
+          paddingHorizontal: 10,
+          paddingVertical: 6,
+          borderRadius: radius.full,
+          backgroundColor: urgencyConfig.badgeBg,
+        },
+        urgencyText: {
+          fontSize: 12,
+          fontWeight: "700",
+          color: urgencyConfig.badgeText,
+        },
+        // Details grid
+        detailsGrid: {
+          flexDirection: "row",
+          flexWrap: "wrap",
+          marginTop: spacing.xs,
+        },
+        detailItem: {
+          width: "50%",
+          paddingVertical: 4,
+        },
+        detailLabel: {
+          fontSize: 11,
+          fontWeight: "600",
+          color: colors.textMuted,
+          textTransform: "uppercase",
+          letterSpacing: 0.4,
+          marginBottom: 2,
+        },
+        detailValue: {
+          fontSize: 13,
+          fontWeight: "700",
+          color: colors.textPrimary,
+        },
+        // Actions
+        actionsRow: {
+          flexDirection: "row",
           gap: 10,
+          marginTop: spacing.sm + 2,
         },
         payBtn: {
-          borderRadius: radius.lg,
-          paddingHorizontal: 14,
-          paddingVertical: 10,
+          flex: 1,
           flexDirection: "row",
           alignItems: "center",
+          justifyContent: "center",
           gap: 8,
-          backgroundColor: hexToRgba("#16A34A", 0.15), // light green
-          borderWidth: 1,
-          borderColor: hexToRgba("#16A34A", 0.35),
+          paddingVertical: 12,
+          borderRadius: radius.lg,
+          backgroundColor: "#16A34A",
         },
-        payTxt: { fontWeight: "800", color: "#166534" },
+        payBtnPressed: {
+          backgroundColor: "#15803D",
+        },
+        payBtnText: {
+          fontSize: 14,
+          fontWeight: "700",
+          color: "#FFFFFF",
+        },
         editBtn: {
-          borderRadius: radius.lg,
-          paddingHorizontal: 14,
-          paddingVertical: 10,
           flexDirection: "row",
           alignItems: "center",
-          gap: 8,
+          justifyContent: "center",
+          gap: 6,
+          paddingVertical: 12,
+          paddingHorizontal: 16,
+          borderRadius: radius.lg,
           backgroundColor: colors.surface,
           borderWidth: 1,
           borderColor: colors.borderColor,
         },
-        editTxt: { fontWeight: "800", color: colors.textPrimary },
-
-        emptyWrap: { padding: spacing.md },
-        emptyTxt: { color: colors.textSecondary },
+        editBtnPressed: {
+          backgroundColor: hexToRgba(colors.textMuted, 0.1),
+        },
+        editBtnText: {
+          fontSize: 14,
+          fontWeight: "700",
+          color: colors.textPrimary,
+        },
       }),
-    [colors, spacing, typography, radius, insets.bottom]
+    [
+      colors,
+      spacing,
+      radius,
+      typography,
+      cardWidth,
+      urgencyConfig,
+      categoryColor,
+      urgency,
+    ]
   );
 
-  /* -------------- filter + search ---------------- */
-  const filtered = useMemo(() => {
-    let out = Array.isArray(data) ? data : [];
+  return (
+    <Animated.View style={[styles.cardOuter, { transform: [{ scale: scaleAnim }] }]}>
+      <Pressable
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        accessible
+        accessibilityRole="button"
+        accessibilityLabel={`Due from ${name}, Room ${room}, Amount ${formatCurrency(amount)}`}
+      >
+        <View style={styles.cardWrapper}>
+          {/* Urgency bar */}
+          <View style={styles.urgencyBar} />
 
-    // search by name / room / phone
+          <View style={styles.cardContent}>
+            {/* Header: Avatar + Info + Amount */}
+            <View style={styles.headerRow}>
+              <View style={styles.avatar}>
+                <Text style={styles.avatarText}>{getInitials(name)}</Text>
+              </View>
+
+              <View style={styles.infoWrap}>
+                <View style={styles.nameRow}>
+                  <Text style={styles.name} numberOfLines={1}>
+                    {name}
+                  </Text>
+                  <View style={styles.roomBadge}>
+                    <MaterialCommunityIcons
+                      name="door"
+                      size={12}
+                      color={colors.accent}
+                    />
+                    <Text style={styles.roomText}>{room}</Text>
+                  </View>
+                </View>
+                <Text style={styles.phone}>📞 {phone}</Text>
+              </View>
+
+              <View style={styles.amountWrap}>
+                <Text style={styles.amountLabel}>Due</Text>
+                <Text style={styles.amount}>{formatCurrency(amount)}</Text>
+              </View>
+            </View>
+
+            <View style={styles.divider} />
+
+            {/* Chips row */}
+            <View style={styles.chipsRow}>
+              {/* Category chip */}
+              <View style={[styles.chip, styles.categoryChip]}>
+                <MaterialCommunityIcons
+                  name={categoryIcon}
+                  size={14}
+                  color={categoryColor}
+                />
+                <Text style={[styles.chipText, styles.categoryChipText]}>
+                  {category.charAt(0).toUpperCase() + category.slice(1)}
+                </Text>
+              </View>
+
+              {/* Due date chip */}
+              <View style={styles.chip}>
+                <MaterialCommunityIcons
+                  name="calendar"
+                  size={14}
+                  color={colors.textSecondary}
+                />
+                <Text style={styles.chipText}>{formatShortDate(dueDate)}</Text>
+              </View>
+
+              {/* Urgency badge */}
+              <View style={styles.urgencyBadge}>
+                <MaterialCommunityIcons
+                  name={urgencyConfig.icon}
+                  size={14}
+                  color={urgencyConfig.badgeText}
+                />
+                <Text style={styles.urgencyText}>{urgencyConfig.label}</Text>
+              </View>
+            </View>
+
+            {/* Details grid */}
+            <View style={styles.detailsGrid}>
+              <View style={styles.detailItem}>
+                <Text style={styles.detailLabel}>Total Amount</Text>
+                <Text style={styles.detailValue}>
+                  {formatCurrency(totalAmount)}
+                </Text>
+              </View>
+              <View style={styles.detailItem}>
+                <Text style={styles.detailLabel}>Due Month</Text>
+                <Text style={styles.detailValue}>{getMonthYear(dueDate)}</Text>
+              </View>
+            </View>
+
+            {/* Actions */}
+            <View style={styles.actionsRow}>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.payBtn,
+                  pressed && styles.payBtnPressed,
+                ]}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  onPayNow(item);
+                }}
+                accessible
+                accessibilityRole="button"
+                accessibilityLabel="Pay now"
+                accessibilityHint={`Pay ${formatCurrency(amount)} for ${name}`}
+              >
+                <MaterialCommunityIcons
+                  name="check-circle"
+                  size={18}
+                  color="#FFFFFF"
+                />
+                <Text style={styles.payBtnText}>Pay Now</Text>
+              </Pressable>
+
+              <Pressable
+                style={({ pressed }) => [
+                  styles.editBtn,
+                  pressed && styles.editBtnPressed,
+                ]}
+                onPress={() => {
+                  Haptics.selectionAsync();
+                  onEdit(item);
+                }}
+                accessible
+                accessibilityRole="button"
+                accessibilityLabel="Edit"
+                accessibilityHint={`Edit due for ${name}`}
+              >
+                <MaterialCommunityIcons
+                  name="pencil"
+                  size={16}
+                  color={colors.textPrimary}
+                />
+                <Text style={styles.editBtnText}>Edit</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Pressable>
+    </Animated.View>
+  );
+};
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   EMPTY STATE
+───────────────────────────────────────────────────────────────────────────── */
+
+interface EmptyStateProps {
+  hasFilter: boolean;
+}
+
+const EmptyState: React.FC<EmptyStateProps> = ({ hasFilter }) => {
+  const { colors, spacing, radius } = useTheme();
+
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        container: {
+          alignItems: "center",
+          justifyContent: "center",
+          paddingVertical: spacing.xl * 2.5,
+          paddingHorizontal: spacing.xl,
+        },
+        iconOuter: {
+          width: 100,
+          height: 100,
+          borderRadius: 50,
+          backgroundColor: hexToRgba("#10B981", 0.08),
+          alignItems: "center",
+          justifyContent: "center",
+          marginBottom: spacing.lg,
+        },
+        iconInner: {
+          width: 72,
+          height: 72,
+          borderRadius: 36,
+          backgroundColor: hexToRgba("#10B981", 0.15),
+          alignItems: "center",
+          justifyContent: "center",
+        },
+        title: {
+          fontSize: 20,
+          fontWeight: "700",
+          color: colors.textPrimary,
+          marginBottom: spacing.sm,
+          textAlign: "center",
+          letterSpacing: 0.2,
+        },
+        subtitle: {
+          fontSize: 14,
+          color: colors.textSecondary,
+          textAlign: "center",
+          lineHeight: 22,
+          maxWidth: 280,
+        },
+        ctaHint: {
+          marginTop: spacing.lg,
+          flexDirection: "row",
+          alignItems: "center",
+          gap: spacing.xs,
+          backgroundColor: hexToRgba("#10B981", 0.1),
+          paddingHorizontal: spacing.md,
+          paddingVertical: spacing.sm,
+          borderRadius: radius.full,
+        },
+        ctaText: {
+          fontSize: 13,
+          fontWeight: "600",
+          color: "#059669",
+        },
+      }),
+    [colors, spacing, radius]
+  );
+
+  return (
+    <View
+      style={styles.container}
+      accessible
+      accessibilityLabel={hasFilter ? "No dues match your filter" : "No pending dues"}
+    >
+      <View style={styles.iconOuter}>
+        <View style={styles.iconInner}>
+          <MaterialCommunityIcons
+            name={hasFilter ? "file-search-outline" : "check-circle"}
+            size={36}
+            color="#10B981"
+          />
+        </View>
+      </View>
+      <Text style={styles.title}>
+        {hasFilter ? "No Results Found" : "All Caught Up! 🎉"}
+      </Text>
+      <Text style={styles.subtitle}>
+        {hasFilter
+          ? "Try adjusting your filters or search terms to find what you're looking for."
+          : "Great news! There are no pending dues at the moment. All payments are up to date."}
+      </Text>
+      {!hasFilter && (
+        <View style={styles.ctaHint}>
+          <MaterialCommunityIcons name="party-popper" size={16} color="#059669" />
+          <Text style={styles.ctaText}>No action needed</Text>
+        </View>
+      )}
+    </View>
+  );
+};
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   LIST HEADER
+───────────────────────────────────────────────────────────────────────────── */
+
+interface ListHeaderProps {
+  metrics: Metric[];
+  totalDues: number;
+  overdueCount: number;
+  dueCount: number;
+  query: string;
+  onQueryChange: (q: string) => void;
+  onFilterPress: () => void;
+  filterActive: boolean;
+}
+
+const ListHeader: React.FC<ListHeaderProps> = ({
+  metrics,
+  totalDues,
+  overdueCount,
+  dueCount,
+  query,
+  onQueryChange,
+  onFilterPress,
+  filterActive,
+}) => {
+  const { colors, spacing, radius } = useTheme();
+  const { width } = useWindowDimensions();
+  const isTablet = width >= 768;
+
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        container: {
+          paddingBottom: spacing.md,
+        },
+        // Quick stats row
+        quickStatsRow: {
+          flexDirection: "row",
+          gap: spacing.sm + 2,
+          marginBottom: spacing.md,
+        },
+        // Section header
+        sectionHeader: {
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          marginBottom: spacing.sm,
+        },
+        sectionTitleRow: {
+          flexDirection: "row",
+          alignItems: "center",
+          gap: spacing.sm,
+        },
+        sectionIcon: {
+          width: 34,
+          height: 34,
+          borderRadius: 10,
+          backgroundColor: hexToRgba("#DC2626", 0.12),
+          alignItems: "center",
+          justifyContent: "center",
+        },
+        sectionTitle: {
+          fontSize: isTablet ? 18 : 16,
+          fontWeight: "700",
+          color: colors.textPrimary,
+          letterSpacing: 0.2,
+        },
+        badges: {
+          flexDirection: "row",
+          gap: spacing.xs,
+        },
+        badge: {
+          paddingHorizontal: spacing.sm,
+          paddingVertical: 4,
+          borderRadius: radius.full,
+        },
+        overdueBadge: {
+          backgroundColor: "#FEE2E2",
+        },
+        totalBadge: {
+          backgroundColor: hexToRgba(colors.accent, 0.1),
+        },
+        badgeText: {
+          fontSize: 11,
+          fontWeight: "700",
+        },
+        overdueText: {
+          color: "#991B1B",
+        },
+        totalText: {
+          color: colors.accent,
+        },
+        // Search container
+        searchContainer: {
+          backgroundColor: colors.cardBackground,
+          paddingVertical: spacing.md,
+          paddingHorizontal: spacing.md,
+          borderRadius: radius.lg + 2,
+          borderWidth: 1,
+          borderColor: Platform.OS === "ios"
+            ? hexToRgba(colors.textMuted, 0.15)
+            : hexToRgba(colors.textMuted, 0.1),
+          shadowColor: "#000000",
+          shadowOffset: { width: 0, height: 3 },
+          shadowOpacity: Platform.OS === "ios" ? 0.1 : 0.05,
+          shadowRadius: Platform.OS === "ios" ? 8 : 4,
+          elevation: 3,
+        },
+        searchLabel: {
+          fontSize: 12,
+          fontWeight: "600",
+          color: colors.textSecondary,
+          marginBottom: spacing.xs + 2,
+          letterSpacing: 0.3,
+          textTransform: "uppercase",
+        },
+      }),
+    [colors, spacing, radius, isTablet]
+  );
+
+  return (
+    <View style={styles.container}>
+      {/* Quick Stats */}
+      {/* <View style={styles.quickStatsRow}>
+        <StatsCard
+          icon="cash-remove"
+          label="Total Dues"
+          value={formatCurrency(totalDues)}
+          iconBg="#FEE2E2"
+          iconColor="#DC2626"
+          highlight
+        />
+        <StatsCard
+          icon="alert-circle"
+          label="Overdue"
+          value={String(overdueCount)}
+          iconBg="#FEF3C7"
+          iconColor="#D97706"
+        />
+      </View> */}
+
+      {/* Metrics grid */}
+      {Array.isArray(metrics) && metrics.length > 0 && (
+        <StatsGrid
+          metrics={metrics}
+          minVisible={width >= 900 ? 4 : width >= 740 ? 3 : 2}
+          cardHeight={88}
+        />
+      )}
+
+      {/* Section header */}
+      <View style={[styles.sectionHeader, { marginTop: spacing.md }]}>
+        <View style={styles.sectionTitleRow}>
+          <View style={styles.sectionIcon}>
+            <MaterialCommunityIcons name="cash-clock" size={18} color="#DC2626" />
+          </View>
+          <Text style={styles.sectionTitle}>Pending Dues</Text>
+        </View>
+        <View style={styles.badges}>
+          {overdueCount > 0 && (
+            <View style={[styles.badge, styles.overdueBadge]}>
+              <Text style={[styles.badgeText, styles.overdueText]}>
+                {overdueCount} overdue
+              </Text>
+            </View>
+          )}
+          <View style={[styles.badge, styles.totalBadge]}>
+            <Text style={[styles.badgeText, styles.totalText]}>
+              {dueCount} total
+            </Text>
+          </View>
+        </View>
+      </View>
+
+      {/* Search */}
+      <View style={styles.searchContainer}>
+        <Text style={styles.searchLabel}>Search Dues</Text>
+        <SearchBar
+          placeholder="Search by name, room or phone..."
+          onSearch={onQueryChange}
+          onFilter={onFilterPress}
+          filterActive={filterActive}
+        />
+      </View>
+    </View>
+  );
+};
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   MAIN COMPONENT
+───────────────────────────────────────────────────────────────────────────── */
+
+export default function DuesTab({
+  data,
+  metrics = [],
+  refreshing,
+  onRefresh,
+}: Props) {
+  const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const { colors, spacing, radius } = useTheme();
+
+  // Responsive columns
+  const columns = width >= 1000 ? 3 : width >= 740 ? 2 : 1;
+  const cardPadding = spacing.md;
+  const cardGap = spacing.md;
+  const cardWidth =
+    columns > 1
+      ? (width - cardPadding * 2 - cardGap * (columns - 1)) / columns
+      : width - cardPadding * 2;
+
+  // State
+  const [query, setQuery] = useState("");
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [filter, setFilter] = useState<{ dueDate?: DateRange }>({});
+
+  // Filter & search
+  const filtered = useMemo(() => {
+    let out: DueItem[] = Array.isArray(data) ? data : [];
+
+    // Only show dues (status === 2)
+    out = out.filter((p) => num(p?.status) === 2);
+
+    // Search
     if (query.trim()) {
       const q = query.trim().toLowerCase();
       out = out.filter((p) => {
@@ -245,191 +1102,140 @@ export default function DuesTab({ data, metrics = [], refreshing, onRefresh }: P
       });
     }
 
-    // due-date range
+    // Date range filter
     const range = filter?.dueDate;
     if (range?.from || range?.to) {
       out = out.filter((p) => withinRange(p?.dueDate, range));
     }
 
-    // guard to dues only if API ever mixes
-    out = out.filter((p) => num(p?.status) === 2);
+    // Sort: overdue first, then by due date
+    out.sort((a, b) => {
+      const urgencyOrder = { overdue: 0, "due-soon": 1, upcoming: 2, future: 3 };
+      const aUrgency = urgencyOrder[getDueUrgency(a.dueDate)];
+      const bUrgency = urgencyOrder[getDueUrgency(b.dueDate)];
+      if (aUrgency !== bUrgency) return aUrgency - bUrgency;
+
+      // Within same urgency, sort by date (earliest first)
+      const aDate = toDate(a.dueDate)?.getTime() || 0;
+      const bDate = toDate(b.dueDate)?.getTime() || 0;
+      return aDate - bDate;
+    });
 
     return out;
   }, [data, query, filter]);
 
-  const filterActive = !!filter?.dueDate?.from || !!filter?.dueDate?.to;
-
-  /* -------------- actions ---------------- */
-  const onPayNow = useCallback((item: any) => {
-    Haptics.selectionAsync();
-    // TODO: integrate payment flow / route when ready
-  }, []);
-
-  const onEdit = useCallback((item: any) => {
-    Haptics.selectionAsync();
-    // TODO: navigate to edit screen when available
-  }, []);
-
-  const initials = (name?: string) =>
-    str(name)
-      .split(/\s+/)
-      .slice(0, 2)
-      .map((w) => w?.[0]?.toUpperCase() || "")
-      .join("") || "PG";
-
-  const Header = () => (
-    <View style={s.headerWrap}>
-      {Array.isArray(metrics) && metrics.length > 0 ? (
-        <StatsGrid
-          metrics={metrics}
-          minVisible={width >= 900 ? 4 : width >= 740 ? 3 : 2}
-          cardHeight={92}
-        />
-      ) : null}
-
-      <SearchBar
-        placeholder="Search by name, room or phone"
-        onSearch={setQuery}
-        onFilter={() => setSheetOpen(true)}
-        filterActive={filterActive}
-      />
-    </View>
+  // Stats
+  const totalDues = useMemo(
+    () => filtered.reduce((sum, item) => sum + num(item?.amount), 0),
+    [filtered]
   );
 
-  const renderItem = ({ item }: { item: any }) => {
-    const name = str(item?.tenantDetails?.name, "—");
-    const room = str(item?.tenantDetails?.roomNumber, "—");
-    const phone = str(item?.tenantDetails?.phoneNumber, "—");
-    const totalAmt = inr(item?.totalAmount);
-    const dueAmt = inr(item?.amount);
-    const category = str(item?.paymentCategory, "—");
-    const dueMonth = monthOf(item?.dueDate);
-    const dueOn = fmtDate(item?.dueDate);
-    const mode = str(item?.paymentMode, "—");
+  const overdueCount = useMemo(
+    () => filtered.filter((item) => getDueUrgency(item.dueDate) === "overdue").length,
+    [filtered]
+  );
 
-    return (
-      <View style={s.card}>
-        {/* header */}
-        <View style={s.headerRow}>
-          <View style={s.leftWrap}>
-            <View style={s.avatar}>
-              <Text style={s.avatarTxt}>{initials(name)}</Text>
-            </View>
-            <View style={s.titleWrap}>
-              <Text style={s.title} numberOfLines={1}>
-                {name}
-              </Text>
-              <Text style={s.subTitle}>Room No: {room}</Text>
-            </View>
-          </View>
+  const filterActive = !!filter?.dueDate?.from || !!filter?.dueDate?.to || !!query.trim();
 
-          {/* Big Due amount */}
-          <Text style={s.amountBig}>{dueAmt}</Text>
-        </View>
+  // Handlers
+  const onPayNow = useCallback((item: DueItem) => {
+    Haptics.selectionAsync();
+    // TODO: Integrate payment flow
+  }, []);
 
-        {/* chips: category (with month), payment mode, due date */}
-        <View style={s.chipsRow}>
-          <View style={s.chip}>
-            <MaterialIcons name="category" size={16} color={colors.textPrimary} />
-            <Text style={s.chipTxt}>
-              {category} {dueMonth !== "—" ? `(${dueMonth})` : ""}
-            </Text>
-          </View>
+  const onEdit = useCallback((item: DueItem) => {
+    Haptics.selectionAsync();
+    // TODO: Navigate to edit screen
+  }, []);
 
-          <View style={s.chip}>
-            <MaterialIcons name="payments" size={16} color={colors.textPrimary} />
-            <Text style={s.chipTxt}>{mode}</Text>
-          </View>
+  // Styles
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        columnGap: {
+          gap: cardGap,
+        },
+        listContent: {
+          paddingHorizontal: cardPadding,
+          paddingTop: spacing.sm,
+          paddingBottom: insets.bottom + spacing.lg * 3,
+          gap: spacing.md,
+        },
+      }),
+    [cardPadding, cardGap, spacing, insets.bottom]
+  );
 
-          <View style={s.chip}>
-            <MaterialIcons name="event" size={16} color={colors.textPrimary} />
-            <Text style={s.chipTxt}>Due: {dueOn}</Text>
-          </View>
-        </View>
+  // Render item
+  const renderItem = useCallback(
+    ({ item }: ListRenderItemInfo<DueItem>) => (
+      <DueCard
+        item={item}
+        onPayNow={onPayNow}
+        onEdit={onEdit}
+        cardWidth={cardWidth}
+      />
+    ),
+    [onPayNow, onEdit, cardWidth]
+  );
 
-        <View style={s.sep} />
+  const keyExtractor = useCallback(
+    (item: DueItem, index: number) => String(item?._id || index),
+    []
+  );
 
-        {/* details */}
-        <View style={s.row}>
-          <Text style={s.label}>Name</Text>
-          <Text style={s.value}>{name}</Text>
-        </View>
-        <View style={s.row}>
-          <Text style={s.label}>Room No</Text>
-          <Text style={s.value}>{room}</Text>
-        </View>
-        <View style={s.row}>
-          <Text style={s.label}>Phone No</Text>
-          <Text style={s.value}>{phone}</Text>
-        </View>
-        <View style={s.row}>
-          <Text style={s.label}>Total Amount</Text>
-          <Text style={s.value}>{totalAmt}</Text>
-        </View>
-        <View style={s.row}>
-          <Text style={s.label}>Due Amount</Text>
-          <Text style={s.value}>{dueAmt}</Text>
-        </View>
+  // List header
+  const ListHeaderMemo = useMemo(
+    () => (
+      <ListHeader
+        metrics={metrics}
+        totalDues={totalDues}
+        overdueCount={overdueCount}
+        dueCount={filtered.length}
+        query={query}
+        onQueryChange={setQuery}
+        onFilterPress={() => setSheetOpen(true)}
+        filterActive={filterActive}
+      />
+    ),
+    [metrics, totalDues, overdueCount, filtered.length, query, filterActive]
+  );
 
-        {/* actions */}
-        <View style={s.actions}>
-          <Pressable
-            onPress={() => onPayNow(item)}
-            style={({ pressed }) => [
-              s.payBtn,
-              pressed && Platform.OS === "ios" && { opacity: 0.85 },
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel="Pay now"
-          >
-            <MaterialIcons name="check-circle" size={18} color="#15803D" />
-            <Text style={s.payTxt}>Pay now</Text>
-          </Pressable>
-
-          <Pressable
-            onPress={() => onEdit(item)}
-            style={({ pressed }) => [
-              s.editBtn,
-              pressed && Platform.OS === "ios" && { opacity: 0.85 },
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel="Edit"
-          >
-            <MaterialIcons name="edit" size={18} color={colors.textPrimary} />
-            <Text style={s.editTxt}>Edit</Text>
-          </Pressable>
-        </View>
-      </View>
-    );
-  };
+  // Empty state
+  const ListEmptyMemo = useMemo(
+    () => <EmptyState hasFilter={filterActive} />,
+    [filterActive]
+  );
 
   return (
     <>
       <FlatList
         data={filtered}
-        keyExtractor={(t: any, i) => String(t?._id ?? t?.id ?? i)}
+        keyExtractor={keyExtractor}
+        numColumns={columns}
+        key={`dues-list-${columns}`}
+        columnWrapperStyle={columns > 1 ? styles.columnGap : undefined}
         renderItem={renderItem}
-        numColumns={1}
-        contentContainerStyle={s.listContent}
-        ListHeaderComponent={<Header />}
+        contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
-        ListEmptyComponent={
-          <View style={s.emptyWrap}>
-            <Text style={s.emptyTxt}>No dues found.</Text>
-          </View>
-        }
+        ListHeaderComponent={ListHeaderMemo}
+        ListEmptyComponent={ListEmptyMemo}
         refreshControl={
           <RefreshControl
             refreshing={!!refreshing}
             onRefresh={onRefresh}
             tintColor={colors.accent}
+            colors={[colors.accent]}
           />
         }
         removeClippedSubviews
-        initialNumToRender={10}
-        windowSize={10}
+        initialNumToRender={8}
+        maxToRenderPerBatch={8}
+        windowSize={11}
+        accessibilityLabel="Dues list"
+        accessibilityRole="list"
       />
 
+      {/* Filter Sheet */}
       <FilterSheet
         visible={sheetOpen}
         value={filter}
@@ -437,6 +1243,7 @@ export default function DuesTab({ data, metrics = [], refreshing, onRefresh }: P
         onClose={() => setSheetOpen(false)}
         sections={sections}
         resetValue={{}}
+        title="Filter Dues"
       />
     </>
   );

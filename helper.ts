@@ -36,13 +36,24 @@ export async function fetchData<T = any>({
 }: FetchParams): Promise<T> {
   const token = await AsyncStorage.getItem("userToken");
   url = baseUrl + url;
+
+  // Check if body is FormData - don't set Content-Type for FormData
+  // The browser/RN will automatically set it with proper boundary
+  const isFormData = body instanceof FormData;
+
+  const fetchHeaders: Record<string, string> = {
+    ...(headers || {}),
+    ...(isAuthRequired && token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+
+  // Only set Content-Type for non-FormData requests
+  if (!isFormData) {
+    fetchHeaders["Content-Type"] = "application/json";
+  }
+
   const fetchObject: RequestInit = {
     method,
-    headers: {
-      ...(headers || {}),
-      ...(isAuthRequired && token ? { Authorization: `Bearer ${token}` } : {}),
-      "Content-Type": "application/json",
-    },
+    headers: fetchHeaders,
     body: body,
   };
   try {
