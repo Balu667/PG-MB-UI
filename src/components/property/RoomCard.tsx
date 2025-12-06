@@ -1,4 +1,5 @@
 // src/components/property/RoomCard.tsx
+// Premium Room Card - Rich, user-friendly design
 import React, { useState, useRef, useMemo } from "react";
 import {
   View,
@@ -8,7 +9,6 @@ import {
   Animated,
   Platform,
   LayoutAnimation,
-  UIManager,
   useWindowDimensions,
 } from "react-native";
 import * as Haptics from "expo-haptics";
@@ -19,44 +19,55 @@ import { useProperty } from "@/src/context/PropertyContext";
 import { useTheme } from "@/src/theme/ThemeContext";
 import { hexToRgba } from "@/src/theme";
 
-if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
+// Note: LayoutAnimation works without setLayoutAnimationEnabledExperimental in modern React Native
+// Removed to avoid "no-op in New Architecture" warning
 
-const chipTint = (colors: any) => ({
-  Available: colors.availableBeds,
-  Partial: colors.advBookedBeds,
-  Filled: colors.filledBeds,
-});
+/* ─────────────────────────────────────────────────────────────────────────────
+   HELPERS & CONSTANTS
+───────────────────────────────────────────────────────────────────────────── */
 
-const bedTint = (colors: any) => ({
-  totalBeds: colors.primary,
-  vacantBeds: colors.availableBeds,
-  occupiedBeds: colors.filledBeds,
-  noticeBeds: colors.underNoticeBeds,
-  bookingBeds: colors.advBookedBeds,
-});
+const num = (v: unknown, fallback = 0) =>
+  typeof v === "number" ? v : Number(v ?? fallback) || fallback;
+const str = (v: unknown, fallback = "") => (v == null ? fallback : String(v));
 
-const labelMap = {
-  totalBeds: "Total Beds",
-  vacantBeds: "Vacant",
-  occupiedBeds: "Occupied",
-  noticeBeds: "Notice",
-  bookingBeds: "Adv. Booking",
-} as const;
+type DerivedStatus = "Available" | "Partial" | "Filled";
 
-const num = (v: any, fallback = 0) => (typeof v === "number" ? v : Number(v ?? fallback)) || 0;
-const str = (v: any, fallback = "") => (v == null ? fallback : String(v));
+const formatCurrency = (amount: number): string =>
+  `₹${amount.toLocaleString("en-IN")}`;
+
+const getFloorLabel = (floor: number | string): string => {
+  const f = num(floor, NaN);
+  if (Number.isNaN(f)) return "—";
+  if (f === 0) return "Ground";
+  if (f === 1) return "1st";
+  if (f === 2) return "2nd";
+  if (f === 3) return "3rd";
+  return `${f}th`;
+};
+
+// Facility icons and labels
+const FACILITY_MAP: Record<string, { icon: string; label: string }> = {
+  washingMachine: { icon: "washing-machine", label: "Washing" },
+  wifi: { icon: "wifi", label: "WiFi" },
+  hotWater: { icon: "water-boiler", label: "Hot Water" },
+  table: { icon: "desk", label: "Table" },
+  tv: { icon: "television", label: "TV" },
+  ac: { icon: "air-conditioner", label: "AC" },
+  fridge: { icon: "fridge", label: "Fridge" },
+  gym: { icon: "dumbbell", label: "Gym" },
+};
 
 interface Props {
-  room: any;
+  room: Record<string, unknown>;
 }
 
 const RoomCard: React.FC<Props> = ({ room }) => {
   const router = useRouter();
   const { width } = useWindowDimensions();
-  const { colors, spacing, radius, shadow } = useTheme();
+  const { colors, spacing, radius } = useTheme();
   const { selectedId } = useProperty();
+
+  // Responsive columns
   const COLS = width >= 1000 ? 3 : width >= 740 ? 2 : 1;
   const GAP = spacing.md - 2;
   const SIDE = spacing.md * 2;
@@ -70,15 +81,26 @@ const RoomCard: React.FC<Props> = ({ room }) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setOpen((p) => !p);
     Animated.sequence([
-      Animated.spring(scale, { toValue: 0.96, useNativeDriver: true, speed: 25 }),
+      Animated.spring(scale, { toValue: 0.97, useNativeDriver: true, speed: 25 }),
       Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 25 }),
     ]).start();
+  };
+
+  const handleEdit = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    const rid = String(room?._id ?? room?.id ?? "");
+    if (!rid) return;
+    router.push({
+      pathname: `/protected/rooms/${rid}`,
+      params: { pid: String(selectedId || "") },
+    });
   };
 
   // ---- Normalized fields ----
   const roomNoRaw = str(room?.roomNo ?? room?.roomNumber ?? room?.name ?? room?.code, "—");
   const roomNo = roomNoRaw.toString().toUpperCase();
-  const floor = str(room?.floor ?? room?.floorLabel ?? room?.floorNo, "—");
+  const floor = num(room?.floor, 0);
+  const floorLabel = getFloorLabel(floor);
 
   const totalBeds =
     num(room?.totalBeds) ||
@@ -99,8 +121,13 @@ const RoomCard: React.FC<Props> = ({ room }) => {
   const bedPrice = num(room?.bedPrice ?? room?.rentAmount ?? 0);
   const deposit = num(room?.securityDeposit ?? room?.deposit ?? 0);
 
-  const usedCount = Math.min(occupiedBeds + underNotice + advanceBookings, totalBeds);
-  const derivedStatus =
+  const facilities: string[] = Array.isArray(room?.facilities) ? (room.facilities as string[]) : [];
+  const roomTypes: string[] = Array.isArray(room?.roomType) ? (room.roomType as string[]) : [];
+  const remarks = str(room?.remarks ?? "");
+  const electricityIncluded = str(room?.electricityBillInclude ?? "yes").toLowerCase() === "yes";
+
+  // Status calculation
+  const derivedStatus: DerivedStatus =
     totalBeds <= 0
       ? "Available"
       : vacantBeds <= 0
@@ -109,217 +136,467 @@ const RoomCard: React.FC<Props> = ({ room }) => {
       ? "Available"
       : "Partial";
 
-  const utilisation = totalBeds ? Math.min(usedCount / totalBeds, 1) : 0;
+  // Colors based on status
+  const statusConfig = useMemo(() => {
+    switch (derivedStatus) {
+      case "Available":
+        return { bg: "#10B981", label: "Available", icon: "check-circle" as const };
+      case "Filled":
+        return { bg: "#EF4444", label: "Filled", icon: "close-circle" as const };
+      case "Partial":
+        return { bg: "#F59E0B", label: "Partial", icon: "progress-check" as const };
+      default:
+        return { bg: colors.textMuted, label: "Unknown", icon: "help-circle" as const };
+    }
+  }, [derivedStatus, colors.textMuted]);
 
-  const CHIP = useMemo(() => chipTint(colors), [colors]);
-  const BED_COLORS = useMemo(() => bedTint(colors), [colors]);
+  // Bed breakdown
+  const bedBreakdown = [
+    { key: "vacant", label: "Vacant", value: vacantBeds, color: "#10B981", icon: "bed-empty" },
+    { key: "occupied", label: "Occupied", value: occupiedBeds, color: "#EF4444", icon: "bed" },
+    { key: "notice", label: "Notice", value: underNotice, color: "#8B5CF6", icon: "bell-ring" },
+    { key: "booked", label: "Booked", value: advanceBookings, color: "#F59E0B", icon: "calendar-check" },
+  ];
 
-  const extraBeds = Math.max(totalBeds - 2, 0);
-
-  const bedBreakdown = {
-    totalBeds,
-    vacantBeds,
-    occupiedBeds,
-    noticeBeds: underNotice,
-    bookingBeds: advanceBookings,
-  };
-
-  const progressColor =
-    derivedStatus === "Filled"
-      ? colors.filledBeds
-      : derivedStatus === "Partial"
-      ? colors.advBookedBeds
-      : colors.availableBeds;
-
-  const s = useMemo(
+  const styles = useMemo(
     () =>
       StyleSheet.create({
-        shadowWrap: {
+        cardOuter: {
           width: cardW,
           borderRadius: radius.xl,
-          shadowColor: shadow,
-          shadowOffset: { width: 0, height: 7 },
-          shadowOpacity: 0.09,
-          shadowRadius: 12,
-          borderWidth: 1,
-          borderColor: colors.borderColor,
-        },
-        card: {
           backgroundColor: colors.cardBackground,
-          borderRadius: radius.xl,
-          padding: spacing.md + 2,
+          borderWidth: 1,
+          borderColor: Platform.OS === "ios"
+            ? hexToRgba(colors.textMuted, 0.15)
+            : hexToRgba(colors.textMuted, 0.1),
+          shadowColor: "#000000",
+          shadowOffset: { width: 0, height: 6 },
+          shadowOpacity: Platform.OS === "ios" ? 0.15 : 0.08,
+          shadowRadius: Platform.OS === "ios" ? 14 : 10,
+          elevation: 5,
           overflow: "hidden",
         },
-        rowBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-
-        roomLabel: { fontSize: 18, fontWeight: "600", color: colors.textPrimary },
-        roomNo: { fontSize: 18, fontWeight: "800", color: colors.accent },
-
-        statusChip: (bg: string) => ({
-          backgroundColor: bg,
-          borderRadius: 12,
-          paddingHorizontal: 10,
-          paddingVertical: 3,
-          shadowColor: bg,
-          shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: 0.3,
-          shadowRadius: 3,
-          elevation: 3,
-        }),
-        statusTxt: {
-          color: colors.white,
-          fontSize: 11,
-          fontWeight: "700",
-          textTransform: "uppercase",
+        statusBar: {
+          height: 5,
+          backgroundColor: statusConfig.bg,
         },
-
-        // New: small Edit icon next to status chip
-        headerRight: { flexDirection: "row", alignItems: "center", gap: 8 },
-        editBtn: {
-          width: 28,
-          height: 28,
-          borderRadius: 14,
-          alignItems: "center",
-          justifyContent: "center",
+        cardContent: {
+          padding: spacing.md,
+        },
+        // Header row
+        headerRow: {
+          flexDirection: "row",
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          marginBottom: spacing.sm,
+        },
+        roomBadge: {
           backgroundColor: hexToRgba(colors.accent, 0.12),
+          paddingHorizontal: spacing.sm + 4,
+          paddingVertical: spacing.xs + 2,
+          borderRadius: radius.lg,
+          borderWidth: 1,
+          borderColor: hexToRgba(colors.accent, 0.2),
         },
-
-        floorWrap: { flexDirection: "row", alignItems: "center", gap: 6 },
-        floorTxt: { fontSize: 14, color: colors.textSecondary },
-
-        bedsWrap: { flexDirection: "row", alignItems: "center", gap: 2 },
-        moreBadge: {
-          backgroundColor: hexToRgba(colors.primary, 0.15),
-          borderRadius: 8,
-          paddingHorizontal: 4,
-          marginLeft: 2,
+        roomLabel: {
+          fontSize: 11,
+          fontWeight: "600",
+          color: colors.textSecondary,
+          marginBottom: 2,
+          letterSpacing: 0.5,
         },
-        moreBadgeTxt: { fontSize: 11, color: colors.accent, fontWeight: "600" },
-
-        rentTxt: { marginTop: 6, fontSize: 13, color: colors.textSecondary },
-        rentBold: { fontWeight: "700", color: colors.textPrimary },
-
-        depositTxt: { marginTop: 4, fontSize: 13, color: colors.textSecondary },
-        depositBold: { fontWeight: "800", color: colors.textPrimary },
-
-        utilBarWrap: {
-          height: 6,
-          backgroundColor: hexToRgba(colors.textSecondary, 0.25),
-          borderRadius: 3,
-          marginTop: 10,
-          overflow: "hidden",
+        roomNo: {
+          fontSize: 20,
+          fontWeight: "800",
+          color: colors.accent,
+          letterSpacing: -0.5,
         },
-        utilBarFill: { height: 6 },
-
-        infoBox: {
-          marginTop: spacing.md - 2,
-          borderTopWidth: StyleSheet.hairlineWidth,
-          borderColor: hexToRgba(colors.textSecondary, 0.25),
-          paddingTop: spacing.sm,
+        headerRight: {
+          flexDirection: "row",
+          alignItems: "center",
           gap: 8,
         },
-        infoRow: { flexDirection: "row", alignItems: "center" },
-        infoLabel: { flex: 1, fontSize: 14, color: colors.textSecondary, fontWeight: "600" },
-        infoValue: { fontSize: 14, color: colors.accent, fontWeight: "700" },
+        statusChip: {
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 4,
+          backgroundColor: hexToRgba(statusConfig.bg, 0.15),
+          paddingHorizontal: 10,
+          paddingVertical: 5,
+          borderRadius: radius.full,
+          borderWidth: 1,
+          borderColor: hexToRgba(statusConfig.bg, 0.3),
+        },
+        statusText: {
+          fontSize: 11,
+          fontWeight: "700",
+          color: statusConfig.bg,
+          textTransform: "uppercase",
+        },
+        editBtn: {
+          width: 36,
+          height: 36,
+          borderRadius: 18,
+          backgroundColor: hexToRgba(colors.accent, 0.1),
+          alignItems: "center",
+          justifyContent: "center",
+          borderWidth: 1,
+          borderColor: hexToRgba(colors.accent, 0.2),
+        },
+        // Info grid
+        infoGrid: {
+          flexDirection: "row",
+          flexWrap: "wrap",
+          gap: spacing.sm,
+          marginBottom: spacing.md,
+        },
+        infoItem: {
+          flex: 1,
+          minWidth: "45%",
+          backgroundColor: colors.surface,
+          borderRadius: radius.md,
+          padding: spacing.sm,
+          borderWidth: 1,
+          borderColor: hexToRgba(colors.textMuted, 0.08),
+        },
+        infoLabel: {
+          fontSize: 10,
+          fontWeight: "600",
+          color: colors.textSecondary,
+          textTransform: "uppercase",
+          letterSpacing: 0.5,
+          marginBottom: 4,
+        },
+        infoValue: {
+          fontSize: 15,
+          fontWeight: "700",
+          color: colors.textPrimary,
+        },
+        infoValueAccent: {
+          color: colors.accent,
+        },
+        // Beds section
+        bedsSection: {
+          marginBottom: spacing.md,
+        },
+        bedsSectionHeader: {
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          marginBottom: spacing.sm,
+        },
+        bedsSectionTitle: {
+          fontSize: 12,
+          fontWeight: "700",
+          color: colors.textSecondary,
+          textTransform: "uppercase",
+          letterSpacing: 0.5,
+        },
+        bedsTotalBadge: {
+          backgroundColor: hexToRgba(colors.primary, 0.1),
+          paddingHorizontal: 10,
+          paddingVertical: 4,
+          borderRadius: radius.full,
+        },
+        bedsTotalText: {
+          fontSize: 12,
+          fontWeight: "700",
+          color: colors.primary,
+        },
+        bedsGrid: {
+          flexDirection: "row",
+          gap: 6,
+        },
+        bedItem: {
+          flex: 1,
+          alignItems: "center",
+          padding: spacing.xs + 2,
+          borderRadius: radius.sm,
+          backgroundColor: colors.surface,
+          borderWidth: 1,
+          borderColor: hexToRgba(colors.textMuted, 0.08),
+        },
+        bedDot: {
+          width: 8,
+          height: 8,
+          borderRadius: 4,
+          marginBottom: 4,
+        },
+        bedValue: {
+          fontSize: 14,
+          fontWeight: "800",
+          color: colors.textPrimary,
+        },
+        bedLabel: {
+          fontSize: 9,
+          fontWeight: "600",
+          color: colors.textSecondary,
+          marginTop: 2,
+        },
+        // Divider
+        divider: {
+          height: 1,
+          backgroundColor: hexToRgba(colors.textMuted, 0.1),
+          marginVertical: spacing.sm,
+        },
+        // Expandable content
+        expandContent: {
+          marginTop: spacing.sm,
+        },
+        sectionTitle: {
+          fontSize: 11,
+          fontWeight: "700",
+          color: colors.textSecondary,
+          textTransform: "uppercase",
+          letterSpacing: 0.5,
+          marginBottom: spacing.xs,
+        },
+        facilitiesRow: {
+          flexDirection: "row",
+          flexWrap: "wrap",
+          gap: 6,
+          marginBottom: spacing.sm,
+        },
+        facilityChip: {
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 4,
+          backgroundColor: hexToRgba(colors.accent, 0.08),
+          paddingHorizontal: 8,
+          paddingVertical: 4,
+          borderRadius: radius.md,
+          borderWidth: 1,
+          borderColor: hexToRgba(colors.accent, 0.15),
+        },
+        facilityText: {
+          fontSize: 10,
+          fontWeight: "600",
+          color: colors.accent,
+        },
+        roomTypeRow: {
+          flexDirection: "row",
+          flexWrap: "wrap",
+          gap: 6,
+          marginBottom: spacing.sm,
+        },
+        roomTypeChip: {
+          backgroundColor: hexToRgba(colors.textSecondary, 0.1),
+          paddingHorizontal: 8,
+          paddingVertical: 4,
+          borderRadius: radius.md,
+        },
+        roomTypeText: {
+          fontSize: 10,
+          fontWeight: "600",
+          color: colors.textSecondary,
+        },
+        remarksBox: {
+          backgroundColor: hexToRgba(colors.textMuted, 0.06),
+          padding: spacing.sm,
+          borderRadius: radius.md,
+          borderLeftWidth: 3,
+          borderLeftColor: colors.accent,
+        },
+        remarksText: {
+          fontSize: 12,
+          color: colors.textSecondary,
+          fontStyle: "italic",
+        },
+        electricityRow: {
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 6,
+          marginTop: spacing.sm,
+        },
+        electricityText: {
+          fontSize: 11,
+          fontWeight: "600",
+          color: electricityIncluded ? "#10B981" : "#EF4444",
+        },
+        // Footer
+        footerRow: {
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "center",
+          paddingTop: spacing.xs,
+        },
+        expandHint: {
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 4,
+        },
+        expandHintText: {
+          fontSize: 11,
+          fontWeight: "600",
+          color: colors.textMuted,
+        },
       }),
-    [colors, spacing, radius, cardW, shadow]
+    [colors, spacing, radius, cardW, statusConfig, electricityIncluded]
   );
 
   return (
-    <Animated.View style={[s.shadowWrap, { transform: [{ scale }] }]}>
+    <Animated.View style={[styles.cardOuter, { transform: [{ scale }] }]}>
+      {/* Status bar at top */}
+      <View style={styles.statusBar} />
+
       <Pressable
-        style={s.card}
         onPress={handlePress}
         android_ripple={{ color: hexToRgba(colors.primary, 0.07) }}
+        accessible
+        accessibilityRole="button"
+        accessibilityLabel={`Room ${roomNo}, ${derivedStatus}, ${vacantBeds} vacant beds out of ${totalBeds}`}
+        accessibilityHint="Tap to expand details"
       >
-        {/* header */}
-        <View style={s.rowBetween}>
-          <Text style={s.roomLabel}>
-            Room - <Text style={s.roomNo}>{roomNo}</Text>
-          </Text>
-
-          <View style={s.headerRight}>
-            <View style={s.statusChip(CHIP[derivedStatus as keyof typeof CHIP] ?? colors.accent)}>
-              <Text style={s.statusTxt}>{derivedStatus}</Text>
+        <View style={styles.cardContent}>
+          {/* Header */}
+          <View style={styles.headerRow}>
+            <View style={styles.roomBadge}>
+              <Text style={styles.roomLabel}>ROOM NO.</Text>
+              <Text style={styles.roomNo}>{roomNo}</Text>
             </View>
 
-            {/* EDIT */}
-            <Pressable
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                const rid = String(room?._id ?? room?.id ?? "");
-                if (!rid) return;
-                // include pid so /rooms/[id] can resolve property even if context is late
-                router.push({
-                  pathname: `/protected/rooms/${rid}`,
-                  params: { pid: String(selectedId || "") },
-                });
-              }}
-              style={({ pressed }) => [s.editBtn, pressed && { opacity: 0.8 }]}
-              hitSlop={10}
-              accessibilityRole="button"
-              accessibilityLabel={`Edit Room ${roomNo}`}
-            >
-              <MaterialIcons name="edit" size={16} color={colors.accent} />
-            </Pressable>
-          </View>
-        </View>
-
-        {/* row 2 */}
-        <View style={[s.rowBetween, { marginTop: 6 }]}>
-          <View style={s.floorWrap}>
-            <MaterialIcons name="stairs" size={16} color={colors.accent} />
-            <Text style={s.floorTxt}>Floor {floor}</Text>
-          </View>
-
-          <View style={s.bedsWrap}>
-            <MaterialCommunityIcons name="bed" size={18} color={colors.accent} />
-            <MaterialCommunityIcons name="bed" size={18} color={colors.accent} />
-            {extraBeds > 0 && (
-              <View style={s.moreBadge}>
-                <Text style={s.moreBadgeTxt}>+{extraBeds}</Text>
-              </View>
-            )}
-          </View>
-        </View>
-
-        {!!bedPrice && (
-          <Text style={s.rentTxt}>
-            <Text style={s.rentBold}>₹{bedPrice.toLocaleString()}</Text> - Rent
-          </Text>
-        )}
-
-        {!!deposit && (
-          <Text style={s.depositTxt}>
-            <Text style={s.depositBold}>₹{deposit.toLocaleString()}</Text> - Security Deposit
-          </Text>
-        )}
-
-        <View style={s.utilBarWrap}>
-          <View
-            style={[
-              s.utilBarFill,
-              { width: `${utilisation * 100}%`, backgroundColor: progressColor },
-            ]}
-          />
-        </View>
-
-        {open && (
-          <View style={s.infoBox}>
-            {Object.entries(bedBreakdown).map(([k, v]) => (
-              <View key={k} style={s.infoRow}>
+            <View style={styles.headerRight}>
+              <View style={styles.statusChip}>
                 <MaterialCommunityIcons
-                  name="bed"
-                  size={15}
-                  color={BED_COLORS[k as keyof typeof BED_COLORS]}
-                  style={{ width: 22 }}
+                  name={statusConfig.icon}
+                  size={12}
+                  color={statusConfig.bg}
                 />
-                <Text style={s.infoLabel}>{labelMap[k as keyof typeof labelMap] ?? k}</Text>
-                <Text style={s.infoValue}>{v}</Text>
+                <Text style={styles.statusText}>{statusConfig.label}</Text>
               </View>
-            ))}
+
+              <Pressable
+                onPress={handleEdit}
+                style={({ pressed }) => [styles.editBtn, pressed && { opacity: 0.7 }]}
+                hitSlop={10}
+                accessibilityRole="button"
+                accessibilityLabel={`Edit Room ${roomNo}`}
+              >
+                <MaterialIcons name="edit" size={16} color={colors.accent} />
+              </Pressable>
+            </View>
           </View>
-        )}
+
+          {/* Info Grid */}
+          <View style={styles.infoGrid}>
+            <View style={styles.infoItem}>
+              <Text style={styles.infoLabel}>Floor</Text>
+              <Text style={styles.infoValue}>{floorLabel}</Text>
+            </View>
+            <View style={styles.infoItem}>
+              <Text style={styles.infoLabel}>Sharing</Text>
+              <Text style={styles.infoValue}>{totalBeds} Bed{totalBeds > 1 ? "s" : ""}</Text>
+            </View>
+            <View style={styles.infoItem}>
+              <Text style={styles.infoLabel}>Rent/Bed</Text>
+              <Text style={[styles.infoValue, styles.infoValueAccent]}>
+                {formatCurrency(bedPrice)}
+              </Text>
+            </View>
+            <View style={styles.infoItem}>
+              <Text style={styles.infoLabel}>Deposit</Text>
+              <Text style={styles.infoValue}>{formatCurrency(deposit)}</Text>
+            </View>
+          </View>
+
+          {/* Beds Section */}
+          <View style={styles.bedsSection}>
+            <View style={styles.bedsSectionHeader}>
+              <Text style={styles.bedsSectionTitle}>Bed Status</Text>
+              <View style={styles.bedsTotalBadge}>
+                <Text style={styles.bedsTotalText}>{totalBeds} Total</Text>
+              </View>
+            </View>
+            <View style={styles.bedsGrid}>
+              {bedBreakdown.map((bed) => (
+                <View key={bed.key} style={styles.bedItem}>
+                  <View style={[styles.bedDot, { backgroundColor: bed.color }]} />
+                  <Text style={styles.bedValue}>{bed.value}</Text>
+                  <Text style={styles.bedLabel}>{bed.label}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+
+          {/* Expandable Content */}
+          {open && (
+            <View style={styles.expandContent}>
+              <View style={styles.divider} />
+
+              {/* Facilities */}
+              {facilities.length > 0 && (
+                <>
+                  <Text style={styles.sectionTitle}>Facilities</Text>
+                  <View style={styles.facilitiesRow}>
+                    {facilities.map((f) => {
+                      const fac = FACILITY_MAP[f] || { icon: "checkbox-marked-circle", label: f };
+                      return (
+                        <View key={f} style={styles.facilityChip}>
+                          <MaterialCommunityIcons
+                            name={fac.icon as keyof typeof MaterialCommunityIcons.glyphMap}
+                            size={12}
+                            color={colors.accent}
+                          />
+                          <Text style={styles.facilityText}>{fac.label}</Text>
+                        </View>
+                      );
+                    })}
+                  </View>
+                </>
+              )}
+
+              {/* Room Types */}
+              {roomTypes.length > 0 && (
+                <>
+                  <Text style={styles.sectionTitle}>Room Type</Text>
+                  <View style={styles.roomTypeRow}>
+                    {roomTypes.map((rt) => (
+                      <View key={rt} style={styles.roomTypeChip}>
+                        <Text style={styles.roomTypeText}>{rt}</Text>
+                      </View>
+                    ))}
+                  </View>
+                </>
+              )}
+
+              {/* Remarks */}
+              {remarks.trim() && (
+                <>
+                  <Text style={styles.sectionTitle}>Remarks</Text>
+                  <View style={styles.remarksBox}>
+                    <Text style={styles.remarksText}>{remarks}</Text>
+                  </View>
+                </>
+              )}
+
+              {/* Electricity */}
+              <View style={styles.electricityRow}>
+                <MaterialCommunityIcons
+                  name={electricityIncluded ? "check-circle" : "close-circle"}
+                  size={14}
+                  color={electricityIncluded ? "#10B981" : "#EF4444"}
+                />
+                <Text style={styles.electricityText}>
+                  Electricity {electricityIncluded ? "Included" : "Not Included"}
+                </Text>
+              </View>
+            </View>
+          )}
+
+          {/* Footer hint */}
+          <View style={styles.footerRow}>
+            <View style={styles.expandHint}>
+              <MaterialIcons
+                name={open ? "keyboard-arrow-up" : "keyboard-arrow-down"}
+                size={18}
+                color={colors.textMuted}
+              />
+              <Text style={styles.expandHintText}>
+                {open ? "Tap to collapse" : "Tap for details"}
+              </Text>
+            </View>
+          </View>
+        </View>
       </Pressable>
     </Animated.View>
   );
