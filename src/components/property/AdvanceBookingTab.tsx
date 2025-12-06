@@ -1,47 +1,65 @@
 // src/components/property/AdvanceBookingTab.tsx
+// Premium Advance Booking Tab - Compact, modern design
 import React, { useMemo, useState, useCallback } from "react";
-import { FlatList, StyleSheet, View, Text, RefreshControl } from "react-native";
-import { useWindowDimensions } from "react-native";
+import {
+  FlatList,
+  StyleSheet,
+  View,
+  Text,
+  RefreshControl,
+  Platform,
+  useWindowDimensions,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
+import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 
 import { useTheme } from "@/src/theme/ThemeContext";
+import { hexToRgba } from "@/src/theme";
 import SearchBar from "@/src/components/SearchBar";
 import AddButton from "@/src/components/Common/AddButton";
 import AdvancedBookingCard from "@/src/components/property/AdvancedBookingCard";
 import FilterSheet, { Section } from "@/src/components/FilterSheet";
-import { hexToRgba } from "@/src/theme";
 
-const str = (v: any, f = "") => (v == null ? f : String(v));
-const num = (v: any, f = 0) => (typeof v === "number" ? v : Number(v ?? f)) || 0;
-const getName = (t: any) => str(t?.tenantName ?? t?.name ?? "", "");
+/* ─────────────────────────────────────────────────────────────────────────────
+   HELPERS
+───────────────────────────────────────────────────────────────────────────── */
 
-/** allowed statuses for this tab */
-const ALLOWED = new Set([3, 5, 6]);
+const str = (v: unknown, f = "") => (v == null ? f : String(v));
+const num = (v: unknown, f = 0) => (typeof v === "number" ? v : Number(v ?? f)) || f;
+const getName = (t: Record<string, unknown>) => str(t?.tenantName ?? t?.name ?? "", "");
+const getPhone = (t: Record<string, unknown>) => str(t?.phoneNumber ?? t?.phone ?? "", "");
+const getRoom = (t: Record<string, unknown>) => str(t?.roomNumber ?? t?.room ?? "", "");
 
-/* ---------------------------- Filter typing ---------------------------- */
+/** Allowed statuses for advance booking tab */
+const ALLOWED_STATUSES = new Set([3, 5, 6]);
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   FILTER TYPES & SECTIONS
+───────────────────────────────────────────────────────────────────────────── */
+
 type DateRange = { from?: Date; to?: Date };
-type AdvanceBookingFilter = {
-  status: number[]; // {3,5,6}
-  bookingDate: DateRange; // filters on tenant.bookingDate
-  joiningDate: DateRange; // filters on tenant.joiningDate (or joinedOn/joinDate)
-};
 
-const emptyAdvanceBookingFilter: AdvanceBookingFilter = {
+interface AdvanceBookingFilter {
+  status: number[];
+  bookingDate: DateRange;
+  joiningDate: DateRange;
+}
+
+const emptyFilter: AdvanceBookingFilter = {
   status: [],
   bookingDate: {},
   joiningDate: {},
 };
 
-/* ---------------------------- Filter sections ---------------------------- */
-const sections: Section[] = [
+const filterSections: Section[] = [
   {
     key: "status",
-    label: "Status",
+    label: "Booking Status",
     mode: "checkbox",
     options: [
-      { label: "Active", value: 3 }, // Adv Booking = 3
+      { label: "Active Booking", value: 3 },
       { label: "Expired", value: 5 },
       { label: "Cancelled", value: 6 },
     ],
@@ -56,12 +74,15 @@ const sections: Section[] = [
     key: "joiningDate",
     label: "Joining Date",
     mode: "date",
-    dateConfig: { allowFuture: true, fromLabel: "From", toLabel: "To" }, // Joining can be future
+    dateConfig: { allowFuture: true, fromLabel: "From", toLabel: "To" },
   },
 ];
 
-/* ------------------------------ Helpers ------------------------------ */
-const parseDate = (v: any) => {
+/* ─────────────────────────────────────────────────────────────────────────────
+   DATE HELPERS
+───────────────────────────────────────────────────────────────────────────── */
+
+const parseDate = (v: unknown): Date | null => {
   try {
     const s = str(v, "");
     if (!s) return null;
@@ -72,13 +93,12 @@ const parseDate = (v: any) => {
   }
 };
 
-// Normalize a Date to the local start/end of day
 const startOfDayLocal = (d: Date) =>
   new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+
 const endOfDayLocal = (d: Date) =>
   new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
 
-// If user accidentally picks to<from, swap so the range still works
 const normalizeRange = (from?: Date, to?: Date) => {
   if (from && to && to.getTime() < from.getTime()) {
     return { from: to, to: from };
@@ -86,107 +106,247 @@ const normalizeRange = (from?: Date, to?: Date) => {
   return { from, to };
 };
 
-type Props = {
-  data: any[];
+/* ─────────────────────────────────────────────────────────────────────────────
+   COMPACT STAT CHIP COMPONENT
+───────────────────────────────────────────────────────────────────────────── */
+
+interface StatChipProps {
+  icon: string;
+  label: string;
+  value: number | string;
+  color: string;
+  bgColor: string;
+}
+
+const StatChip: React.FC<StatChipProps> = ({ icon, label, value, color, bgColor }) => {
+  const { colors, spacing, radius } = useTheme();
+
+  return (
+    <View
+      style={{
+        flexDirection: "row",
+        alignItems: "center",
+        backgroundColor: bgColor,
+        paddingHorizontal: 12,
+        paddingVertical: 7,
+        borderRadius: radius.full,
+        gap: 7,
+        borderWidth: 1,
+        borderColor: hexToRgba(color, 0.2),
+      }}
+    >
+      <MaterialCommunityIcons
+        name={icon as keyof typeof MaterialCommunityIcons.glyphMap}
+        size={15}
+        color={color}
+      />
+      <Text
+        style={{
+          fontSize: 12,
+          fontWeight: "600",
+          color: colors.textSecondary,
+        }}
+      >
+        {label}
+      </Text>
+      <Text
+        style={{
+          fontSize: 14,
+          fontWeight: "800",
+          color: color,
+        }}
+      >
+        {value}
+      </Text>
+    </View>
+  );
+};
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   EMPTY STATE COMPONENT
+───────────────────────────────────────────────────────────────────────────── */
+
+interface EmptyStateProps {
+  filtered: boolean;
+}
+
+const EmptyState: React.FC<EmptyStateProps> = ({ filtered }) => {
+  const { colors, spacing } = useTheme();
+
+  return (
+    <View
+      style={{
+        alignItems: "center",
+        justifyContent: "center",
+        paddingVertical: spacing.xl * 2,
+        paddingHorizontal: spacing.lg,
+      }}
+    >
+      <View
+        style={{
+          width: 64,
+          height: 64,
+          borderRadius: 32,
+          backgroundColor: hexToRgba(colors.accent, 0.1),
+          alignItems: "center",
+          justifyContent: "center",
+          marginBottom: spacing.md,
+        }}
+      >
+        <MaterialCommunityIcons
+          name={filtered ? "filter-off" : "calendar-blank-multiple"}
+          size={28}
+          color={colors.accent}
+        />
+      </View>
+      <Text
+        style={{
+          fontSize: 15,
+          fontWeight: "700",
+          color: colors.textPrimary,
+          marginBottom: 4,
+        }}
+      >
+        {filtered ? "No Results Found" : "No Advance Bookings"}
+      </Text>
+      <Text
+        style={{
+          fontSize: 12,
+          color: colors.textSecondary,
+          textAlign: "center",
+          maxWidth: 240,
+        }}
+      >
+        {filtered
+          ? "Try adjusting your filters or search query."
+          : "Tap the + button to create an advance booking."}
+      </Text>
+    </View>
+  );
+};
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   MAIN COMPONENT
+───────────────────────────────────────────────────────────────────────────── */
+
+interface Props {
+  data: Record<string, unknown>[];
   refreshing: boolean;
   onRefresh: () => void;
-};
+}
 
 export default function AdvanceBookingTab({ data, refreshing, onRefresh }: Props) {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { colors, spacing } = useTheme();
+  const { colors, spacing, radius } = useTheme();
 
   const [query, setQuery] = useState("");
-  const [list, setList] = useState(() => (Array.isArray(data) ? data : []));
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [filter, setFilter] = useState<AdvanceBookingFilter>(emptyAdvanceBookingFilter);
+  const [filter, setFilter] = useState<AdvanceBookingFilter>(emptyFilter);
 
-  React.useEffect(() => setList(Array.isArray(data) ? data : []), [data]);
+  // Ensure data is always an array
+  const list = useMemo(() => (Array.isArray(data) ? data : []), [data]);
 
+  // Responsive columns
   const cols = useMemo(() => (width >= 1000 ? 3 : width >= 740 ? 2 : 1), [width]);
 
-  const filterIsActive =
-    (filter.status?.length ?? 0) > 0 ||
-    !!filter.bookingDate.from ||
-    !!filter.bookingDate.to ||
-    !!filter.joiningDate.from ||
-    !!filter.joiningDate.to;
+  // Calculate stats
+  const stats = useMemo(() => {
+    const activeBookings = list.filter((t) => num(t?.status) === 3).length;
+    const expiredBookings = list.filter((t) => num(t?.status) === 5).length;
+    const cancelledBookings = list.filter((t) => num(t?.status) === 6).length;
+    const totalAmount = list.reduce((sum, t) => {
+      return sum + num(t?.advanceRentAmountPaid) + num(t?.advanceDepositAmountPaid);
+    }, 0);
 
+    return { activeBookings, expiredBookings, cancelledBookings, totalAmount };
+  }, [list]);
+
+  // Check if filter is active
+  const filterIsActive = useMemo(
+    () =>
+      (filter.status?.length ?? 0) > 0 ||
+      !!filter.bookingDate.from ||
+      !!filter.bookingDate.to ||
+      !!filter.joiningDate.from ||
+      !!filter.joiningDate.to,
+    [filter]
+  );
+
+  // Apply filters
   const filtered = useMemo(() => {
-    let out = list.filter((t: any) => ALLOWED.has(num(t?.status)));
+    let out = list.filter((t) => ALLOWED_STATUSES.has(num(t?.status)));
 
-    // text search
+    // Text search
     if (query.trim()) {
       const q = query.toLowerCase().trim();
-      out = out.filter((t) => getName(t).toLowerCase().includes(q));
+      out = out.filter(
+        (t) =>
+          getName(t).toLowerCase().includes(q) ||
+          getPhone(t).toLowerCase().includes(q) ||
+          getRoom(t).toLowerCase().includes(q)
+      );
     }
 
-    // status filter
+    // Status filter
     if ((filter.status?.length ?? 0) > 0) {
-      const sset = new Set(filter.status.map((x) => num(x)));
-      out = out.filter((t) => sset.has(num(t?.status)));
+      const statusSet = new Set(filter.status.map((x) => num(x)));
+      out = out.filter((t) => statusSet.has(num(t?.status)));
     }
 
-    // booking date range (inclusive)
-    {
-      const { from, to } = normalizeRange(filter.bookingDate.from, filter.bookingDate.to);
-      const bFrom = from ? startOfDayLocal(from) : undefined;
-      const bTo = to ? endOfDayLocal(to) : undefined;
+    // Booking date range
+    const { from: bFrom, to: bTo } = normalizeRange(
+      filter.bookingDate.from,
+      filter.bookingDate.to
+    );
+    if (bFrom || bTo) {
+      const bFromLocal = bFrom ? startOfDayLocal(bFrom) : undefined;
+      const bToLocal = bTo ? endOfDayLocal(bTo) : undefined;
 
-      if (bFrom || bTo) {
-        out = out.filter((t) => {
-          const d = parseDate(t?.bookingDate);
-          if (!d) return false;
-          if (bFrom && d < bFrom) return false;
-          if (bTo && d > bTo) return false;
-          return true;
-        });
-      }
+      out = out.filter((t) => {
+        const d = parseDate(t?.bookingDate);
+        if (!d) return false;
+        if (bFromLocal && d < bFromLocal) return false;
+        if (bToLocal && d > bToLocal) return false;
+        return true;
+      });
     }
 
-    // joining date range (inclusive)
-    {
-      const { from, to } = normalizeRange(filter.joiningDate.from, filter.joiningDate.to);
-      const jFrom = from ? startOfDayLocal(from) : undefined;
-      const jTo = to ? endOfDayLocal(to) : undefined;
+    // Joining date range
+    const { from: jFrom, to: jTo } = normalizeRange(
+      filter.joiningDate.from,
+      filter.joiningDate.to
+    );
+    if (jFrom || jTo) {
+      const jFromLocal = jFrom ? startOfDayLocal(jFrom) : undefined;
+      const jToLocal = jTo ? endOfDayLocal(jTo) : undefined;
 
-      if (jFrom || jTo) {
-        out = out.filter((t) => {
-          const d = parseDate(t?.joiningDate) ?? parseDate(t?.joinedOn) ?? parseDate(t?.joinDate);
-          if (!d) return false;
-          if (jFrom && d < jFrom) return false;
-          if (jTo && d > jTo) return false;
-          return true;
-        });
-      }
+      out = out.filter((t) => {
+        const d =
+          parseDate(t?.joiningDate) ?? parseDate(t?.joinedOn) ?? parseDate(t?.joinDate);
+        if (!d) return false;
+        if (jFromLocal && d < jFromLocal) return false;
+        if (jToLocal && d > jToLocal) return false;
+        return true;
+      });
     }
+
+    // Sort: Active first, then by booking date (most recent first)
+    out.sort((a, b) => {
+      const statusA = num(a?.status);
+      const statusB = num(b?.status);
+      if (statusA === 3 && statusB !== 3) return -1;
+      if (statusB === 3 && statusA !== 3) return 1;
+      const dateA = parseDate(a?.bookingDate)?.getTime() ?? 0;
+      const dateB = parseDate(b?.bookingDate)?.getTime() ?? 0;
+      return dateB - dateA;
+    });
 
     return out;
   }, [list, query, filter]);
 
-  const s = useMemo(
-    () =>
-      StyleSheet.create({
-        columnGap: { gap: spacing.md - 2 },
-        listContent: {
-          paddingHorizontal: spacing.md,
-          paddingTop: spacing.md,
-          paddingBottom: insets.bottom + spacing.lg * 2,
-          rowGap: spacing.md - 2,
-        },
-        emptyWrap: { padding: spacing.md },
-        emptyTxt: { color: colors.textSecondary },
-      }),
-    [spacing, insets.bottom, colors.textSecondary, spacing.lg]
-  );
-
-  const handleDelete = useCallback(
-    (id: string) => setList((prev) => prev.filter((t: any) => String(t?._id ?? t?.id) !== id)),
-    []
-  );
-
+  // Handlers
   const handleEdit = useCallback(
     (tenantId: string) => {
       if (!tenantId) return;
@@ -200,10 +360,10 @@ export default function AdvanceBookingTab({ data, refreshing, onRefresh }: Props
   );
 
   const handleConvertToTenant = useCallback(
-    (tenant: any) => {
+    (tenant: Record<string, unknown>) => {
       const tenantId = str(tenant?._id ?? tenant?.id ?? "", "");
       if (!tenantId) return;
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       router.push({
         pathname: "/protected/advancedBooking/[id]",
         params: { id: tenantId, mode: "convert" },
@@ -212,36 +372,160 @@ export default function AdvanceBookingTab({ data, refreshing, onRefresh }: Props
     [router]
   );
 
+  const handleAddBooking = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    router.push("/protected/advancedBooking/add");
+  }, [router]);
+
+  // Styles
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        container: {
+          flex: 1,
+          backgroundColor: colors.background,
+        },
+        header: {
+          paddingHorizontal: spacing.md,
+          paddingTop: spacing.sm,
+        },
+        statsRow: {
+          flexDirection: "row",
+          flexWrap: "wrap",
+          gap: 10,
+          marginBottom: spacing.md,
+        },
+        sectionHeader: {
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 8,
+          marginTop: spacing.sm,
+          marginBottom: spacing.md,
+        },
+        sectionIconBadge: {
+          width: 28,
+          height: 28,
+          borderRadius: 14,
+          backgroundColor: hexToRgba(colors.accent, 0.12),
+          alignItems: "center",
+          justifyContent: "center",
+        },
+        sectionTitle: {
+          fontSize: 14,
+          fontWeight: "700",
+          color: colors.textPrimary,
+          flex: 1,
+        },
+        countBadge: {
+          backgroundColor: hexToRgba(colors.accent, 0.12),
+          paddingHorizontal: 10,
+          paddingVertical: 4,
+          borderRadius: radius.full,
+        },
+        countText: {
+          fontSize: 12,
+          fontWeight: "700",
+          color: colors.accent,
+        },
+        columnGap: {
+          gap: spacing.md,
+        },
+        listContent: {
+          paddingHorizontal: spacing.md,
+          paddingTop: spacing.sm,
+          paddingBottom: insets.bottom + spacing.lg * 2,
+          rowGap: spacing.md,
+        },
+      }),
+    [colors, spacing, radius, insets.bottom]
+  );
+
+  // List header
+  const ListHeader = useMemo(
+    () => (
+      <View style={styles.header}>
+        {/* Compact stats row */}
+        <View style={styles.statsRow}>
+          <StatChip
+            icon="calendar-check"
+            label="Active"
+            value={stats.activeBookings}
+            color="#10B981"
+            bgColor={hexToRgba("#10B981", 0.1)}
+          />
+          <StatChip
+            icon="calendar-remove"
+            label="Expired"
+            value={stats.expiredBookings}
+            color="#EF4444"
+            bgColor={hexToRgba("#EF4444", 0.1)}
+          />
+          <StatChip
+            icon="close-circle"
+            label="Cancelled"
+            value={stats.cancelledBookings}
+            color="#6B7280"
+            bgColor={hexToRgba("#6B7280", 0.1)}
+          />
+        </View>
+
+        {/* Search bar */}
+        <SearchBar
+          placeholder="Search by name, phone, room..."
+          onSearch={setQuery}
+          onFilter={() => setSheetOpen(true)}
+          filterActive={filterIsActive}
+        />
+
+        {/* Section header */}
+        <View style={styles.sectionHeader}>
+          <View style={styles.sectionIconBadge}>
+            <MaterialCommunityIcons
+              name="calendar-multiple"
+              size={14}
+              color={colors.accent}
+            />
+          </View>
+          <Text style={styles.sectionTitle}>Bookings</Text>
+          <View style={styles.countBadge}>
+            <Text style={styles.countText}>{filtered.length}</Text>
+          </View>
+        </View>
+      </View>
+    ),
+    [styles, stats, filterIsActive, filtered.length, colors.accent]
+  );
+
+  const renderItem = useCallback(
+    ({ item }: { item: Record<string, unknown> }) => (
+      <AdvancedBookingCard
+        tenant={item}
+        onEdit={handleEdit}
+        onConvertToTenant={handleConvertToTenant}
+      />
+    ),
+    [handleEdit, handleConvertToTenant]
+  );
+
+  const keyExtractor = useCallback(
+    (item: Record<string, unknown>, index: number) =>
+      String(item?._id ?? item?.id ?? index),
+    []
+  );
+
   return (
-    <>
+    <View style={styles.container}>
       <FlatList
         data={filtered}
-        keyExtractor={(t: any, i) => String(t?._id ?? t?.id ?? i)}
-        renderItem={({ item }) => (
-          <AdvancedBookingCard
-            tenant={item}
-            onDelete={handleDelete}
-            onEdit={handleEdit}
-            onConvertToTenant={handleConvertToTenant}
-          />
-        )}
+        keyExtractor={keyExtractor}
+        renderItem={renderItem}
         numColumns={cols}
-        columnWrapperStyle={cols > 1 ? s.columnGap : undefined}
-        contentContainerStyle={s.listContent}
+        key={cols}
+        columnWrapperStyle={cols > 1 ? styles.columnGap : undefined}
+        contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
-        ListHeaderComponent={
-          <SearchBar
-            placeholder="Search advance bookings"
-            onSearch={setQuery}
-            onFilter={() => setSheetOpen(true)}
-            filterActive={filterIsActive}
-          />
-        }
-        ListEmptyComponent={
-          <View style={s.emptyWrap}>
-            <Text style={s.emptyTxt}>No advance bookings found.</Text>
-          </View>
-        }
+        ListHeaderComponent={ListHeader}
+        ListEmptyComponent={<EmptyState filtered={!!query.trim() || filterIsActive} />}
         refreshControl={
           <RefreshControl
             refreshing={!!refreshing}
@@ -252,6 +536,7 @@ export default function AdvanceBookingTab({ data, refreshing, onRefresh }: Props
         removeClippedSubviews
         initialNumToRender={10}
         windowSize={10}
+        maxToRenderPerBatch={10}
       />
 
       {/* Filter Sheet */}
@@ -260,16 +545,12 @@ export default function AdvanceBookingTab({ data, refreshing, onRefresh }: Props
         value={filter}
         onChange={setFilter}
         onClose={() => setSheetOpen(false)}
-        sections={sections}
-        resetValue={emptyAdvanceBookingFilter}
+        sections={filterSections}
+        resetValue={emptyFilter}
       />
 
-      <AddButton
-        onPress={() => {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          router.push("/protected/advancedBooking/add");
-        }}
-      />
-    </>
+      {/* Add Button */}
+      <AddButton onPress={handleAddBooking} />
+    </View>
   );
 }

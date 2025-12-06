@@ -1,372 +1,65 @@
-// // src/components/property/AdvancedBookingCard.tsx
-// import React, { useMemo, useState } from "react";
-// import { View, Text, StyleSheet, Image, Pressable } from "react-native";
-// import * as Haptics from "expo-haptics";
-// import { useRouter } from "expo-router";
-// import { Menu, IconButton, Divider } from "react-native-paper";
-// import { useTheme } from "@/src/theme/ThemeContext";
-// import { hexToRgba } from "@/src/theme";
-
-// const num = (v: any, f = 0) => (typeof v === "number" ? v : Number(v ?? f)) || 0;
-// const str = (v: any, f = "") => (v == null ? f : String(v));
-
-// /** status label from code (same as TenantCard) */
-// const statusLabelFromCode = (code: any): string => {
-//   switch (num(code)) {
-//     case 1:
-//       return "Active";
-//     case 2:
-//       return "Under Notice";
-//     case 3:
-//       return "Adv Booking";
-//     case 5:
-//       return "Expired Booking";
-//     case 6:
-//       return "Canceled Booking";
-//     default:
-//       return "";
-//   }
-// };
-
-// /** palette mapping like TenantCard */
-// const statusTint = (colors: any) => ({
-//   "Adv Booking": colors.advBookedBeds,
-//   "Expired Booking": colors.error,
-//   "Canceled Booking": colors.error,
-//   "Under Notice": colors.underNoticeBeds ?? colors.advBookedBeds,
-//   Active: colors.success,
-// });
-
-// const tId = (t: any) => str(t?._id ?? t?.id, "");
-// const tName = (t: any) => str(t?.tenantName ?? t?.name, "—");
-// const tPhone = (t: any) => str(t?.phoneNumber ?? t?.phone, "—");
-// const tRoom = (t: any) => str(t?.roomNumber ?? t?.room, "—");
-// const tBed = (t: any) => str(t?.bedNumber ?? t?.bedNo ?? "", "");
-// const tSharingType = (t: any) => num(t?.sharingType ?? t?.sharing ?? 0);
-
-// const tImage = (t: any) => {
-//   const arr = Array.isArray(t?.profilePic) ? t.profilePic : [];
-//   const fp = arr?.[0]?.filePath ? String(arr[0].filePath) : null;
-//   return fp || t?.imageUri || "https://via.placeholder.com/54";
-// };
-
-// const sumAdvancePaid = (t: any) => num(t?.advanceRentAmountPaid) + num(t?.advanceDepositAmountPaid);
-
-// const parseDate = (v: any) => {
-//   try {
-//     const s = str(v, "");
-//     if (!s) return null;
-//     const d = new Date(s);
-//     return isNaN(d.getTime()) ? null : d;
-//   } catch {
-//     return null;
-//   }
-// };
-
-// const formatDate = (v: any) => {
-//   const d = parseDate(v);
-//   if (!d) return "—";
-//   try {
-//     return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
-//   } catch {
-//     return d.toISOString().slice(0, 10);
-//   }
-// };
-
-// interface Props {
-//   tenant: any;
-
-//   /** Legacy prop kept for backward compatibility (no longer used). */
-//   onDelete?: (id: string) => void;
-
-//   /** New action hooks (optional) */
-//   onEdit?: (id: string) => void;
-//   onConvertToTenant?: (tenant: any) => void;
-//   onCancelBooking?: (tenant: any) => void;
-// }
-
-// const AdvancedBookingCard: React.FC<Props> = ({
-//   tenant,
-//   onDelete, // eslint-disable-line @typescript-eslint/no-unused-vars
-//   onEdit,
-//   onConvertToTenant,
-//   onCancelBooking,
-// }) => {
-//   const { colors, spacing, radius, shadow } = useTheme();
-//   const router = useRouter();
-//   const STATUS_COLORS = useMemo(() => statusTint(colors), [colors]);
-
-//   const s = useMemo(
-//     () =>
-//       StyleSheet.create({
-//         wrap: {
-//           borderRadius: radius.lg,
-//           backgroundColor: colors.cardBackground,
-//           padding: spacing.md,
-//           shadowColor: shadow,
-//           shadowOffset: { width: 0, height: 6 },
-//           shadowOpacity: 0.08,
-//           shadowRadius: 8,
-//           borderWidth: 1,
-//           borderColor: colors.borderColor,
-//         },
-//         row: { flexDirection: "row", alignItems: "center" },
-//         avatar: { width: 54, height: 54, borderRadius: 27, backgroundColor: colors.surface },
-//         info: { marginLeft: spacing.sm, flex: 1 },
-//         name: { fontSize: 16, fontWeight: "600", color: colors.textPrimary },
-//         phone: { fontSize: 13, color: colors.textSecondary },
-//         amtBlock: { alignItems: "flex-end" },
-//         amt: { fontSize: 16, fontWeight: "700", color: colors.textPrimary },
-//         bottomRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: spacing.md - 2 },
-//         badge: {
-//           backgroundColor: colors.surface,
-//           borderRadius: radius.md,
-//           paddingHorizontal: spacing.sm,
-//           paddingVertical: 3,
-//         },
-//         badgeTxt: { fontSize: 12, color: colors.textSecondary },
-//         statusBadge: (bg: string) => ({
-//           backgroundColor: bg,
-//           borderRadius: radius.md,
-//           paddingHorizontal: spacing.sm,
-//           paddingVertical: 3,
-//         }),
-//         statusTxt: { fontSize: 12, color: colors.white, fontWeight: "600" },
-//         activeTxt: { fontSize: 12, fontWeight: "700", color: colors.success },
-//       }),
-//     [colors, spacing, radius, shadow]
-//   );
-
-//   // Premium menu styling
-//   const menuStyles = useMemo(
-//     () =>
-//       StyleSheet.create({
-//         content: {
-//           backgroundColor: colors.cardBackground,
-//           borderRadius: 14,
-//           borderWidth: 1,
-//           borderColor: colors.borderColor,
-//           minWidth: 200,
-//           paddingVertical: 2,
-//           // paper adds elevation automatically; border + radius gives premium look
-//         },
-//         item: {
-//           paddingVertical: 6,
-//         },
-//         title: {
-//           fontSize: 14,
-//           color: colors.textPrimary,
-//         },
-//         dangerTitle: {
-//           fontSize: 14,
-//           color: colors.error,
-//         },
-//         anchorRipple: {
-//           borderRadius: 20,
-//           overflow: "hidden",
-//         },
-//       }),
-//     [colors]
-//   );
-
-//   const [menuVisible, setMenuVisible] = useState(false);
-
-//   const id = tId(tenant);
-//   const statusLabel = statusLabelFromCode(tenant?.status);
-//   const advPaid = sumAdvancePaid(tenant);
-//   const booking = formatDate(tenant?.bookingDate);
-//   const joining = formatDate(tenant?.joiningDate ?? tenant?.joinedOn ?? tenant?.joinDate);
-//   const isAdvBooking = num(tenant?.status) === 3;
-
-//   return (
-//     <View style={s.wrap}>
-//       {/* top row */}
-//       <View style={[s.row, { marginBottom: spacing.sm }]}>
-//         <Pressable
-//           onPress={() => {
-//             Haptics.selectionAsync();
-//             router.push({
-//               pathname: "/protected/tenant/TenantProfileDetails",
-//               params: { id },
-//             });
-//           }}
-//           style={[s.row, { flex: 1 }]}
-//           android_ripple={{ color: hexToRgba(colors.primary, 0.07) }}
-//         >
-//           <Image source={{ uri: tImage(tenant) }} style={s.avatar} />
-//           <View style={s.info}>
-//             <Text style={s.name}>{tName(tenant)}</Text>
-//             <Text style={s.phone}>{tPhone(tenant)}</Text>
-//           </View>
-//           <View style={s.amtBlock}>
-//             <Text style={s.amt}>₹{advPaid.toLocaleString("en-IN")}</Text>
-//           </View>
-//         </Pressable>
-
-//         {/* Premium three-dot menu */}
-//         <Menu
-//           visible={menuVisible}
-//           onDismiss={() => setMenuVisible(false)}
-//           anchor={
-//             <Pressable
-//               hitSlop={8}
-//               onPress={() => setMenuVisible(true)}
-//               style={menuStyles.anchorRipple}
-//               android_ripple={{ color: hexToRgba(colors.primary, 0.08) }}
-//             >
-//               <IconButton icon="dots-vertical" />
-//             </Pressable>
-//           }
-//           contentStyle={menuStyles.content}
-//           anchorPosition="bottom"
-//         >
-//           <Menu.Item
-//             style={menuStyles.item}
-//             titleStyle={menuStyles.title}
-//             leadingIcon="pencil"
-//             title="Edit"
-//             onPress={() => {
-//               setMenuVisible(false);
-//               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-//               if (onEdit) {
-//                 onEdit(id);
-//               } else {
-//                 // Safe default navigation
-//                 router.push({ pathname: "/protected/tenant/[id]", params: { id } });
-//               }
-//             }}
-//           />
-//           <Divider />
-//           <Menu.Item
-//             style={menuStyles.item}
-//             titleStyle={menuStyles.title}
-//             leadingIcon="account-convert"
-//             title="Convert to Tenant"
-//             onPress={() => {
-//               setMenuVisible(false);
-//               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-//               onConvertToTenant?.(tenant);
-//             }}
-//           />
-//           <Menu.Item
-//             style={menuStyles.item}
-//             titleStyle={menuStyles.dangerTitle}
-//             leadingIcon="close-circle-outline"
-//             title="Cancel Booking"
-//             onPress={() => {
-//               setMenuVisible(false);
-//               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-//               onCancelBooking?.(tenant);
-//             }}
-//           />
-//         </Menu>
-//       </View>
-
-//       {/* bottom badges: Booking, Joining, Room, Bed, Sharing, Status */}
-//       <View style={s.bottomRow}>
-//         <View style={s.badge}>
-//           <Text style={s.badgeTxt}>Booking: {booking}</Text>
-//         </View>
-//         <View style={s.badge}>
-//           <Text style={s.badgeTxt}>Joining: {joining}</Text>
-//         </View>
-
-//         {!!tRoom(tenant) && (
-//           <View style={s.badge}>
-//             <Text style={s.badgeTxt}>Room: {tRoom(tenant)}</Text>
-//           </View>
-//         )}
-//         {!!tBed(tenant) && (
-//           <View style={s.badge}>
-//             <Text style={s.badgeTxt}>Bed: {tBed(tenant)}</Text>
-//           </View>
-//         )}
-//         {!!tSharingType(tenant) && (
-//           <View style={s.badge}>
-//             <Text style={s.badgeTxt}>Sharing: {tSharingType(tenant)}</Text>
-//           </View>
-//         )}
-
-//         {!!statusLabel && (
-//           <>
-//             <View style={s.statusBadge(STATUS_COLORS[statusLabel] ?? colors.accent)}>
-//               <Text style={s.statusTxt}>{statusLabel}</Text>
-//             </View>
-//             {isAdvBooking && <Text style={s.activeTxt}>(Active)</Text>}
-//           </>
-//         )}
-//       </View>
-//     </View>
-//   );
-// };
-
-// export default AdvancedBookingCard;
 // src/components/property/AdvancedBookingCard.tsx
-import React, { useMemo, useState } from "react";
-import { View, Text, StyleSheet, Image, Pressable, Alert, Platform } from "react-native";
+// Premium Advanced Booking Card - Compact, user-friendly design with inline actions
+import React, { useMemo, useState, useCallback } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  Pressable,
+  Alert,
+  Platform,
+  Animated,
+  useWindowDimensions,
+  LayoutAnimation,
+  UIManager,
+} from "react-native";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 import {
-  Menu,
-  IconButton,
-  Divider,
   Portal,
   Dialog,
   Button,
   TextInput as PaperTextInput,
+  Text as PaperText,
 } from "react-native-paper";
+import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 
 import { useTheme } from "@/src/theme/ThemeContext";
 import { hexToRgba } from "@/src/theme";
 import { useUpdateTenant } from "@/src/hooks/tenants";
 import { useInsertPayment } from "@/src/hooks/payments";
 
-const num = (v: any, f = 0) => (typeof v === "number" ? v : Number(v ?? f)) || 0;
-const str = (v: any, f = "") => (v == null ? f : String(v));
+// Note: LayoutAnimation works without this in New Architecture
 
-/** status label from code (same as TenantCard) */
-const statusLabelFromCode = (code: any): string => {
-  switch (num(code)) {
-    case 1:
-      return "Active";
-    case 2:
-      return "Under Notice";
-    case 3:
-      return "Adv Booking";
-    case 5:
-      return "Expired Booking";
-    case 6:
-      return "Canceled Booking";
-    default:
-      return "";
-  }
+/* ─────────────────────────────────────────────────────────────────────────────
+   HELPERS & CONSTANTS
+───────────────────────────────────────────────────────────────────────────── */
+
+const num = (v: unknown, f = 0) => (typeof v === "number" ? v : Number(v ?? f)) || f;
+const str = (v: unknown, f = "") => (v == null ? f : String(v));
+
+// Status definitions
+const STATUS_CONFIG: Record<number, { label: string; color: string; icon: string }> = {
+  3: { label: "Active", color: "#10B981", icon: "calendar-check" },
+  5: { label: "Expired", color: "#EF4444", icon: "calendar-remove" },
+  6: { label: "Cancelled", color: "#6B7280", icon: "close-circle" },
 };
 
-/** palette mapping like TenantCard */
-const statusTint = (colors: any) => ({
-  "Adv Booking": colors.advBookedBeds,
-  "Expired Booking": colors.error,
-  "Canceled Booking": colors.error,
-  "Under Notice": colors.underNoticeBeds ?? colors.advBookedBeds,
-  Active: colors.success,
-});
+// Tenant data extractors
+const tId = (t: Record<string, unknown>) => str(t?._id ?? t?.id, "");
+const tName = (t: Record<string, unknown>) => str(t?.tenantName ?? t?.name, "—");
+const tPhone = (t: Record<string, unknown>) => str(t?.phoneNumber ?? t?.phone, "—");
+const tRoom = (t: Record<string, unknown>) => str(t?.roomNumber ?? t?.room, "—");
+const tBed = (t: Record<string, unknown>) => str(t?.bedNumber ?? t?.bedNo ?? "", "");
+const tRent = (t: Record<string, unknown>) => num(t?.rentAmount ?? 0);
+const tDeposit = (t: Record<string, unknown>) => num(t?.depositAmount ?? 0);
+const tAdvRent = (t: Record<string, unknown>) => num(t?.advanceRentAmountPaid ?? 0);
+const tAdvDeposit = (t: Record<string, unknown>) => num(t?.advanceDepositAmountPaid ?? 0);
 
-const tId = (t: any) => str(t?._id ?? t?.id, "");
-const tName = (t: any) => str(t?.tenantName ?? t?.name, "—");
-const tPhone = (t: any) => str(t?.phoneNumber ?? t?.phone, "—");
-const tRoom = (t: any) => str(t?.roomNumber ?? t?.room, "—");
-const tBed = (t: any) => str(t?.bedNumber ?? t?.bedNo ?? "", "");
-const tSharingType = (t: any) => num(t?.sharingType ?? t?.sharing ?? 0);
+const formatCurrency = (amount: number): string =>
+  `₹${amount.toLocaleString("en-IN")}`;
 
-const tImage = (t: any) => {
-  const arr = Array.isArray(t?.profilePic) ? t.profilePic : [];
-  const fp = arr?.[0]?.filePath ? String(arr[0].filePath) : null;
-  return fp || t?.imageUri || "https://via.placeholder.com/54";
-};
-
-const sumAdvancePaid = (t: any) => num(t?.advanceRentAmountPaid) + num(t?.advanceDepositAmountPaid);
-
-const parseDate = (v: any) => {
+const parseDate = (v: unknown): Date | null => {
   try {
     const s = str(v, "");
     if (!s) return null;
@@ -377,168 +70,246 @@ const parseDate = (v: any) => {
   }
 };
 
-const formatDate = (v: any) => {
+const formatDate = (v: unknown): string => {
   const d = parseDate(v);
   if (!d) return "—";
   try {
-    return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+    return d.toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "short",
+    });
   } catch {
     return d.toISOString().slice(0, 10);
   }
 };
 
+// Get initials from name
+const getInitials = (name: string): string => {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
+  return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+};
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   TYPES
+───────────────────────────────────────────────────────────────────────────── */
+
 interface Props {
-  tenant: any;
-
-  /** Legacy prop kept for backward compatibility (no longer used). */
+  tenant: Record<string, unknown>;
   onDelete?: (id: string) => void;
-
-  /** New action hooks (optional) */
   onEdit?: (id: string) => void;
-  onConvertToTenant?: (tenant: any) => void;
-  onCancelBooking?: (tenant: any) => void;
+  onConvertToTenant?: (tenant: Record<string, unknown>) => void;
+  onReceipt?: (tenant: Record<string, unknown>) => void;
 }
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   ACTION BUTTON COMPONENT
+───────────────────────────────────────────────────────────────────────────── */
+
+interface ActionBtnProps {
+  icon: string;
+  label: string;
+  onPress: () => void;
+  color: string;
+  bgColor: string;
+  disabled?: boolean;
+}
+
+const ActionBtn: React.FC<ActionBtnProps> = ({
+  icon,
+  label,
+  onPress,
+  color,
+  bgColor,
+  disabled,
+}) => {
+  const { radius } = useTheme();
+
+  return (
+    <Pressable
+      onPress={() => {
+        if (disabled) return;
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        onPress();
+      }}
+      style={({ pressed }) => ({
+        flex: 1,
+        alignItems: "center",
+        justifyContent: "center",
+        paddingVertical: 10,
+        paddingHorizontal: 6,
+        borderRadius: radius.md,
+        backgroundColor: pressed ? hexToRgba(color, 0.2) : bgColor,
+        opacity: disabled ? 0.5 : 1,
+        minHeight: 48,
+      })}
+      disabled={disabled}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+    >
+      <MaterialCommunityIcons
+        name={icon as keyof typeof MaterialCommunityIcons.glyphMap}
+        size={20}
+        color={color}
+      />
+      <Text
+        style={{
+          fontSize: 11,
+          fontWeight: "600",
+          color: color,
+          marginTop: 3,
+        }}
+        numberOfLines={1}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  );
+};
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   MAIN COMPONENT
+───────────────────────────────────────────────────────────────────────────── */
 
 const AdvancedBookingCard: React.FC<Props> = ({
   tenant,
-  onDelete, // eslint-disable-line @typescript-eslint/no-unused-vars
   onEdit,
   onConvertToTenant,
-  onCancelBooking,
+  onReceipt,
 }) => {
-  const { colors, spacing, radius, shadow } = useTheme();
+  const { colors, spacing, radius, typography } = useTheme();
   const router = useRouter();
-  const STATUS_COLORS = useMemo(() => statusTint(colors), [colors]);
+  const { width } = useWindowDimensions();
 
-  // ---- Cancel booking modal state ----
-  const [menuVisible, setMenuVisible] = useState(false);
-  const [cancelVisible, setCancelVisible] = useState(false);
+  // Responsive columns
+  const COLS = width >= 1000 ? 3 : width >= 740 ? 2 : 1;
+  const GAP = spacing.md - 2;
+  const SIDE = spacing.md * 2;
+  const cardW = (width - SIDE - GAP * (COLS - 1)) / COLS;
+
+  // State
+  const [expanded, setExpanded] = useState(false);
+  const [cancelModalVisible, setCancelModalVisible] = useState(false);
   const [refundAmountText, setRefundAmountText] = useState("");
+
+  // Animation
+  const scaleAnim = React.useRef(new Animated.Value(1)).current;
 
   // API hooks
   const updateTenantMutation = useUpdateTenant(() => {
-    // Queries invalidate inside hook; list will refresh from server
+    setCancelModalVisible(false);
   });
 
-  const insertPaymentMutation = useInsertPayment(() => {
-    // Success alert already handled inside hook
-  });
+  const insertPaymentMutation = useInsertPayment(() => {});
 
-  const s = useMemo(
-    () =>
-      StyleSheet.create({
-        wrap: {
-          borderRadius: radius.lg,
-          backgroundColor: colors.cardBackground,
-          padding: spacing.md,
-          shadowColor: shadow,
-          shadowOffset: { width: 0, height: 6 },
-          shadowOpacity: 0.08,
-          shadowRadius: 8,
-          borderWidth: 1,
-          borderColor: colors.borderColor,
-        },
-        row: { flexDirection: "row", alignItems: "center" },
-        avatar: { width: 54, height: 54, borderRadius: 27, backgroundColor: colors.surface },
-        info: { marginLeft: spacing.sm, flex: 1 },
-        name: { fontSize: 16, fontWeight: "600", color: colors.textPrimary },
-        phone: { fontSize: 13, color: colors.textSecondary },
-        amtBlock: { alignItems: "flex-end" },
-        amt: { fontSize: 16, fontWeight: "700", color: colors.textPrimary },
-        bottomRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: spacing.md - 2 },
-        badge: {
-          backgroundColor: colors.surface,
-          borderRadius: radius.md,
-          paddingHorizontal: spacing.sm,
-          paddingVertical: 3,
-        },
-        badgeTxt: { fontSize: 12, color: colors.textSecondary },
-        statusBadge: (bg: string) => ({
-          backgroundColor: bg,
-          borderRadius: radius.md,
-          paddingHorizontal: spacing.sm,
-          paddingVertical: 3,
-        }),
-        statusTxt: { fontSize: 12, color: colors.white, fontWeight: "600" },
-        activeTxt: { fontSize: 12, fontWeight: "700", color: colors.success },
-      }),
-    [colors, spacing, radius, shadow]
-  );
-
-  // Premium menu styling
-  const menuStyles = useMemo(
-    () =>
-      StyleSheet.create({
-        content: {
-          backgroundColor: colors.cardBackground,
-          borderRadius: 14,
-          borderWidth: 1,
-          borderColor: colors.borderColor,
-          minWidth: 200,
-          paddingVertical: 2,
-        },
-        item: {
-          paddingVertical: 6,
-        },
-        title: {
-          fontSize: 14,
-          color: colors.textPrimary,
-        },
-        dangerTitle: {
-          fontSize: 14,
-          color: colors.error,
-        },
-        anchorRipple: {
-          borderRadius: 20,
-          overflow: "hidden",
-        },
-      }),
-    [colors]
-  );
-
+  // Derived values
   const id = tId(tenant);
-  const statusLabel = statusLabelFromCode(tenant?.status);
-  const advPaid = sumAdvancePaid(tenant);
-  const booking = formatDate(tenant?.bookingDate);
-  const joining = formatDate(tenant?.joiningDate ?? tenant?.joinedOn ?? tenant?.joinDate);
-  const isAdvBooking = num(tenant?.status) === 3;
+  const name = tName(tenant);
+  const phone = tPhone(tenant);
+  const room = tRoom(tenant);
+  const bed = tBed(tenant);
+  const rent = tRent(tenant);
+  const deposit = tDeposit(tenant);
+  const advRent = tAdvRent(tenant);
+  const advDeposit = tAdvDeposit(tenant);
+  const status = num(tenant?.status, 3);
+  const statusConfig = STATUS_CONFIG[status] || STATUS_CONFIG[3];
 
-  // -------- Cancel booking handlers --------
+  const bookingDate = formatDate(tenant?.bookingDate);
+  const joiningDate = formatDate(tenant?.joiningDate ?? tenant?.joinedOn ?? tenant?.joinDate);
 
-  const handleOpenCancelModal = () => {
+  const totalAdvancePaid = advRent + advDeposit;
+  const hasAdvancePayment = totalAdvancePaid > 0;
+  const isActive = status === 3;
+  const isCancelled = status === 6;
+  const initials = getInitials(name);
+
+  // Handlers
+  const handleToggleExpand = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setExpanded((prev) => !prev);
+  }, []);
+
+  const handleEdit = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (onEdit) {
+      onEdit(id);
+    } else {
+      router.push({
+        pathname: "/protected/advancedBooking/[id]",
+        params: { id, mode: "edit" },
+      });
+    }
+  }, [onEdit, id, router]);
+
+  const handleConvert = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    if (onConvertToTenant) {
+      onConvertToTenant(tenant);
+    } else {
+      router.push({
+        pathname: "/protected/advancedBooking/[id]",
+        params: { id, mode: "convert" },
+      });
+    }
+  }, [onConvertToTenant, tenant, router, id]);
+
+  const handleReceipt = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (onReceipt) {
+      onReceipt(tenant);
+    } else {
+      Alert.alert("Receipt", "Receipt feature will be available soon.", [{ text: "OK" }]);
+    }
+  }, [onReceipt, tenant]);
+
+  const handleOpenCancelModal = useCallback(() => {
     setRefundAmountText("");
-    setCancelVisible(true);
-  };
+    setCancelModalVisible(true);
+  }, []);
 
-  const handleConfirmCancel = () => {
-    const tenantId = tId(tenant);
-    if (!tenantId) {
+  const handleConfirmCancel = useCallback(() => {
+    if (!id) {
       Alert.alert("Error", "Unable to identify booking record.");
       return;
     }
 
-    const rawRefund = refundAmountText.trim();
-    const cleanRefund = rawRefund.replace(/[^\d]/g, "");
-    const hasRefund = cleanRefund.length > 0;
+    const rawRefund = refundAmountText.trim().replace(/[^\d]/g, "");
+    const hasRefund = rawRefund.length > 0 && Number(rawRefund) > 0;
 
     const formData = new FormData();
     formData.append("status", "6");
-    formData.append("refundAmount", hasRefund ? cleanRefund : "0");
+    formData.append("refundAmount", hasRefund ? rawRefund : "0");
 
-    // 1) Always update tenant (status 6 + refundAmount)
-    updateTenantMutation.mutate({ formData, tenantId });
+    updateTenantMutation.mutate(
+      { formData, tenantId: id },
+      {
+        onSuccess: () => {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          setCancelModalVisible(false);
+        },
+        onError: (error) => {
+          const errMsg =
+            (error as { message?: string })?.message ||
+            "Failed to cancel booking. Please try again.";
+          Alert.alert("Error", errMsg);
+        },
+      }
+    );
 
-    // 2) If refund entered, also insert a payment record
     if (hasRefund) {
       const roomId = str(
-        tenant?.roomId?._id ?? tenant?.roomId ?? tenant?.room?.id ?? tenant?.room?._id ?? "",
+        (tenant?.roomId as Record<string, unknown>)?._id ??
+          tenant?.roomId ??
+          (tenant?.room as Record<string, unknown>)?.id ??
+          "",
         ""
       );
       const propertyId = str(
-        tenant?.propertyId?._id ??
+        (tenant?.propertyId as Record<string, unknown>)?._id ??
           tenant?.propertyId ??
-          tenant?.property?.id ??
-          tenant?.property?._id ??
           "",
         ""
       );
@@ -546,224 +317,382 @@ const AdvancedBookingCard: React.FC<Props> = ({
 
       const paymentPayload = {
         status: 3,
-        tenantId,
+        tenantId: id,
         roomId,
-        amount: cleanRefund,
+        amount: rawRefund,
         paymentCategory: "Refund",
         propertyId,
         paymentMode: "cash",
-        description: "advance booking amount refunded to the tenant",
+        description: "Advance booking amount refunded to tenant",
         createdBy,
       };
 
       insertPaymentMutation.mutate(paymentPayload);
     }
-
-    setCancelVisible(false);
-  };
+  }, [id, refundAmountText, updateTenantMutation, insertPaymentMutation, tenant]);
 
   const isMutating = updateTenantMutation.isPending || insertPaymentMutation.isPending;
 
+  // Styles
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        cardOuter: {
+          width: cardW,
+          borderRadius: radius.lg,
+          backgroundColor: colors.cardBackground,
+          borderWidth: 1,
+          borderColor: Platform.OS === "ios"
+            ? hexToRgba(colors.textMuted, 0.12)
+            : hexToRgba(colors.textMuted, 0.08),
+          shadowColor: "#000000",
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: Platform.OS === "ios" ? 0.12 : 0.06,
+          shadowRadius: Platform.OS === "ios" ? 10 : 8,
+          elevation: 4,
+          overflow: "hidden",
+        },
+        // Top section with status indicator
+        topRow: {
+          flexDirection: "row",
+          alignItems: "center",
+          padding: spacing.md,
+          gap: spacing.sm + 2,
+        },
+        statusIndicator: {
+          width: 4,
+          height: 52,
+          borderRadius: 2,
+          backgroundColor: statusConfig.color,
+        },
+        avatarContainer: {
+          width: 48,
+          height: 48,
+          borderRadius: 24,
+          backgroundColor: hexToRgba(statusConfig.color, 0.12),
+          alignItems: "center",
+          justifyContent: "center",
+        },
+        avatarText: {
+          fontSize: 16,
+          fontWeight: "700",
+          color: statusConfig.color,
+        },
+        mainInfo: {
+          flex: 1,
+        },
+        nameRow: {
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 8,
+        },
+        name: {
+          fontSize: 15,
+          fontWeight: "700",
+          color: colors.textPrimary,
+          flex: 1,
+        },
+        statusBadge: {
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 4,
+          backgroundColor: hexToRgba(statusConfig.color, 0.12),
+          paddingHorizontal: 8,
+          paddingVertical: 3,
+          borderRadius: radius.sm,
+        },
+        statusText: {
+          fontSize: 11,
+          fontWeight: "700",
+          color: statusConfig.color,
+        },
+        phone: {
+          fontSize: 12,
+          color: colors.textSecondary,
+          marginTop: 2,
+        },
+        amountBadge: {
+          backgroundColor: hexToRgba(colors.accent, 0.1),
+          paddingHorizontal: 10,
+          paddingVertical: 6,
+          borderRadius: radius.md,
+          alignItems: "flex-end",
+        },
+        amountLabel: {
+          fontSize: 10,
+          color: colors.textSecondary,
+        },
+        amountValue: {
+          fontSize: 14,
+          fontWeight: "800",
+          color: hasAdvancePayment ? "#10B981" : colors.textPrimary,
+        },
+        // Info chips row
+        chipsRow: {
+          flexDirection: "row",
+          flexWrap: "wrap",
+          gap: 8,
+          paddingHorizontal: spacing.md,
+          paddingBottom: spacing.sm + 2,
+        },
+        chip: {
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 4,
+          backgroundColor: colors.surface,
+          paddingHorizontal: 8,
+          paddingVertical: 5,
+          borderRadius: radius.md,
+          borderWidth: 1,
+          borderColor: hexToRgba(colors.textMuted, 0.06),
+        },
+        chipText: {
+          fontSize: 11,
+          fontWeight: "600",
+          color: colors.textSecondary,
+        },
+        chipValue: {
+          fontSize: 11,
+          fontWeight: "700",
+          color: colors.textPrimary,
+        },
+        // Expand toggle
+        expandToggle: {
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "center",
+          paddingVertical: 8,
+          borderTopWidth: 1,
+          borderTopColor: hexToRgba(colors.textMuted, 0.08),
+          gap: 6,
+        },
+        expandText: {
+          fontSize: 12,
+          fontWeight: "600",
+          color: colors.textMuted,
+        },
+        // Expanded actions
+        actionsRow: {
+          flexDirection: "row",
+          gap: 8,
+          paddingHorizontal: spacing.md,
+          paddingBottom: spacing.md,
+          paddingTop: spacing.xs,
+        },
+        // Cancel modal
+        cancelInfoRow: {
+          flexDirection: "row",
+          justifyContent: "space-between",
+          alignItems: "center",
+          paddingVertical: 6,
+          borderBottomWidth: 1,
+          borderBottomColor: hexToRgba(colors.textMuted, 0.1),
+        },
+        cancelInfoLabel: {
+          fontSize: 13,
+          color: colors.textSecondary,
+        },
+        cancelInfoValue: {
+          fontSize: 14,
+          fontWeight: "700",
+          color: colors.textPrimary,
+        },
+      }),
+    [colors, spacing, radius, cardW, statusConfig, hasAdvancePayment]
+  );
+
   return (
     <>
-      <View style={s.wrap}>
-        {/* top row */}
-        <View style={[s.row, { marginBottom: spacing.sm }]}>
-          <Pressable
-            onPress={() => {
-              Haptics.selectionAsync();
-              router.push({
-                pathname: "/protected/tenant/TenantProfileDetails",
-                params: { id },
-              });
-            }}
-            style={[s.row, { flex: 1 }]}
-            android_ripple={{ color: hexToRgba(colors.primary, 0.07) }}
-          >
-            <Image source={{ uri: tImage(tenant) }} style={s.avatar} />
-            <View style={s.info}>
-              <Text style={s.name}>{tName(tenant)}</Text>
-              <Text style={s.phone}>{tPhone(tenant)}</Text>
-            </View>
-            <View style={s.amtBlock}>
-              <Text style={s.amt}>₹{advPaid.toLocaleString("en-IN")}</Text>
-            </View>
-          </Pressable>
+      <View style={styles.cardOuter}>
+        {/* Main card content */}
+        <Pressable
+          onPress={handleToggleExpand}
+          android_ripple={{ color: hexToRgba(colors.primary, 0.05) }}
+          accessible
+          accessibilityRole="button"
+          accessibilityLabel={`${name}, ${statusConfig.label}, Room ${room}`}
+          accessibilityHint="Tap to show actions"
+        >
+          {/* Top row */}
+          <View style={styles.topRow}>
+            <View style={styles.statusIndicator} />
 
-          {/* Premium three-dot menu */}
-          <Menu
-            visible={menuVisible}
-            onDismiss={() => setMenuVisible(false)}
-            anchor={
-              <Pressable
-                hitSlop={8}
-                onPress={() => setMenuVisible(true)}
-                style={menuStyles.anchorRipple}
-                android_ripple={{ color: hexToRgba(colors.primary, 0.08) }}
-              >
-                <IconButton icon="dots-vertical" />
-              </Pressable>
-            }
-            contentStyle={menuStyles.content}
-            anchorPosition="bottom"
-          >
-            <Menu.Item
-              style={menuStyles.item}
-              titleStyle={menuStyles.title}
-              leadingIcon="pencil"
-              title="Edit"
-              onPress={() => {
-                setMenuVisible(false);
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                if (onEdit) {
-                  onEdit(id);
-                } else {
-                  router.push({ pathname: "/protected/tenant/[id]", params: { id } });
-                }
-              }}
+            <View style={styles.avatarContainer}>
+              <Text style={styles.avatarText}>{initials}</Text>
+            </View>
+
+            <View style={styles.mainInfo}>
+              <View style={styles.nameRow}>
+                <Text style={styles.name} numberOfLines={1}>
+                  {name}
+                </Text>
+                <View style={styles.statusBadge}>
+                  <MaterialCommunityIcons
+                    name={statusConfig.icon as keyof typeof MaterialCommunityIcons.glyphMap}
+                    size={12}
+                    color={statusConfig.color}
+                  />
+                  <Text style={styles.statusText}>{statusConfig.label}</Text>
+                </View>
+              </View>
+              <Text style={styles.phone}>{phone}</Text>
+            </View>
+
+            <View style={styles.amountBadge}>
+              <Text style={styles.amountLabel}>Advance</Text>
+              <Text style={styles.amountValue}>{formatCurrency(totalAdvancePaid)}</Text>
+            </View>
+          </View>
+
+          {/* Info chips */}
+          <View style={styles.chipsRow}>
+            <View style={styles.chip}>
+              <MaterialCommunityIcons name="door" size={12} color={colors.textMuted} />
+              <Text style={styles.chipText}>Room</Text>
+              <Text style={styles.chipValue}>{room}</Text>
+            </View>
+            {bed && (
+              <View style={styles.chip}>
+                <MaterialCommunityIcons name="bed" size={12} color={colors.textMuted} />
+                <Text style={styles.chipText}>Bed</Text>
+                <Text style={styles.chipValue}>{bed}</Text>
+              </View>
+            )}
+            <View style={styles.chip}>
+              <MaterialCommunityIcons name="calendar-plus" size={12} color={colors.textMuted} />
+              <Text style={styles.chipText}>Booked</Text>
+              <Text style={styles.chipValue}>{bookingDate}</Text>
+            </View>
+            <View style={styles.chip}>
+              <MaterialCommunityIcons name="calendar-arrow-right" size={12} color={colors.accent} />
+              <Text style={styles.chipText}>Join</Text>
+              <Text style={[styles.chipValue, { color: colors.accent }]}>{joiningDate}</Text>
+            </View>
+          </View>
+
+          {/* Expand toggle */}
+          <View style={styles.expandToggle}>
+            <Text style={styles.expandText}>{expanded ? "Hide actions" : "Tap for actions"}</Text>
+            <MaterialCommunityIcons
+              name={expanded ? "chevron-up" : "chevron-down"}
+              size={18}
+              color={colors.textMuted}
             />
-            <Divider />
-            <Menu.Item
-              style={menuStyles.item}
-              titleStyle={menuStyles.title}
-              leadingIcon="account-convert"
-              title="Convert to Tenant"
-              onPress={() => {
-                setMenuVisible(false);
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                onConvertToTenant?.(tenant);
-              }}
+          </View>
+        </Pressable>
+
+        {/* Expanded actions */}
+        {expanded && (
+          <View style={styles.actionsRow}>
+            <ActionBtn
+              icon="pencil"
+              label="Edit"
+              onPress={handleEdit}
+              color={colors.accent}
+              bgColor={hexToRgba(colors.accent, 0.1)}
             />
-            {tenant?.status === 1 && (
-              <Menu.Item
-                style={menuStyles.item}
-                titleStyle={menuStyles.dangerTitle}
-                leadingIcon="close-circle-outline"
-                title="Cancel Booking"
-                onPress={() => {
-                  setMenuVisible(false);
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  handleOpenCancelModal();
-                  onCancelBooking?.(tenant);
-                }}
+
+            {/* Convert to Tenant - available for Active (3) and Cancelled (6) */}
+            {(isActive || isCancelled) && (
+              <ActionBtn
+                icon="account-convert"
+                label="Convert"
+                onPress={handleConvert}
+                color="#8B5CF6"
+                bgColor={hexToRgba("#8B5CF6", 0.1)}
               />
             )}
-          </Menu>
-        </View>
 
-        {/* bottom badges: Booking, Joining, Room, Bed, Sharing, Status */}
-        <View style={s.bottomRow}>
-          <View style={s.badge}>
-            <Text style={s.badgeTxt}>Booking: {booking}</Text>
+            {/* Receipt - only when advance payment exists */}
+            {hasAdvancePayment && (
+              <ActionBtn
+                icon="receipt"
+                label="Receipt"
+                onPress={handleReceipt}
+                color="#0EA5E9"
+                bgColor={hexToRgba("#0EA5E9", 0.1)}
+              />
+            )}
+
+            {/* Cancel Booking - only for Active */}
+            {isActive && (
+              <ActionBtn
+                icon="calendar-remove"
+                label="Cancel"
+                onPress={handleOpenCancelModal}
+                color="#EF4444"
+                bgColor={hexToRgba("#EF4444", 0.1)}
+              />
+            )}
           </View>
-          <View style={s.badge}>
-            <Text style={s.badgeTxt}>Joining: {joining}</Text>
-          </View>
-
-          {!!tRoom(tenant) && (
-            <View style={s.badge}>
-              <Text style={s.badgeTxt}>Room: {tRoom(tenant)}</Text>
-            </View>
-          )}
-          {!!tBed(tenant) && (
-            <View style={s.badge}>
-              <Text style={s.badgeTxt}>Bed: {tBed(tenant)}</Text>
-            </View>
-          )}
-          {!!tSharingType(tenant) && (
-            <View style={s.badge}>
-              <Text style={s.badgeTxt}>Sharing: {tSharingType(tenant)}</Text>
-            </View>
-          )}
-
-          {!!statusLabel && (
-            <>
-              <View style={s.statusBadge(STATUS_COLORS[statusLabel] ?? colors.accent)}>
-                <Text style={s.statusTxt}>{statusLabel}</Text>
-              </View>
-              {isAdvBooking && <Text style={s.activeTxt}>(Active)</Text>}
-            </>
-          )}
-        </View>
+        )}
       </View>
 
       {/* Cancel Booking Modal */}
       <Portal>
         <Dialog
-          visible={cancelVisible}
-          onDismiss={() => setCancelVisible(false)}
-          style={{ backgroundColor: colors.cardBackground }}
+          visible={cancelModalVisible}
+          onDismiss={() => setCancelModalVisible(false)}
+          style={{ backgroundColor: colors.cardBackground, borderRadius: 16 }}
         >
-          <Dialog.Title style={{ color: colors.textPrimary }}>Cancel booking</Dialog.Title>
+          <Dialog.Title style={{ color: colors.textPrimary, fontWeight: "700" }}>
+            Cancel Booking
+          </Dialog.Title>
           <Dialog.Content>
-            <Text
-              style={{
-                color: colors.textSecondary,
-                fontSize: 13,
-                marginBottom: 4,
-              }}
-            >
-              Paid Adv Rent Amount
-            </Text>
-            <Text
-              style={{
-                color: colors.textPrimary,
-                fontWeight: "600",
-                marginBottom: 12,
-              }}
-            >
-              ₹{num(tenant?.advanceRentAmountPaid).toLocaleString("en-IN")}
-            </Text>
+            <View style={{ gap: spacing.sm }}>
+              <PaperText style={{ color: colors.textSecondary, marginBottom: spacing.xs }}>
+                Are you sure you want to cancel this booking for {name}?
+              </PaperText>
 
-            <Text
-              style={{
-                color: colors.textSecondary,
-                fontSize: 13,
-                marginBottom: 4,
-              }}
-            >
-              Paid Adv Deposit Amount
-            </Text>
-            <Text
-              style={{
-                color: colors.textPrimary,
-                fontWeight: "600",
-                marginBottom: 12,
-              }}
-            >
-              ₹{num(tenant?.advanceDepositAmountPaid).toLocaleString("en-IN")}
-            </Text>
+              <View style={styles.cancelInfoRow}>
+                <Text style={styles.cancelInfoLabel}>Adv. Rent Paid</Text>
+                <Text style={styles.cancelInfoValue}>{formatCurrency(advRent)}</Text>
+              </View>
 
-            <PaperTextInput
-              label="Refund Amount"
-              mode="outlined"
-              value={refundAmountText}
-              onChangeText={setRefundAmountText}
-              keyboardType={Platform.OS === "ios" ? "number-pad" : "numeric"}
-              outlineColor={hexToRgba(colors.textSecondary, 0.22)}
-              activeOutlineColor={colors.accent}
-              style={{ backgroundColor: colors.cardSurface }}
-            />
-            <Text
-              style={{
-                color: colors.textMuted,
-                fontSize: 11,
-                marginTop: 4,
-              }}
-            >
-              Leave blank if no amount is refunded.
-            </Text>
+              <View style={styles.cancelInfoRow}>
+                <Text style={styles.cancelInfoLabel}>Adv. Deposit Paid</Text>
+                <Text style={styles.cancelInfoValue}>{formatCurrency(advDeposit)}</Text>
+              </View>
+
+              <View style={[styles.cancelInfoRow, { borderBottomWidth: 0 }]}>
+                <Text style={styles.cancelInfoLabel}>Total Paid</Text>
+                <Text style={[styles.cancelInfoValue, { color: colors.accent }]}>
+                  {formatCurrency(totalAdvancePaid)}
+                </Text>
+              </View>
+
+              <PaperTextInput
+                label="Refund Amount (optional)"
+                mode="outlined"
+                value={refundAmountText}
+                onChangeText={setRefundAmountText}
+                keyboardType={Platform.OS === "ios" ? "number-pad" : "numeric"}
+                outlineColor={hexToRgba(colors.textSecondary, 0.22)}
+                activeOutlineColor={colors.accent}
+                style={{ backgroundColor: colors.cardSurface, marginTop: spacing.xs }}
+                textColor={colors.textPrimary}
+                left={<PaperTextInput.Affix text="₹" />}
+              />
+              <Text style={{ color: colors.textMuted, fontSize: 11, marginTop: 2 }}>
+                Leave blank if no refund is required.
+              </Text>
+            </View>
           </Dialog.Content>
           <Dialog.Actions>
             <Button
-              onPress={() => setCancelVisible(false)}
+              onPress={() => setCancelModalVisible(false)}
               textColor={colors.textPrimary}
               disabled={isMutating}
             >
-              Cancel
+              Go Back
             </Button>
-            <Button onPress={handleConfirmCancel} loading={isMutating} textColor={colors.accent}>
-              Confirm
+            <Button
+              onPress={handleConfirmCancel}
+              loading={isMutating}
+              textColor={colors.error}
+              disabled={isMutating}
+            >
+              Cancel Booking
             </Button>
           </Dialog.Actions>
         </Dialog>
