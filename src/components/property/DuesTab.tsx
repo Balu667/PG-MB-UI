@@ -22,6 +22,7 @@ import { hexToRgba } from "@/src/theme";
 import SearchBar from "@/src/components/SearchBar";
 import FilterSheet, { Section } from "@/src/components/FilterSheet";
 import StatsGrid, { Metric } from "@/src/components/StatsGrid";
+import { router } from "expo-router";
 
 /* ─────────────────────────────────────────────────────────────────────────────
    TYPES & HELPERS
@@ -54,6 +55,7 @@ interface Props {
   metrics?: Metric[];
   refreshing: boolean;
   onRefresh: () => void;
+  propertyId: string;
 }
 
 const str = (v: unknown, fallback = ""): string =>
@@ -210,7 +212,11 @@ const sections: Section[] = [
     key: "dueDate",
     label: "Due Date",
     mode: "date",
-    dateConfig: { allowFuture: true, fromLabel: "From Date", toLabel: "To Date" },
+    dateConfig: {
+      allowFuture: false, // Only past dates and today allowed
+      fromLabel: "From Date",
+      toLabel: "To Date",
+    },
   },
 ];
 
@@ -396,13 +402,17 @@ const DueCard: React.FC<DueCardProps> = ({
           width: cardWidth,
           borderRadius: radius.xl,
           backgroundColor: colors.cardBackground,
+          // iOS shadow - more prominent
           shadowColor: "#000000",
           shadowOffset: { width: 0, height: 6 },
-          shadowOpacity: Platform.OS === "ios" ? 0.12 : 0.08,
-          shadowRadius: Platform.OS === "ios" ? 14 : 10,
-          elevation: 5,
+          shadowOpacity: Platform.OS === "ios" ? 0.18 : 0.1,
+          shadowRadius: Platform.OS === "ios" ? 16 : 10,
+          elevation: 6,
+          // Border for iOS definition
           borderWidth: Platform.OS === "ios" ? 1 : 0,
-          borderColor: hexToRgba(colors.textMuted, 0.1),
+          borderColor: Platform.OS === "ios"
+            ? hexToRgba(colors.textMuted, 0.15)
+            : hexToRgba(colors.textMuted, 0.1),
         },
         cardWrapper: {
           overflow: "hidden",
@@ -1065,6 +1075,7 @@ export default function DuesTab({
   metrics = [],
   refreshing,
   onRefresh,
+  propertyId,
 }: Props) {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -1138,15 +1149,33 @@ export default function DuesTab({
   const filterActive = !!filter?.dueDate?.from || !!filter?.dueDate?.to || !!query.trim();
 
   // Handlers
-  const onPayNow = useCallback((item: DueItem) => {
-    Haptics.selectionAsync();
-    // TODO: Integrate payment flow
-  }, []);
+  const onPayNow = useCallback(
+    (item: DueItem) => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      router.push({
+        pathname: `/protected/dues/${propertyId}`,
+        params: {
+          dueId: item._id,
+          mode: "pay",
+        },
+      });
+    },
+    [propertyId]
+  );
 
-  const onEdit = useCallback((item: DueItem) => {
-    Haptics.selectionAsync();
-    // TODO: Navigate to edit screen
-  }, []);
+  const onEdit = useCallback(
+    (item: DueItem) => {
+      Haptics.selectionAsync();
+      router.push({
+        pathname: `/protected/dues/${propertyId}`,
+        params: {
+          dueId: item._id,
+          mode: "edit",
+        },
+      });
+    },
+    [propertyId]
+  );
 
   // Styles
   const styles = useMemo(

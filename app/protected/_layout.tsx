@@ -16,6 +16,7 @@ export default function ProtectedLayout() {
     "/protected/tenant", // hide header for Add/Edit Tenant screen
     "/protected/employees", // hide header for Add/Edit Employee screen
     "/protected/expenses", // hide header for Add/Edit Expense screen
+    "/protected/dues", // hide header for Pay/Edit Due screen
   ]);
 
   const isPropertyDetail = pathname.startsWith("/protected/property/");

@@ -674,6 +674,7 @@ export default function PropertyDetails() {
           metrics={duesMetrics}
           refreshing={!!duesQuery?.isFetching}
           onRefresh={duesQuery?.refetch}
+          propertyId={id as string}
         />
       ) : activeTab === "Collections" ? (
         <CollectionsTab
