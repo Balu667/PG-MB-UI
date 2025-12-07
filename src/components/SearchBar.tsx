@@ -51,7 +51,7 @@ const SearchBar: React.FC<SearchBarProps> = ({
         wrap: {
           flexDirection: "row",
           alignItems: "center",
-          marginTop: spacing.md,
+          marginTop: spacing.xs,
           marginBottom: spacing.sm,
         },
 

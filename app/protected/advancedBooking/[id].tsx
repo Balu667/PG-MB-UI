@@ -1,7 +1,9 @@
 // app/protected/advancedBooking/[id].tsx
-import React, { useEffect, useMemo, useState } from "react";
+// Add/Edit/Convert Advanced Booking Screen - Premium design with proper validation
+import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import {
   ActivityIndicator,
+  Alert,
   BackHandler,
   KeyboardAvoidingView,
   Platform,
@@ -9,14 +11,17 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput as RNTextInput,
   View,
+  Keyboard,
+  TouchableWithoutFeedback,
+  I18nManager,
+  Modal,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { MaterialIcons } from "@expo/vector-icons";
-import DateTimePicker from "@react-native-community/datetimepicker";
+import DateTimePicker, { DateTimePickerEvent } from "@react-native-community/datetimepicker";
 import {
   Button,
   RadioButton,
@@ -24,8 +29,9 @@ import {
   TextInput,
   Portal,
   Dialog,
+  Divider,
 } from "react-native-paper";
-import Toast from "react-native-toast-message";
+import { useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 
 import { useTheme } from "@/src/theme/ThemeContext";
@@ -34,13 +40,15 @@ import { useProperty } from "@/src/context/PropertyContext";
 import { useGetAllRooms } from "@/src/hooks/room";
 import { useGetAllTenants, useInsertTenant, useUpdateTenant } from "@/src/hooks/tenants";
 
-/* ----------------------------- helpers ----------------------------- */
+/* ─────────────────────────────────────────────────────────────────────────────
+   HELPERS & CONSTANTS
+───────────────────────────────────────────────────────────────────────────── */
 
-const str = (v: any, fallback = "") => (v == null ? fallback : String(v));
-const num = (v: any, fallback = 0) =>
+const str = (v: unknown, fallback = "") => (v == null ? fallback : String(v));
+const num = (v: unknown, fallback = 0) =>
   typeof v === "number" ? v : Number(v ?? fallback) || fallback;
 
-const parseISODate = (v: any): Date | null => {
+const parseISODate = (v: unknown): Date | null => {
   try {
     const s = str(v, "");
     if (!s) return null;
@@ -51,20 +59,17 @@ const parseISODate = (v: any): Date | null => {
   }
 };
 
-const formatDisplayDate = (d: Date | null) => {
-  if (!d) return "Select date";
-  try {
-    return d.toLocaleDateString("en-IN", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
-  } catch {
-    return d.toISOString().slice(0, 10);
-  }
+const formatDisplayDate = (d: Date | null): string => {
+  if (!d || !(d instanceof Date) || isNaN(d.getTime())) return "Select date";
+  return d.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
 };
 
-const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+const startOfDay = (d: Date) =>
+  new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
 
 const addDays = (d: Date, days: number) => {
   const nd = new Date(d.getTime());
@@ -76,7 +81,6 @@ const addMonths = (d: Date, months: number) => {
   const nd = new Date(d.getTime());
   const day = nd.getDate();
   nd.setMonth(nd.getMonth() + months);
-  // If we overflowed month (e.g., 31st), clamp to last day of new month
   if (nd.getDate() < day) {
     nd.setDate(0);
   }
@@ -92,112 +96,79 @@ const firstOfNextMonth = (base: Date) => {
   return new Date(y, m + 1, 1, 0, 0, 0, 0);
 };
 
-const unwrapPayload = (resp: any): any => {
-  if (!resp) return {};
-  if (resp.data && typeof resp.data === "object" && !Array.isArray(resp.data)) {
-    return resp.data;
-  }
-  return resp;
+// Format number to Indian currency format
+const formatIndianNumber = (num: string): string => {
+  const cleaned = num.replace(/[^0-9]/g, "");
+  if (!cleaned) return "";
+  const number = parseInt(cleaned, 10);
+  if (isNaN(number)) return cleaned;
+  return number.toLocaleString("en-IN");
 };
 
-const isErrorPayload = (payload: any): boolean => {
-  if (!payload || typeof payload !== "object") return false;
-  if (payload.success === false) return true;
-  if (typeof payload.statusCode === "number" && payload.statusCode >= 400) return true;
-  return false;
+const parseFormattedNumber = (formatted: string): string => {
+  return formatted.replace(/[^0-9]/g, "");
 };
 
-const getPayloadMessage = (
-  payload: any,
-  fallback = "Something went wrong. Please try again."
-): string => {
-  if (!payload || typeof payload !== "object") return fallback;
-
-  const nested = payload.data && typeof payload.data === "object" ? payload.data : null;
-
-  const msg = payload.errorMessage || payload.message || nested?.errorMessage || nested?.message;
-
-  if (typeof msg === "string" && msg.trim().length > 0) return msg.trim();
-  return fallback;
-};
-
-const getErrorMessageFromError = (
-  err: any,
-  fallback = "Something went wrong. Please try again."
-): string => {
-  if (!err) return fallback;
-  const data = err?.response?.data ?? err?.data ?? err;
-  if (data && typeof data === "object") {
-    return getPayloadMessage(data, fallback);
-  }
-  if (typeof data === "string" && data.trim().length > 0) return data.trim();
-  if (typeof err?.message === "string" && err.message.trim().length > 0) {
-    return err.message.trim();
-  }
-  return fallback;
-};
-
-/* ------------------- digits & currency formatting ------------------ */
-
+const BED_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const MAX_AMOUNT_DIGITS = 9;
 
-const onlyDigitsMax = (value: string, max: number) => value.replace(/[^\d]/g, "").slice(0, max);
+type DueType = "Monthly" | "FirstMonth" | "Custom";
+type BedDisplayStatus = "Filled" | "AdvBooked" | "UnderNotice" | "Available";
 
-/** Format a numeric string as Indian currency with commas, but keep it as plain text (no ₹). */
-const formatAmountInput = (value: string): string => {
-  const digits = onlyDigitsMax(value, MAX_AMOUNT_DIGITS);
-  if (!digits) return "";
-  const n = Number(digits);
-  if (!Number.isFinite(n)) return "";
-  return n.toLocaleString("en-IN");
-};
+/* ─────────────────────────────────────────────────────────────────────────────
+   ROOM & BED HELPERS
+───────────────────────────────────────────────────────────────────────────── */
 
-/** Parse formatted text like "5,000" to a number (5000). */
-const parseAmount = (value: string): number => {
-  const digits = value.replace(/[^\d]/g, "");
-  if (!digits) return 0;
-  const n = Number(digits);
-  return Number.isFinite(n) ? n : 0;
-};
-
-/** Extract rooms array from useGetAllRooms response (same logic as in Rooms Add/Edit) */
-const extractRooms = (resp: any): any[] => {
+const extractRooms = (resp: unknown): Record<string, unknown>[] => {
   if (!resp) return [];
-  if (resp && typeof resp === "object" && !Array.isArray(resp)) {
-    if (Array.isArray(resp.data)) {
-      const first = resp.data[0];
-      if (first && Array.isArray(first.rooms)) return first.rooms;
-      return resp.data;
+  const r = resp as Record<string, unknown>;
+  if (r && typeof r === "object" && !Array.isArray(r)) {
+    if (Array.isArray(r.data)) {
+      const first = (r.data as Record<string, unknown>[])[0];
+      if (first && Array.isArray(first.rooms)) return first.rooms as Record<string, unknown>[];
+      return r.data as Record<string, unknown>[];
     }
-    if (Array.isArray(resp.rooms)) return resp.rooms;
+    if (Array.isArray(r.rooms)) return r.rooms as Record<string, unknown>[];
   }
   if (Array.isArray(resp)) {
-    const first = resp[0];
-    if (first && Array.isArray(first.rooms)) return first.rooms;
-    return resp;
+    const first = (resp as Record<string, unknown>[])[0];
+    if (first && Array.isArray(first.rooms)) return first.rooms as Record<string, unknown>[];
+    return resp as Record<string, unknown>[];
   }
   return [];
 };
 
-/** Extract advance-booking tenants from useGetAllTenants response */
-const extractAdvanceTenants = (resp: any): any[] => {
+const extractAdvanceTenants = (resp: unknown): Record<string, unknown>[] => {
   if (!resp) return [];
-  if (resp && typeof resp === "object") {
-    if (Array.isArray(resp.data)) {
-      const bucket = resp.data[0];
-      if (bucket && Array.isArray(bucket.tenants)) return bucket.tenants;
+  const r = resp as Record<string, unknown>;
+  if (r && typeof r === "object") {
+    // Format: { data: [{ metadata, tenants: [...] }] }
+    if (Array.isArray(r.data)) {
+      const bucket = (r.data as Record<string, unknown>[])[0];
+      if (bucket && Array.isArray(bucket.tenants)) {
+        return bucket.tenants as Record<string, unknown>[];
+      }
+      // Format: { data: [tenant1, tenant2, ...] }
+      return r.data as Record<string, unknown>[];
     }
-    if (Array.isArray(resp.tenants)) return resp.tenants;
+    // Format: { tenants: [...] }
+    if (Array.isArray(r.tenants)) return r.tenants as Record<string, unknown>[];
   }
-  if (Array.isArray(resp)) return resp;
+  // Format: [tenant1, tenant2, ...]
+  if (Array.isArray(resp)) {
+    // Check if it's [{ metadata, tenants }] format
+    const first = (resp as Record<string, unknown>[])[0];
+    if (first && Array.isArray(first.tenants)) {
+      return first.tenants as Record<string, unknown>[];
+    }
+    return resp as Record<string, unknown>[];
+  }
   return [];
 };
 
-/* ---------------- room status (same idea as RoomsTab) --------------- */
+type DerivedRoomStatus = "Available" | "Partial" | "Filled";
 
-type DerivedStatus = "Available" | "Partial" | "Filled";
-
-const deriveRoomStatus = (room: any): DerivedStatus => {
+const deriveRoomStatus = (room: Record<string, unknown>): DerivedRoomStatus => {
   const totalBeds =
     num(room?.totalBeds) ||
     num(room?.bedsTotal) ||
@@ -205,11 +176,9 @@ const deriveRoomStatus = (room: any): DerivedStatus => {
     num(room?.capacity) ||
     num(room?.beds) ||
     0;
-
   const occupiedBeds = num(room?.occupiedBeds);
   const underNotice = num(room?.underNotice);
   const advanceBookings = num(room?.advancedBookings) || num(room?.advanceBookingBeds);
-
   const hasVacantField = room?.vacantBeds !== undefined && room?.vacantBeds !== null;
   const vacantBeds = hasVacantField
     ? num(room?.vacantBeds)
@@ -221,538 +190,198 @@ const deriveRoomStatus = (room: any): DerivedStatus => {
   return "Partial";
 };
 
-const BED_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-
-type DueType = "Monthly" | "FirstMonth" | "Custom";
-
-/* ---------------- Bed display status (per bed) ---------------- */
-
-type BedDisplayStatus = "Filled" | "AdvBooked" | "UnderNotice" | "Available";
-
 const bedStatusFromTenantStatuses = (codes: number[]): BedDisplayStatus => {
   if (!codes || codes.length === 0) return "Available";
-  // Follow your priority mapping: 1 → Filled, 3 → AdvBooked, 2 → UnderNotice, else Available
   if (codes.some((c) => c === 1)) return "Filled";
   if (codes.some((c) => c === 3)) return "AdvBooked";
   if (codes.some((c) => c === 2)) return "UnderNotice";
   return "Available";
 };
 
-interface DateFieldProps {
+/* ─────────────────────────────────────────────────────────────────────────────
+   LABELED COMPONENT
+───────────────────────────────────────────────────────────────────────────── */
+
+const Labeled = React.memo(
+  ({
+    label,
+    children,
+    required,
+  }: {
+    label: string;
+    children: React.ReactNode;
+    required?: boolean;
+  }) => {
+    const { colors } = useTheme();
+    return (
+      <View style={{ marginTop: 8, marginBottom: 10 }}>
+        <PaperText
+          style={{ color: colors.textPrimary, fontWeight: "600", marginBottom: 6 }}
+          accessible
+          accessibilityRole="text"
+        >
+          {label}
+          {required && <Text style={{ color: colors.error }}> *</Text>}
+        </PaperText>
+        {children}
+      </View>
+    );
+  }
+);
+Labeled.displayName = "Labeled";
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   SHEET SELECT COMPONENT (Generic Dropdown)
+───────────────────────────────────────────────────────────────────────────── */
+
+interface SheetSelectOption {
+  id: string;
   label: string;
-  value: Date | null;
-  placeholder?: string;
-  onChange: (date: Date) => void;
-  minimumDate?: Date;
-  maximumDate?: Date;
+  sublabel?: string;
+  status?: string;
+  statusColor?: string;
   disabled?: boolean;
 }
 
-/* ------------------------ Small shared UI pieces ------------------------ */
-/** Premium modal-style date picker */
-const DateField: React.FC<DateFieldProps> = ({
-  label,
+interface SheetSelectProps {
+  value?: string;
+  options: SheetSelectOption[];
+  placeholder: string;
+  onChange: (v: string) => void;
+  disabled?: boolean;
+}
+
+const SheetSelect = React.memo(function SheetSelect({
   value,
-  placeholder = "Select date",
+  options,
+  placeholder,
   onChange,
-  minimumDate,
-  maximumDate,
   disabled,
-}) => {
+}: SheetSelectProps) {
   const { colors, radius, spacing, typography } = useTheme();
   const [open, setOpen] = useState(false);
-  const [draft, setDraft] = useState<Date>(value ?? new Date());
 
-  useEffect(() => {
-    if (!open && value) {
-      setDraft(value);
-    }
-  }, [value, open]);
-
-  const handleOpen = () => {
-    if (disabled) return;
-    Haptics.selectionAsync();
-    setDraft(value ?? new Date());
-    setOpen(true);
-  };
-
-  const handleDone = () => {
-    setOpen(false);
-    if (draft) {
-      Haptics.selectionAsync();
-      onChange(draft);
-    }
-  };
+  const selectedOption = options.find((o) => o.id === value);
 
   return (
-    <View style={{ marginBottom: spacing.md }}>
-      <Text
-        style={{
-          color: colors.textSecondary,
-          fontWeight: "600",
-          marginBottom: 6,
-          fontSize: typography.fontSizeSm,
-        }}
-      >
-        {label}
-      </Text>
+    <>
       <Pressable
-        disabled={disabled}
-        onPress={handleOpen}
+        onPress={() => {
+          if (disabled) return;
+          Haptics.selectionAsync();
+          setOpen(true);
+        }}
         style={{
           borderWidth: 1,
           borderColor: colors.borderColor,
           borderRadius: radius.lg,
           backgroundColor: disabled ? colors.surface : colors.cardSurface,
-          paddingVertical: 12,
+          paddingVertical: 14,
           paddingHorizontal: 12,
-          minHeight: 48,
-          justifyContent: "center",
-          opacity: disabled ? 0.7 : 1,
+          opacity: disabled ? 0.6 : 1,
+          minHeight: 55,
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
         }}
         accessibilityRole="button"
-        accessibilityLabel={label}
+        accessibilityLabel={placeholder}
+        accessibilityHint="Opens selection menu"
+        accessible
       >
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-          <MaterialIcons
-            name="event"
-            size={18}
-            color={disabled ? colors.textMuted : colors.textSecondary}
-          />
+        <View style={{ flex: 1 }}>
           <PaperText
             style={{
-              color: value ? colors.textPrimary : colors.textMuted,
-              fontSize: typography.fontSizeSm,
+              color: selectedOption ? colors.textPrimary : colors.textMuted,
+              fontSize: typography.fontSizeMd,
             }}
+            numberOfLines={1}
           >
-            {value ? formatDisplayDate(value) : placeholder}
+            {selectedOption?.label || placeholder}
           </PaperText>
+          {selectedOption?.sublabel && (
+            <PaperText
+              style={{
+                color: colors.textSecondary,
+                fontSize: 12,
+                marginTop: 2,
+              }}
+              numberOfLines={1}
+            >
+              {selectedOption.sublabel}
+            </PaperText>
+          )}
         </View>
+        <MaterialIcons
+          name={open ? "keyboard-arrow-up" : "keyboard-arrow-down"}
+          size={20}
+          color={colors.textSecondary}
+        />
       </Pressable>
 
       <Portal>
         <Dialog
           visible={open}
           onDismiss={() => setOpen(false)}
-          style={{ backgroundColor: colors.cardBackground }}
-        >
-          <Dialog.Title style={{ color: colors.textPrimary }}>{label}</Dialog.Title>
-          <Dialog.Content>
-            <DateTimePicker
-              value={draft ?? new Date()}
-              mode="date"
-              display={Platform.OS === "ios" ? "inline" : "default"}
-              minimumDate={minimumDate}
-              maximumDate={maximumDate}
-              onChange={(_, d) => {
-                if (d) setDraft(d);
-              }}
-            />
-          </Dialog.Content>
-          <Dialog.Actions>
-            <Button onPress={() => setOpen(false)} textColor={colors.textPrimary}>
-              Cancel
-            </Button>
-            <Button onPress={handleDone} textColor={colors.accent}>
-              Done
-            </Button>
-          </Dialog.Actions>
-        </Dialog>
-      </Portal>
-    </View>
-  );
-};
-
-interface RoomOption {
-  id: string;
-  roomNo: string;
-  status: DerivedStatus;
-}
-
-interface RoomSelectProps {
-  label: string;
-  value?: string; // roomId
-  onChange: (id: string) => void;
-  rooms: RoomOption[];
-}
-
-/** Premium bottom-sheet “dropdown” for Room */
-const RoomSelect: React.FC<RoomSelectProps> = ({ label, value, onChange, rooms }) => {
-  const { colors, radius, spacing, typography } = useTheme();
-  const [open, setOpen] = useState(false);
-
-  const statusColor = useMemo(
-    () => ({
-      Available: colors.availableBeds,
-      Partial: colors.advBookedBeds,
-      Filled: colors.filledBeds,
-    }),
-    [colors]
-  );
-
-  const selectedRoom = rooms.find((r) => r.id === value);
-
-  return (
-    <>
-      <View style={{ marginBottom: spacing.md }}>
-        <Text
           style={{
-            color: colors.textSecondary,
-            fontWeight: "600",
-            marginBottom: 6,
-            fontSize: typography.fontSizeSm,
+            backgroundColor: colors.cardBackground,
+            borderTopLeftRadius: 18,
+            borderTopRightRadius: 18,
           }}
         >
-          {label}
-        </Text>
-        <Pressable
-          onPress={() => {
-            Haptics.selectionAsync();
-            setOpen(true);
-          }}
-          style={{
-            borderWidth: 1,
-            borderColor: colors.borderColor,
-            borderRadius: radius.lg,
-            backgroundColor: colors.cardSurface,
-            paddingVertical: 12,
-            paddingHorizontal: 12,
-            minHeight: 48,
-            justifyContent: "center",
-          }}
-          accessibilityRole="button"
-          accessibilityLabel={label}
-        >
-          <View
+          <Dialog.Title
             style={{
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "space-between",
+              color: colors.textPrimary,
+              marginBottom: 6,
+              fontWeight: "700",
+              fontSize: typography.fontSizeMd,
             }}
           >
-            <PaperText
-              style={{
-                color: selectedRoom ? colors.textPrimary : colors.textMuted,
-                fontSize: typography.fontSizeSm,
-              }}
-              numberOfLines={1}
-            >
-              {selectedRoom ? `Room - ${selectedRoom.roomNo}` : "Select room"}
-            </PaperText>
-            <MaterialIcons
-              name={open ? "keyboard-arrow-up" : "keyboard-arrow-down"}
-              size={20}
-              color={colors.textSecondary}
-            />
-          </View>
-        </Pressable>
-      </View>
-
-      {open && (
-        <View
-          style={{
-            position: "absolute",
-            left: 0,
-            right: 0,
-            bottom: 0,
-            top: 0,
-            justifyContent: "flex-end",
-            backgroundColor: hexToRgba(colors.backDrop ?? "#000000", 0.35),
-          }}
-        >
-          <Pressable
-            style={{ flex: 1 }}
-            onPress={() => setOpen(false)}
-            accessibilityLabel="Close room selection"
-          />
-          <View
-            style={{
-              backgroundColor: colors.cardBackground,
-              borderTopLeftRadius: 18,
-              borderTopRightRadius: 18,
-              paddingHorizontal: spacing.md,
-              paddingTop: spacing.md,
-              paddingBottom: spacing.lg,
-            }}
-          >
-            <View style={{ alignItems: "center", marginBottom: spacing.sm }}>
-              <View
-                style={{
-                  width: 40,
-                  height: 4,
-                  borderRadius: 999,
-                  backgroundColor: hexToRgba(colors.textSecondary, 0.25),
-                }}
-              />
-            </View>
-            <PaperText
-              style={{
-                color: colors.textPrimary,
-                fontSize: typography.fontSizeMd,
-                fontWeight: "700",
-                marginBottom: 8,
-              }}
-            >
-              Select room
-            </PaperText>
+            {placeholder}
+          </Dialog.Title>
+          <Dialog.ScrollArea>
             <ScrollView
-              style={{ maxHeight: 380 }}
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={{ paddingBottom: spacing.md }}
-            >
-              {rooms.length === 0 ? (
-                <PaperText style={{ color: colors.textMuted, paddingVertical: 8 }}>
-                  No rooms available.
-                </PaperText>
-              ) : (
-                rooms.map((r) => {
-                  const selected = r.id === value;
-                  const bg = selected ? hexToRgba(colors.accent, 0.14) : "transparent";
-                  const border = selected ? colors.accent : "transparent";
-                  return (
-                    <Pressable
-                      key={r.id}
-                      onPress={() => {
-                        Haptics.selectionAsync();
-                        onChange(r.id);
-                        setOpen(false);
-                      }}
-                      style={{
-                        paddingVertical: 14,
-                        borderBottomWidth: StyleSheet.hairlineWidth,
-                        borderColor: hexToRgba(colors.textSecondary, 0.16),
-                        backgroundColor: bg,
-                        borderWidth: selected ? 1 : 0,
-                        borderRadius: 10,
-                        marginBottom: 6,
-                        paddingHorizontal: 8,
-                      }}
-                    >
-                      <View
-                        style={{
-                          flexDirection: "row",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                        }}
-                      >
-                        <PaperText
-                          style={{
-                            color: colors.textPrimary,
-                            fontSize: typography.fontSizeSm,
-                          }}
-                        >
-                          Room - {r.roomNo}
-                        </PaperText>
-                        <View
-                          style={{
-                            backgroundColor:
-                              statusColor[r.status] ?? hexToRgba(colors.textSecondary, 0.2),
-                            borderRadius: 999,
-                            paddingHorizontal: 10,
-                            paddingVertical: 4,
-                          }}
-                        >
-                          <Text
-                            style={{
-                              color: colors.white,
-                              fontSize: 11,
-                              fontWeight: "700",
-                              textTransform: "uppercase",
-                            }}
-                          >
-                            {r.status}
-                          </Text>
-                        </View>
-                      </View>
-                    </Pressable>
-                  );
-                })
-              )}
-            </ScrollView>
-            <Button onPress={() => setOpen(false)} textColor={colors.accent}>
-              Close
-            </Button>
-          </View>
-        </View>
-      )}
-    </>
-  );
-};
-
-interface BedOption {
-  value: string;
-  status: BedDisplayStatus;
-  disabled?: boolean;
-}
-
-interface BedSelectProps {
-  label: string;
-  value?: string;
-  options: BedOption[];
-  onChange: (v: string) => void;
-  disabled?: boolean;
-}
-
-/** Premium bottom-sheet “dropdown” for Bed */
-const BedSelect: React.FC<BedSelectProps> = ({ label, value, options, onChange, disabled }) => {
-  const { colors, radius, spacing, typography } = useTheme();
-  const [open, setOpen] = useState(false);
-
-  const selectedOption = options.find((o) => o.value === value);
-  const bedStatusColors = useMemo(
-    () => ({
-      Filled: colors.filledBeds,
-      AdvBooked: colors.advBookedBeds,
-      UnderNotice: colors.underNoticeBeds ?? colors.advBookedBeds,
-      Available: colors.availableBeds ?? colors.success,
-    }),
-    [colors]
-  );
-
-  return (
-    <>
-      <View style={{ marginBottom: spacing.md }}>
-        <Text
-          style={{
-            color: colors.textSecondary,
-            fontWeight: "600",
-            marginBottom: 6,
-            fontSize: typography.fontSizeSm,
-          }}
-        >
-          {label}
-        </Text>
-        <Pressable
-          disabled={disabled}
-          onPress={() => {
-            if (disabled) return;
-            Haptics.selectionAsync();
-            setOpen(true);
-          }}
-          style={{
-            borderWidth: 1,
-            borderColor: colors.borderColor,
-            borderRadius: radius.lg,
-            backgroundColor: disabled ? colors.surface : colors.cardSurface,
-            paddingVertical: 12,
-            paddingHorizontal: 12,
-            minHeight: 48,
-            justifyContent: "center",
-            opacity: disabled ? 0.7 : 1,
-          }}
-          accessibilityRole="button"
-          accessibilityLabel={label}
-        >
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "space-between",
-            }}
-          >
-            <PaperText
-              style={{
-                color: selectedOption ? colors.textPrimary : colors.textMuted,
-                fontSize: typography.fontSizeSm,
-              }}
-            >
-              {selectedOption
-                ? `Bed ${selectedOption.value} (${selectedOption.status})`
-                : value
-                ? `Bed ${String(value).toUpperCase()}`
-                : "Select bed"}
-            </PaperText>
-            <MaterialIcons
-              name={open ? "keyboard-arrow-up" : "keyboard-arrow-down"}
-              size={20}
-              color={colors.textSecondary}
-            />
-          </View>
-        </Pressable>
-      </View>
-
-      {open && (
-        <View
-          style={{
-            position: "absolute",
-            left: 0,
-            right: 0,
-            bottom: 0,
-            top: 0,
-            justifyContent: "flex-end",
-            backgroundColor: hexToRgba(colors.backDrop ?? "#000000", 0.35),
-          }}
-        >
-          <Pressable
-            style={{ flex: 1 }}
-            onPress={() => setOpen(false)}
-            accessibilityLabel="Close bed selection"
-          />
-          <View
-            style={{
-              backgroundColor: colors.cardBackground,
-              borderTopLeftRadius: 18,
-              borderTopRightRadius: 18,
-              paddingHorizontal: spacing.md,
-              paddingTop: spacing.md,
-              paddingBottom: spacing.lg,
-            }}
-          >
-            <View style={{ alignItems: "center", marginBottom: spacing.sm }}>
-              <View
-                style={{
-                  width: 40,
-                  height: 4,
-                  borderRadius: 999,
-                  backgroundColor: hexToRgba(colors.textSecondary, 0.25),
-                }}
-              />
-            </View>
-            <PaperText
-              style={{
-                color: colors.textPrimary,
-                fontSize: typography.fontSizeMd,
-                fontWeight: "700",
-                marginBottom: 8,
-              }}
-            >
-              Select bed
-            </PaperText>
-            <ScrollView
-              style={{ maxHeight: 280 }}
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={{ paddingBottom: spacing.md }}
+              style={{ maxHeight: 400 }}
+              contentContainerStyle={{ padding: spacing.sm }}
+              keyboardShouldPersistTaps="always"
             >
               {options.length === 0 ? (
-                <PaperText style={{ color: colors.textMuted, paddingVertical: 8 }}>
-                  No beds defined for this room.
+                <PaperText style={{ color: colors.textMuted, paddingVertical: 12 }}>
+                  No options available.
                 </PaperText>
               ) : (
                 options.map((opt) => {
-                  const isSelected = opt.value === value;
+                  const isSelected = opt.id === value;
                   const isDisabled = !!opt.disabled;
 
                   return (
                     <Pressable
-                      key={opt.value}
+                      key={opt.id}
                       disabled={isDisabled}
                       onPress={() => {
+                        if (isDisabled) return;
                         Haptics.selectionAsync();
-                        onChange(opt.value);
+                        onChange(opt.id);
                         setOpen(false);
                       }}
                       style={{
-                        paddingVertical: 12,
-                        paddingHorizontal: 8,
-                        borderBottomWidth: StyleSheet.hairlineWidth,
-                        borderColor: hexToRgba(colors.textSecondary, 0.14),
-                        opacity: isDisabled ? 0.4 : 1,
+                        paddingVertical: 14,
+                        borderBottomWidth: 1,
+                        borderColor: hexToRgba(colors.textSecondary, 0.12),
+                        minHeight: 52,
+                        justifyContent: "center",
                         backgroundColor: isSelected
-                          ? hexToRgba(colors.accent, 0.14)
+                          ? hexToRgba(colors.accent, 0.1)
                           : "transparent",
                         borderRadius: isSelected ? 10 : 0,
+                        paddingHorizontal: 10,
                         marginBottom: 4,
+                        opacity: isDisabled ? 0.4 : 1,
                       }}
+                      accessibilityRole="button"
+                      accessibilityLabel={opt.label}
+                      accessibilityState={{ selected: isSelected, disabled: isDisabled }}
+                      accessible
                     >
                       <View
                         style={{
@@ -761,196 +390,260 @@ const BedSelect: React.FC<BedSelectProps> = ({ label, value, options, onChange, 
                           justifyContent: "space-between",
                         }}
                       >
-                        <PaperText
-                          style={{
-                            color: colors.textPrimary,
-                            fontSize: typography.fontSizeSm,
-                            fontWeight: isSelected ? "700" : "500",
-                          }}
-                        >
-                          Bed {opt.value}
-                        </PaperText>
-                        <View
-                          style={{
-                            backgroundColor:
-                              bedStatusColors[opt.status] ?? hexToRgba(colors.textSecondary, 0.2),
-                            borderRadius: 999,
-                            paddingHorizontal: 10,
-                            paddingVertical: 4,
-                          }}
-                        >
-                          <Text
+                        <View style={{ flex: 1 }}>
+                          <PaperText
                             style={{
-                              color: colors.white,
-                              fontSize: 11,
-                              fontWeight: "700",
+                              color: colors.textPrimary,
+                              fontWeight: isSelected ? "700" : "500",
+                              fontSize: 14,
                             }}
                           >
-                            {opt.status}
-                          </Text>
+                            {opt.label}
+                          </PaperText>
+                          {opt.sublabel && (
+                            <PaperText
+                              style={{
+                                color: colors.textSecondary,
+                                fontSize: 12,
+                                marginTop: 2,
+                              }}
+                            >
+                              {opt.sublabel}
+                            </PaperText>
+                          )}
                         </View>
+                        {opt.status && (
+                          <View
+                            style={{
+                              backgroundColor: opt.statusColor || colors.textMuted,
+                              borderRadius: 999,
+                              paddingHorizontal: 10,
+                              paddingVertical: 4,
+                            }}
+                          >
+                            <Text
+                              style={{
+                                color: "#FFFFFF",
+                                fontSize: 10,
+                                fontWeight: "700",
+                              }}
+                            >
+                              {opt.status}
+                            </Text>
+                          </View>
+                        )}
                       </View>
                     </Pressable>
                   );
                 })
               )}
             </ScrollView>
+          </Dialog.ScrollArea>
+          <Dialog.Actions>
             <Button onPress={() => setOpen(false)} textColor={colors.accent}>
               Close
             </Button>
-          </View>
-        </View>
-      )}
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
     </>
   );
-};
+});
 
-/* -------------------------------- Screen -------------------------------- */
+/* ─────────────────────────────────────────────────────────────────────────────
+   MAIN SCREEN COMPONENT
+───────────────────────────────────────────────────────────────────────────── */
 
 export default function AdvancedBookingScreen() {
-  const { id, mode } = useLocalSearchParams<{ id: string; mode?: string }>();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const insets = useSafeAreaInsets();
   const { colors, spacing, radius, typography } = useTheme();
-  const { selectedId, properties } = useProperty();
-  const { profileData } = useSelector((state: any) => state.profileDetails);
-  const propertyId = selectedId as string | undefined;
 
-  const isAddMode = String(id) === "add";
+  // Params
+  const params = useLocalSearchParams<{ id: string; mode?: string }>();
+  const id = String(params?.id ?? "");
+  const mode = String(params?.mode ?? "");
+
+  // Mode detection
+  const isAddMode = id === "add";
   const isConvertMode = !isAddMode && mode === "convert";
   const isEditMode = !isAddMode && !isConvertMode;
 
-  const ownerIdSafe = str(
-    profileData?.ownerId ?? profileData?.userId ?? profileData?._id ?? "",
+  // Property context
+  const { selectedId, properties } = useProperty();
+  const propertyId = selectedId as string | undefined;
+
+  // Profile data
+  const profileData = useSelector(
+    (state: { profileDetails?: { profileData?: Record<string, unknown> } }) =>
+      state?.profileDetails?.profileData
+  );
+  const ownerId = str(
+    (profileData as Record<string, unknown>)?.ownerId ??
+      (profileData as Record<string, unknown>)?.userId ??
+      (profileData as Record<string, unknown>)?._id ??
+      "",
     ""
   );
 
+  // Current property
   const currentProperty = useMemo(
     () => properties.find((p) => p._id === propertyId),
     [properties, propertyId]
   );
 
+  // Fetch rooms
   const {
     data: roomsResp,
     isLoading: roomsLoading,
-    error: roomsError,
   } = useGetAllRooms(propertyId as string);
 
+  // Fetch advance booking tenants
   const {
     data: tenantsResp,
     isLoading: tenantsLoading,
-    error: tenantsError,
   } = useGetAllTenants(propertyId as string, "?status=3,5,6");
 
   const rooms = useMemo(() => extractRooms(roomsResp), [roomsResp]);
-  const allAdvanceTenants = useMemo(() => extractAdvanceTenants(tenantsResp), [tenantsResp]);
+  const allAdvanceTenants = useMemo(
+    () => extractAdvanceTenants(tenantsResp),
+    [tenantsResp]
+  );
 
+  // Find current tenant for edit/convert mode
   const currentTenant = useMemo(() => {
     if (isAddMode || !id) return null;
     const key = String(id);
-    return (
-      allAdvanceTenants[0]?.tenants?.find((t: any) => String(t?._id ?? t?.id ?? "") === key) ?? null
+
+    // Try direct search in flat array first
+    const directMatch = allAdvanceTenants.find(
+      (t) => String(t?._id ?? t?.id ?? "") === key
     );
+    if (directMatch) return directMatch;
+
+    // Fallback: check if it's nested format [{ tenants: [...] }]
+    const firstBucket = allAdvanceTenants[0] as Record<string, unknown> | undefined;
+    if (firstBucket && Array.isArray(firstBucket.tenants)) {
+      const nestedMatch = (firstBucket.tenants as Record<string, unknown>[]).find(
+        (t) => String(t?._id ?? t?.id ?? "") === key
+      );
+      if (nestedMatch) return nestedMatch;
+    }
+
+    return null;
   }, [allAdvanceTenants, id, isAddMode]);
 
-  /* ----------------------------- form state ----------------------------- */
+  /* ----------------------------- Form State ----------------------------- */
 
   const [tenantName, setTenantName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
-
   const [gender, setGender] = useState<"Male" | "Female">("Male");
-
   const [joiningDate, setJoiningDate] = useState<Date | null>(null);
-  const [initialJoiningDate, setInitialJoiningDate] = useState<Date | null>(null);
-
-  const [roomId, setRoomId] = useState<string>("");
-  const [bed, setBed] = useState<string>("");
-
+  const [roomId, setRoomId] = useState("");
+  const [bedId, setBedId] = useState("");
   const [rentAmount, setRentAmount] = useState("");
   const [depositAmount, setDepositAmount] = useState("");
-  const [advRentCollected, setAdvRentCollected] = useState("");
-  const [advDepositCollected, setAdvDepositCollected] = useState("");
+  const [advRentPaid, setAdvRentPaid] = useState("");
+  const [advDepositPaid, setAdvDepositPaid] = useState("");
   const [rentCollected, setRentCollected] = useState("");
   const [depositCollected, setDepositCollected] = useState("");
-
   const [dueType, setDueType] = useState<DueType>("Monthly");
   const [dueDate, setDueDate] = useState<Date | null>(null);
 
-  /* ---------------------- prefill Edit / Convert ----------------------- */
+  // Track initial joining date for edit limits
+  const initialJoiningDate = useRef<Date | null>(null);
+  // Track which tenant ID was prefilled to avoid duplicate prefills
+  const prefilledTenantId = useRef<string | null>(null);
+  // Flag to skip reset effect right after prefill
+  const justPrefilled = useRef(false);
+
+  // Date picker state
+  const [showJoiningDatePicker, setShowJoiningDatePicker] = useState(false);
+  const [showDueDatePicker, setShowDueDatePicker] = useState(false);
+  const [tempJoiningDate, setTempJoiningDate] = useState<Date>(() => new Date());
+  const [tempDueDate, setTempDueDate] = useState<Date>(() => new Date());
+
+  // Mutations
+  const insertTenant = useInsertTenant(() => {});
+  const updateTenant = useUpdateTenant(() => {});
+
+  // Get tenant ID for tracking
+  const currentTenantId = useMemo(() => {
+    if (!currentTenant) return null;
+    return String(currentTenant._id ?? currentTenant.id ?? "");
+  }, [currentTenant]);
+
+  /* ----------------------------- Prefill Logic ----------------------------- */
 
   useEffect(() => {
-    if (isAddMode || !currentTenant) {
-      setInitialJoiningDate(null);
-      return;
-    }
+    // Skip if add mode
+    if (isAddMode) return;
+    
+    // Skip if no tenant data yet
+    if (!currentTenant || !currentTenantId) return;
+    
+    // Skip if already prefilled this tenant
+    if (prefilledTenantId.current === currentTenantId) return;
 
-    setTenantName(str(currentTenant.tenantName, ""));
-    setPhone(str(currentTenant.phoneNumber, "").replace(/[^\d]/g, "").slice(0, 10));
-    setEmail(str(currentTenant.email ?? "", ""));
+    const ct = currentTenant as Record<string, unknown>;
 
-    setGender(String(currentTenant.gender).toLowerCase() === "female" ? "Female" : "Male");
+    // Mark as prefilled for this tenant
+    prefilledTenantId.current = currentTenantId;
 
-    const j =
-      parseISODate(currentTenant.joiningDate) ||
-      parseISODate(currentTenant.joinDate) ||
-      parseISODate(currentTenant.joinedOn);
-    setJoiningDate(j);
-    setInitialJoiningDate(j);
+    // Tenant details
+    setTenantName(str(ct.tenantName ?? ct.name, ""));
+    setPhone(str(ct.phoneNumber ?? ct.phone, "").replace(/[^\d]/g, "").slice(0, 10));
+    setEmail(str(ct.email ?? "", ""));
+    setGender(String(ct.gender).toLowerCase() === "female" ? "Female" : "Male");
 
-    // setRoomId(str(currentTenant.roomId ?? "", ""));
+    // Joining date
+    const jDate =
+      parseISODate(ct.joiningDate) ??
+      parseISODate(ct.joinDate) ??
+      parseISODate(ct.joinedOn);
+    setJoiningDate(jDate);
+    initialJoiningDate.current = jDate;
 
-    const tenantRoomIdRaw =
-      currentTenant?.roomId?._id ??
-      currentTenant?.roomId ??
-      currentTenant?.room?._id ??
-      currentTenant?.room?.id ??
-      "";
-
-    const tenantRoomId = str(tenantRoomIdRaw, "");
+    // Room ID - handle nested object
+    const tenantRoomId = str(
+      (ct.roomId as Record<string, unknown>)?._id ??
+        ct.roomId ??
+        (ct.room as Record<string, unknown>)?._id ??
+        (ct.room as Record<string, unknown>)?.id ??
+        "",
+      ""
+    );
     setRoomId(tenantRoomId);
-    setBed(str(currentTenant.bedNumber ?? "", "").toUpperCase());
 
-    setRentAmount(
-      currentTenant.rentAmount != null
-        ? formatAmountInput(String(num(currentTenant.rentAmount)))
-        : ""
-    );
-    setDepositAmount(
-      currentTenant.depositAmount != null
-        ? formatAmountInput(String(num(currentTenant.depositAmount)))
-        : ""
-    );
+    // Bed - Always bind from API response
+    const tenantBed = str(ct.bedNumber ?? ct.bed ?? "", "").toUpperCase();
+    
+    // CRITICAL: Set flag to prevent reset effect from clearing this bed
+    justPrefilled.current = true;
+    setBedId(tenantBed);
 
-    setAdvRentCollected(
-      currentTenant.advanceRentAmountPaid != null
-        ? formatAmountInput(String(num(currentTenant.advanceRentAmountPaid)))
-        : ""
-    );
-    setAdvDepositCollected(
-      currentTenant.advanceDepositAmountPaid != null
-        ? formatAmountInput(String(num(currentTenant.advanceDepositAmountPaid)))
-        : ""
-    );
+    // Amounts - handle various property names
+    const rentVal = num(ct.rentAmount ?? ct.rent ?? 0);
+    const depositVal = num(ct.depositAmount ?? ct.deposit ?? 0);
+    const advRentVal = num(ct.advanceRentAmountPaid ?? ct.advRentPaid ?? 0);
+    const advDepositVal = num(ct.advanceDepositAmountPaid ?? ct.advDepositPaid ?? 0);
+    const rentCollectedVal = num(ct.rentAmountPaid ?? ct.collectedRent ?? 0);
+    const depositCollectedVal = num(ct.depositAmountPaid ?? ct.collectedDeposit ?? 0);
 
-    setRentCollected(
-      currentTenant.rentAmountPaid != null
-        ? formatAmountInput(String(num(currentTenant.rentAmountPaid)))
-        : ""
-    );
-    setDepositCollected(
-      currentTenant.depositAmountPaid != null
-        ? formatAmountInput(String(num(currentTenant.depositAmountPaid)))
-        : ""
-    );
+    setRentAmount(rentVal > 0 ? formatIndianNumber(String(rentVal)) : "");
+    setDepositAmount(depositVal > 0 ? formatIndianNumber(String(depositVal)) : "");
+    setAdvRentPaid(advRentVal > 0 ? formatIndianNumber(String(advRentVal)) : "");
+    setAdvDepositPaid(advDepositVal > 0 ? formatIndianNumber(String(advDepositVal)) : "");
+    setRentCollected(rentCollectedVal > 0 ? formatIndianNumber(String(rentCollectedVal)) : "");
+    setDepositCollected(depositCollectedVal > 0 ? formatIndianNumber(String(depositCollectedVal)) : "");
 
-    // For both Edit and Convert, default Due Type to Monthly.
-    // For Convert mode, actual dueDate will be recomputed in the due-date effect.
     setDueType("Monthly");
     setDueDate(null);
-  }, [isAddMode, currentTenant]);
+  }, [isAddMode, currentTenant, currentTenantId]);
 
-  /* ---------------------- recompute Due Date logic --------------------- */
+  /* ----------------------------- Due Date Auto-compute ----------------------------- */
 
   useEffect(() => {
     if (!isConvertMode) return;
@@ -976,334 +669,431 @@ export default function AdvancedBookingScreen() {
     }
   }, [dueType, joiningDate, isConvertMode]);
 
-  /* ------------------------- rooms & beds options ---------------------- */
+  /* ----------------------------- Room Options ----------------------------- */
 
-  const roomOptions: RoomOption[] = useMemo(
+  const roomStatusColors = useMemo(
+    () => ({
+      Available: colors.availableBeds ?? "#22C55E",
+      Partial: colors.advBookedBeds ?? "#F59E0B",
+      Filled: colors.filledBeds ?? "#EF4444",
+    }),
+    [colors]
+  );
+
+  const roomOptions: SheetSelectOption[] = useMemo(
     () =>
-      (rooms ?? [])
-        .map((room: any) => {
+      rooms
+        .map((room) => {
           const rid = str(room?._id ?? room?.id ?? "", "");
           const roomNo = str(room?.roomNo ?? room?.roomNumber ?? "", "");
           if (!rid || !roomNo) return null;
+
+          const status = deriveRoomStatus(room);
+          const sharing = num(room?.beds, 0);
+          const vacant = num(room?.vacantBeds, 0);
+
           return {
             id: rid,
-            roomNo,
-            status: deriveRoomStatus(room),
-          } as RoomOption;
+            label: `Room ${roomNo}`,
+            sublabel: `${sharing} beds • ${vacant} vacant`,
+            status: status,
+            statusColor: roomStatusColors[status],
+          } as SheetSelectOption;
         })
-        .filter(Boolean) as RoomOption[],
-    [rooms]
+        .filter(Boolean) as SheetSelectOption[],
+    [rooms, roomStatusColors]
   );
 
+  /* ----------------------------- Selected Room ----------------------------- */
+
   const selectedRoom = useMemo(
-    () => rooms.find((r: any) => String(r?._id ?? r?.id ?? "") === roomId),
+    () => rooms.find((r) => String(r?._id ?? r?.id ?? "") === roomId),
     [rooms, roomId]
   );
 
-  // Auto-bind rent & deposit when a room is picked (user can still override)
+  // Auto-bind rent & deposit when room changes
   useEffect(() => {
-    if (!selectedRoom) return;
+    if (!selectedRoom || !isAddMode) return;
     const price = num(selectedRoom.bedPrice);
     const deposit = num(selectedRoom.securityDeposit);
 
     if (price > 0) {
-      setRentAmount(formatAmountInput(String(price)));
+      setRentAmount(formatIndianNumber(String(price)));
     }
     if (deposit > 0) {
-      setDepositAmount(formatAmountInput(String(deposit)));
+      setDepositAmount(formatIndianNumber(String(deposit)));
     }
-  }, [selectedRoom]);
+  }, [selectedRoom, isAddMode]);
 
-  const bedOptions: BedOption[] = useMemo(() => {
-    if (!selectedRoom) return [];
+  /* ----------------------------- Bed Options ----------------------------- */
 
-    const sharing = num(selectedRoom.beds, 0);
+  const bedStatusColors = useMemo(
+    () => ({
+      Filled: colors.filledBeds ?? "#EF4444",
+      AdvBooked: colors.advBookedBeds ?? "#F59E0B",
+      UnderNotice: colors.underNoticeBeds ?? colors.advBookedBeds ?? "#F59E0B",
+      Available: colors.availableBeds ?? "#22C55E",
+    }),
+    [colors]
+  );
+
+  // Get tenant's original room/bed for edit/convert mode (used in multiple places)
+  // MUST be defined before bedOptions to prevent "used before declaration" error
+  const tenantOriginalRoomId = useMemo(() => {
+    if (isAddMode || !currentTenant) return "";
+    return str(
+      (currentTenant.roomId as Record<string, unknown>)?._id ??
+        currentTenant.roomId ??
+        "",
+      ""
+    );
+  }, [isAddMode, currentTenant]);
+
+  const tenantOriginalBed = useMemo(() => {
+    if (isAddMode || !currentTenant) return "";
+    return str(currentTenant.bedNumber ?? "", "").toUpperCase();
+  }, [isAddMode, currentTenant]);
+
+  const bedOptions: SheetSelectOption[] = useMemo(() => {
+    // If no room selected, no bed options
+    if (!roomId) return [];
+
+    // Determine sharing count - prefer from selectedRoom, fallback to tenant's sharingType
+    let sharing = selectedRoom ? num(selectedRoom.beds, 0) : 0;
+    
+    // In edit/convert mode, if room data not loaded yet, use tenant's sharingType as fallback
+    if (!sharing && !isAddMode && currentTenant && roomId === tenantOriginalRoomId) {
+      sharing = num(currentTenant.sharingType ?? 0);
+    }
+    
     if (!sharing) return [];
 
     const letters = BED_LETTERS.slice(0, Math.min(sharing, BED_LETTERS.length)).split("");
+    const bpr: Record<string, unknown>[] = selectedRoom && Array.isArray(selectedRoom.bedsPerRoom)
+      ? (selectedRoom.bedsPerRoom as Record<string, unknown>[])
+      : [];
 
-    const bpr: any[] = Array.isArray(selectedRoom.bedsPerRoom) ? selectedRoom.bedsPerRoom : [];
-
-    const tenantBedUpper = str(bed, "").toUpperCase();
-    // const isExistingAssignment =
-    //   !isAddMode &&
-    //   !!currentTenant &&
-    //   str(currentTenant.roomId ?? "", "") === roomId &&
-    //   !!tenantBedUpper;
-
-    const tenantRoomIdForCheck = currentTenant
-      ? str(
-          currentTenant.roomId?._id ??
-            currentTenant.roomId ??
-            currentTenant.room?._id ??
-            currentTenant.room?.id ??
-            "",
-          ""
-        )
-      : "";
-
-    const isExistingAssignment =
-      !isAddMode && !!tenantRoomIdForCheck && tenantRoomIdForCheck === roomId && !!tenantBedUpper;
+    // Check if we're on the same room as the tenant's original room
+    const isSameRoom = !isAddMode && tenantOriginalRoomId === roomId;
 
     return letters.map((letter) => {
+      const upperLetter = letter.toUpperCase();
+      
+      // Find bed info from room's bedsPerRoom array (if available)
       const match = bpr.find(
-        (b: any) => str(b?._id ?? b?.bedNumber, "").toUpperCase() === letter.toUpperCase()
+        (b) => str(b?._id ?? b?.bedNumber, "").toUpperCase() === upperLetter
       );
-      const codes = (Array.isArray(match?.tenantsPerBed) ? match.tenantsPerBed : [])
-        .map((t: any) => num(t?.tenantStatus))
-        .filter((c: number) => c > 0);
-      const status = bedStatusFromTenantStatuses(codes);
-      const isCurrent = isExistingAssignment && tenantBedUpper === letter.toUpperCase();
+      
+      // Get tenant statuses for this bed
+      const codes = (
+        match && Array.isArray(match?.tenantsPerBed)
+          ? (match.tenantsPerBed as { tenantStatus?: number }[])
+          : []
+      )
+        .map((t) => num(t?.tenantStatus))
+        .filter((c) => c > 0);
 
-      // In add mode: only Available can be selected.
-      // In edit/convert: Available + current tenant's own bed can be selected.
-      const disabled = status !== "Available" && !isCurrent;
+      const status = bedStatusFromTenantStatuses(codes);
+
+      // CRITICAL: In edit/convert mode, the tenant's own bed should ALWAYS be selectable
+      // even if it shows as "filled" (because the tenant themselves is filling it)
+      const isCurrentTenantBed = isSameRoom && tenantOriginalBed === upperLetter;
+
+      // Disable logic:
+      // - In Add mode: only "Available" beds can be selected
+      // - In Edit/Convert mode: "Available" beds + the tenant's original bed can be selected
+      const disabled = isAddMode
+        ? status !== "Available"
+        : status !== "Available" && !isCurrentTenantBed;
 
       return {
-        value: letter,
-        status,
+        id: letter,
+        label: `Bed ${letter}`,
+        sublabel: isCurrentTenantBed ? "(Your current bed)" : undefined,
+        status: status, // Show original status (Filled, AdvBooked, etc.)
+        statusColor: bedStatusColors[status],
         disabled,
-      };
+      } as SheetSelectOption;
     });
-  }, [selectedRoom, bed, isAddMode, currentTenant, roomId]);
+  }, [
+    selectedRoom,
+    roomId,
+    isAddMode,
+    bedStatusColors,
+    tenantOriginalRoomId,
+    tenantOriginalBed,
+    colors.accent,
+    currentTenant,
+  ]);
 
-  // Reset bed when room changes to something incompatible
+  // Reset bed when room changes (only if moving to a different room)
+  // CRITICAL: Don't reset while rooms are loading to prevent race condition
   useEffect(() => {
-    if (!selectedRoom) {
-      setBed("");
+    // Skip this effect if we just prefilled (to prevent clearing the prefilled bed)
+    if (justPrefilled.current) {
+      justPrefilled.current = false;
       return;
     }
+
+    // Don't run reset logic while rooms are loading
+    if (roomsLoading) return;
+
+    // In edit/convert mode, never reset if this is the tenant's original room+bed combo
+    if (!isAddMode && currentTenant) {
+      const ctRoomId = str(
+        (currentTenant.roomId as Record<string, unknown>)?._id ??
+          currentTenant.roomId ??
+          "",
+        ""
+      );
+      const ctBed = str(currentTenant.bedNumber ?? "", "").toUpperCase();
+      
+      // If current selection matches tenant's original, don't reset
+      if (roomId === ctRoomId && bedId.toUpperCase() === ctBed) {
+        return;
+      }
+    }
+    
+    // If no room selected, clear bed
+    if (!roomId) {
+      setBedId("");
+      return;
+    }
+
+    // If room is selected but not found in rooms list
+    if (!selectedRoom) {
+      // In edit/convert mode, preserve the bed if on tenant's room
+      if (!isAddMode && roomId === tenantOriginalRoomId) {
+        return;
+      }
+      // Room not found and not matching tenant's room - clear bed
+      setBedId("");
+      return;
+    }
+
+    // Room is found - validate bed against room's capacity
     const sharing = num(selectedRoom.beds, 0);
     const allowedLetters = BED_LETTERS.slice(0, Math.min(sharing, BED_LETTERS.length))
       .split("")
       .map((c) => c.toUpperCase());
 
-    const upperBed = str(bed, "").toUpperCase();
-    const isExistingAssignment =
-      !isAddMode &&
-      !!currentTenant &&
-      str(currentTenant.roomId ?? "", "") === roomId &&
-      upperBed === str(currentTenant.bedNumber ?? "", "").toUpperCase();
+    const upperBed = bedId.toUpperCase();
 
-    if (!bed) return;
+    // Check if current bed is the tenant's original bed (in edit/convert mode)
+    const isOriginalBed =
+      !isAddMode && tenantOriginalRoomId === roomId && upperBed === tenantOriginalBed;
 
-    if (!allowedLetters.includes(upperBed) && !isExistingAssignment) {
-      setBed("");
+    // Reset bed only if:
+    // - There's a bed selected
+    // - It's not in the allowed letters for this room's capacity
+    // - AND it's not the tenant's original bed (which we must preserve)
+    if (upperBed && !allowedLetters.includes(upperBed) && !isOriginalBed) {
+      setBedId("");
     }
-  }, [selectedRoom, bed, isAddMode, currentTenant, roomId]);
+  }, [
+    selectedRoom,
+    bedId,
+    isAddMode,
+    roomId,
+    roomsLoading,
+    tenantOriginalRoomId,
+    tenantOriginalBed,
+    currentTenant,
+  ]);
 
-  /* ---------------------------- joining date limits -------------------- */
+  /* ----------------------------- Joining Date Limits ----------------------------- */
 
   const todayStart = useMemo(() => startOfDay(new Date()), []);
+
   const joiningMinDate = useMemo(() => {
     if (isAddMode) {
       return addDays(todayStart, 1); // tomorrow
     }
-    if (initialJoiningDate) {
-      return startOfDay(addMonths(initialJoiningDate, -1)); // 1 month back
+    if (initialJoiningDate.current) {
+      return startOfDay(addMonths(initialJoiningDate.current, -1)); // 1 month back
     }
     return undefined;
-  }, [isAddMode, initialJoiningDate, todayStart]);
+  }, [isAddMode, todayStart]);
 
   const joiningMaxDate = useMemo(() => {
     if (isAddMode) {
-      return undefined; // no upper limit in add mode
+      return undefined;
     }
-    if (initialJoiningDate) {
-      return startOfDay(initialJoiningDate);
+    if (initialJoiningDate.current) {
+      return startOfDay(initialJoiningDate.current);
     }
     return undefined;
-  }, [isAddMode, initialJoiningDate]);
+  }, [isAddMode]);
 
-  /* ---------------------------- validation ----------------------------- */
-  const validate = (): string | null => {
-    if (!propertyId) return "Please select a property first.";
+  /* ----------------------------- Navigation ----------------------------- */
 
-    if (!tenantName.trim()) return "Tenant name is required.";
-
-    if (!phone.trim()) return "Phone number is required.";
-    if (phone.trim().length !== 10) return "Phone number must be 10 digits.";
-
-    if (!joiningDate) return "Date of joining is required.";
-
-    // Joining date rules
-    const jdStart = startOfDay(joiningDate);
-    if (isAddMode) {
-      const tomorrow = addDays(todayStart, 1);
-      if (jdStart.getTime() < tomorrow.getTime()) {
-        return "For advance booking, date of joining must be from tomorrow onwards.";
-      }
-    } else if (initialJoiningDate) {
-      const minAllowed = startOfDay(addMonths(initialJoiningDate, -1));
-      const maxAllowed = startOfDay(initialJoiningDate);
-      if (jdStart.getTime() < minAllowed.getTime() || jdStart.getTime() > maxAllowed.getTime()) {
-        return "In edit / convert mode, date of joining can only be changed up to 1 month earlier than the original date.";
-      }
+  const navigateBackToTab = useCallback(() => {
+    try {
+      queryClient.invalidateQueries({ queryKey: ["tenantList"] });
+    } catch {
+      // Ignore
     }
-
-    if (!roomId) return "Please select a room.";
-    if (!bed) return "Please select a bed.";
-
-    if (!rentAmount.trim()) return "Rent amount is required.";
-    if (!depositAmount.trim()) return "Deposit amount is required.";
-
-    const rent = parseAmount(rentAmount);
-    const deposit = parseAmount(depositAmount);
-    const advRent = parseAmount(advRentCollected);
-    const advDeposit = parseAmount(advDepositCollected);
-    const collectedRentNum = parseAmount(rentCollected);
-    const collectedDepositNum = parseAmount(depositCollected);
-
-    if (rent <= 0) return "Rent amount must be greater than 0.";
-    if (deposit <= 0) return "Deposit amount must be greater than 0.";
-
-    if (advRentCollected.trim() && advRent <= 0) {
-      return "Paid advance rent amount must be greater than 0.";
-    }
-
-    if (advDepositCollected.trim() && advDeposit <= 0) {
-      return "Paid advance deposit amount must be greater than 0.";
-    }
-
-    if (advRent > 0 && rent > 0 && advRent > rent) {
-      return "Paid advance rent amount cannot be greater than rent amount.";
-    }
-
-    if (advDeposit > 0 && deposit > 0 && advDeposit > deposit) {
-      return "Paid advance deposit amount cannot be greater than deposit amount.";
-    }
-
-    if (isConvertMode) {
-      if (!advRentCollected.trim()) {
-        return "Paid advance rent amount is required in convert mode.";
-      }
-      if (!advDepositCollected.trim()) {
-        return "Paid advance deposit amount is required in convert mode.";
-      }
-
-      if (!dueType) return "Please select due type.";
-      if (!dueDate) return "Due date is required.";
-
-      const today = startOfDay(new Date());
-      if (startOfDay(dueDate).getTime() < today.getTime()) {
-        return "Due date cannot be in the past.";
-      }
-
-      if (collectedRentNum > 0 && collectedRentNum > advRent + rent) {
-        return "Collected rent amount cannot be greater than paid advance rent plus rent amount.";
-      }
-
-      if (collectedDepositNum > 0 && collectedDepositNum > deposit + advDeposit) {
-        return "Collected deposit amount cannot be greater than deposit amount plus paid advance deposit.";
-      }
-    }
-
-    if (email.trim()) {
-      const re = /^\S+@\S+\.\S+$/;
-      if (!re.test(email.trim())) return "Please enter a valid email address.";
-    }
-
-    if (!isAddMode && !currentTenant) {
-      return "Unable to load advance booking details for this tenant.";
-    }
-
-    return null;
-  };
-
-  /* ----------------------------- navigation ---------------------------- */
-
-  const goToAdvanceBookingTab = () => {
     if (propertyId) {
       router.replace({
         pathname: `/protected/property/${propertyId}`,
-        params: { tab: "Advance Booking" },
+        params: { tab: "Advance Booking", refresh: String(Date.now()) },
       });
     } else {
       router.replace("/protected/(tabs)/Properties");
     }
-  };
+  }, [queryClient, router, propertyId]);
 
-  const handleBack = () => {
-    goToAdvanceBookingTab();
-  };
+  const handleBack = useCallback(() => {
+    navigateBackToTab();
+  }, [navigateBackToTab]);
 
+  // Android hardware back button
   useEffect(() => {
-    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+    const backHandler = BackHandler.addEventListener("hardwareBackPress", () => {
       handleBack();
       return true;
     });
-    return () => sub.remove();
-  }, []);
+    return () => backHandler.remove();
+  }, [handleBack]);
 
-  /* ----------------------------- error toast --------------------------- */
+  /* ----------------------------- Validation ----------------------------- */
 
-  useEffect(() => {
-    const err: any = roomsError || tenantsError;
-    if (!err) return;
-    const msg = getErrorMessageFromError(err, "Something went wrong. Please try again.");
-    Toast.show({ type: "error", text1: msg, position: "bottom" });
-  }, [roomsError, tenantsError]);
+  const validate = useCallback((): string[] => {
+    const errs: string[] = [];
 
-  /* ------------------------------ mutations ---------------------------- */
-
-  const insertTenantMutation = useInsertTenant((resp: any) => {
-    const payload = unwrapPayload(resp);
-
-    if (isErrorPayload(payload)) {
-      const errMsg = getPayloadMessage(payload, "Something went wrong. Please try again.");
-      Toast.show({ type: "error", text1: errMsg, position: "bottom" });
-      return;
+    if (!propertyId) {
+      errs.push("• Please select a property first.");
     }
 
-    const msg = getPayloadMessage(payload, "Advance booking added successfully.");
-    Toast.show({ type: "success", text1: msg, position: "bottom" });
-    goToAdvanceBookingTab();
-  });
-
-  const updateTenantMutation = useUpdateTenant((resp: any) => {
-    const payload = unwrapPayload(resp);
-
-    if (isErrorPayload(payload)) {
-      const errMsg = getPayloadMessage(payload, "Something went wrong. Please try again.");
-      Toast.show({ type: "error", text1: errMsg, position: "bottom" });
-      return;
+    if (!tenantName.trim()) {
+      errs.push("• Tenant name is required.");
+    } else if (tenantName.trim().length < 2) {
+      errs.push("• Tenant name must be at least 2 characters.");
     }
 
-    const fallbackMsg = isConvertMode
-      ? "Tenant converted successfully."
-      : "Advance booking updated successfully.";
-    const msg = getPayloadMessage(payload, fallbackMsg);
+    if (!phone.trim()) {
+      errs.push("• Phone number is required.");
+    } else if (phone.trim().length !== 10) {
+      errs.push("• Phone number must be exactly 10 digits.");
+    }
 
-    Toast.show({ type: "success", text1: msg, position: "bottom" });
-    goToAdvanceBookingTab();
-  });
+    if (email.trim()) {
+      const emailRegex = /^\S+@\S+\.\S+$/;
+      if (!emailRegex.test(email.trim())) {
+        errs.push("• Please enter a valid email address.");
+      }
+    }
 
-  useEffect(() => {
-    const err: any = insertTenantMutation.error || updateTenantMutation.error;
-    if (!err) return;
-    const msg = getErrorMessageFromError(err, "Something went wrong. Please try again.");
-    Toast.show({ type: "error", text1: msg, position: "bottom" });
-  }, [insertTenantMutation.error, updateTenantMutation.error]);
+    if (!joiningDate) {
+      errs.push("• Date of joining is required.");
+    } else {
+      const jdStart = startOfDay(joiningDate);
+      if (isAddMode) {
+        const tomorrow = addDays(todayStart, 1);
+        if (jdStart.getTime() < tomorrow.getTime()) {
+          errs.push("• For advance booking, joining date must be from tomorrow onwards.");
+        }
+      } else if (initialJoiningDate.current) {
+        const minAllowed = startOfDay(addMonths(initialJoiningDate.current, -1));
+        const maxAllowed = startOfDay(initialJoiningDate.current);
+        if (jdStart.getTime() < minAllowed.getTime() || jdStart.getTime() > maxAllowed.getTime()) {
+          errs.push("• Joining date can only be changed up to 1 month earlier than original.");
+        }
+      }
+    }
 
-  const isSubmitting = insertTenantMutation.isPending || updateTenantMutation.isPending;
+    if (!roomId) {
+      errs.push("• Please select a room.");
+    }
+    if (!bedId) {
+      errs.push("• Please select a bed.");
+    }
 
-  /* ------------------------------ submit ------------------------------- */
+    const rentNum = Number(parseFormattedNumber(rentAmount) || 0);
+    const depositNum = Number(parseFormattedNumber(depositAmount) || 0);
+    const advRentNum = Number(parseFormattedNumber(advRentPaid) || 0);
+    const advDepositNum = Number(parseFormattedNumber(advDepositPaid) || 0);
 
-  const onSubmit = () => {
-    const error = validate();
-    if (error) {
-      Toast.show({ type: "error", text1: error, position: "bottom" });
+    if (!rentAmount.trim()) {
+      errs.push("• Rent amount is required.");
+    } else if (rentNum <= 0) {
+      errs.push("• Rent amount must be greater than 0.");
+    }
+
+    if (!depositAmount.trim()) {
+      errs.push("• Deposit amount is required.");
+    } else if (depositNum <= 0) {
+      errs.push("• Deposit amount must be greater than 0.");
+    }
+
+    if (advRentPaid.trim() && advRentNum > rentNum) {
+      errs.push("• Paid advance rent cannot exceed rent amount.");
+    }
+
+    if (advDepositPaid.trim() && advDepositNum > depositNum) {
+      errs.push("• Paid advance deposit cannot exceed deposit amount.");
+    }
+
+    if (isConvertMode) {
+      if (!advRentPaid.trim()) {
+        errs.push("• Paid advance rent is required for conversion.");
+      }
+      if (!advDepositPaid.trim()) {
+        errs.push("• Paid advance deposit is required for conversion.");
+      }
+      if (!dueType) {
+        errs.push("• Please select due type.");
+      }
+      if (!dueDate) {
+        errs.push("• Due date is required.");
+      } else {
+        const today = startOfDay(new Date());
+        if (startOfDay(dueDate).getTime() < today.getTime()) {
+          errs.push("• Due date cannot be in the past.");
+        }
+      }
+    }
+
+    return errs;
+  }, [
+    propertyId,
+    tenantName,
+    phone,
+    email,
+    joiningDate,
+    roomId,
+    bedId,
+    rentAmount,
+    depositAmount,
+    advRentPaid,
+    advDepositPaid,
+    isAddMode,
+    isConvertMode,
+    dueType,
+    dueDate,
+    todayStart,
+  ]);
+
+  /* ----------------------------- Submit ----------------------------- */
+
+  const onSubmit = useCallback(() => {
+    const errs = validate();
+    if (errs.length) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Alert.alert("Validation Errors", errs.join("\n"), [{ text: "OK" }], { cancelable: true });
       return;
     }
 
     if (!propertyId) return;
 
-    const rentNum = parseAmount(rentAmount);
-    const depositNum = parseAmount(depositAmount);
-    const advRentNum = parseAmount(advRentCollected);
-    const advDepositNum = parseAmount(advDepositCollected);
-    const collectedRentNum = parseAmount(rentCollected);
-    const collectedDepositNum = parseAmount(depositCollected);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+    const rentNum = Number(parseFormattedNumber(rentAmount) || 0);
+    const depositNum = Number(parseFormattedNumber(depositAmount) || 0);
+    const advRentNum = Number(parseFormattedNumber(advRentPaid) || 0);
+    const advDepositNum = Number(parseFormattedNumber(advDepositPaid) || 0);
+    const rentCollectedNum = Number(parseFormattedNumber(rentCollected) || 0);
+    const depositCollectedNum = Number(parseFormattedNumber(depositCollected) || 0);
 
     const formData = new FormData();
 
@@ -1316,19 +1106,12 @@ export default function AdvancedBookingScreen() {
       formData.append("joiningDate", joiningDate.toISOString());
     }
 
-    if (roomId) {
-      formData.append("roomId", roomId);
-      // for safety if backend expects this typo'd key
-      formData.append("roomld", roomId);
-    }
-    if (bed) {
-      formData.append("bedNumber", bed);
-    }
+    formData.append("roomId", roomId);
+    formData.append("roomld", roomId); // Backend typo fallback
+    formData.append("bedNumber", bedId.toUpperCase());
 
     formData.append("rentAmount", String(rentNum));
     formData.append("depositAmount", String(depositNum));
-
-    // As per your examples
     formData.append("lockingPeriod", "");
     formData.append("noticePeriod", "15");
 
@@ -1339,66 +1122,199 @@ export default function AdvancedBookingScreen() {
       formData.append("advanceDepositAmountPaid", String(advDepositNum));
     }
 
-    if (ownerIdSafe) {
-      formData.append("ownerId", ownerIdSafe);
-      formData.append("ownerld", ownerIdSafe);
-      formData.append("createdBy", ownerIdSafe);
+    if (ownerId) {
+      formData.append("ownerId", ownerId);
+      formData.append("ownerld", ownerId);
+      formData.append("createdBy", ownerId);
     }
 
     if (isAddMode) {
-      // Add Advance Booking
       formData.append("status", "3");
       formData.append("dueType", "0");
-      insertTenantMutation.mutate(formData);
+
+      insertTenant.mutate(formData, {
+        onSuccess: () => {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          navigateBackToTab();
+        },
+        onError: (error) => {
+          const errMsg =
+            (error as { message?: string })?.message ||
+            "Could not add booking. Please try again.";
+          Alert.alert("Error", errMsg, [{ text: "OK" }]);
+        },
+      });
     } else {
-      const tenantKey = str(currentTenant?._id ?? id, "");
-      if (!tenantKey) {
-        Toast.show({
-          type: "error",
-          text1: "Unable to identify booking record.",
-          position: "bottom",
-        });
+      const tenantId = str(currentTenant?._id ?? id, "");
+      if (!tenantId) {
+        Alert.alert("Error", "Unable to identify booking record.", [{ text: "OK" }]);
         return;
       }
 
       if (isConvertMode) {
-        // Convert to tenant
         const dueTypeCode = dueType === "FirstMonth" ? 0 : dueType === "Custom" ? 2 : 1;
 
         formData.append("status", "1");
         formData.append("dueType", String(dueTypeCode));
 
         if (dueDate) {
-          formData.append("dueDate", dueDate.toUTCString());
+          formData.append("dueDate", dueDate.toISOString());
         }
 
-        if (collectedRentNum) {
-          formData.append("rentAmountPaid", String(collectedRentNum));
+        if (rentCollectedNum) {
+          formData.append("rentAmountPaid", String(rentCollectedNum));
         }
-        if (collectedDepositNum) {
-          formData.append("depositAmountPaid", String(collectedDepositNum));
+        if (depositCollectedNum) {
+          formData.append("depositAmountPaid", String(depositCollectedNum));
         }
 
-        // Due amounts – sensible formula
-        const dueRentAmount = Math.max(rentNum - advRentNum - collectedRentNum, 0);
-        const dueDepositAmount = Math.max(depositNum - advDepositNum - collectedDepositNum, 0);
+        const dueRentAmount = Math.max(rentNum - advRentNum - rentCollectedNum, 0);
+        const dueDepositAmount = Math.max(depositNum - advDepositNum - depositCollectedNum, 0);
 
         formData.append("dueRentAmount", String(dueRentAmount));
         formData.append("dueDepositAmount", String(dueDepositAmount));
-      } else if (isEditMode) {
-        // Edit advance booking
+      } else {
+        // Edit mode
         formData.append("status", "3");
         formData.append("dueType", "0");
       }
 
-      updateTenantMutation.mutate({ formData, tenantId: tenantKey });
+      updateTenant.mutate(
+        { formData, tenantId },
+        {
+          onSuccess: () => {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            navigateBackToTab();
+          },
+          onError: (error) => {
+            const errMsg =
+              (error as { message?: string })?.message ||
+              "Could not update booking. Please try again.";
+            Alert.alert("Error", errMsg, [{ text: "OK" }]);
+          },
+        }
+      );
     }
-  };
-  /* ------------------------------ styles ------------------------------- */
+  }, [
+    validate,
+    propertyId,
+    tenantName,
+    phone,
+    email,
+    gender,
+    joiningDate,
+    roomId,
+    bedId,
+    rentAmount,
+    depositAmount,
+    advRentPaid,
+    advDepositPaid,
+    rentCollected,
+    depositCollected,
+    ownerId,
+    isAddMode,
+    isConvertMode,
+    dueType,
+    dueDate,
+    currentTenant,
+    id,
+    insertTenant,
+    updateTenant,
+    navigateBackToTab,
+  ]);
+
+  /* ----------------------------- Input Handlers ----------------------------- */
+
+  const onPhoneChange = useCallback((text: string) => {
+    const digitsOnly = text.replace(/[^\d]/g, "").slice(0, 10);
+    setPhone(digitsOnly);
+  }, []);
+
+  const onNameChange = useCallback((text: string) => {
+    // Allow only alphabets and spaces
+    const filtered = text.replace(/[^a-zA-Z\s]/g, "");
+    setTenantName(filtered);
+  }, []);
+
+  const onAmountChange = useCallback(
+    (setter: React.Dispatch<React.SetStateAction<string>>) => (text: string) => {
+      const digitsOnly = parseFormattedNumber(text).slice(0, MAX_AMOUNT_DIGITS);
+      setter(digitsOnly ? formatIndianNumber(digitsOnly) : "");
+    },
+    []
+  );
+
+  /* ----------------------------- Date Picker Handlers ----------------------------- */
+
+  const openJoiningDatePicker = useCallback(() => {
+    const validDate =
+      joiningDate instanceof Date && !isNaN(joiningDate.getTime()) ? joiningDate : new Date();
+    setTempJoiningDate(new Date(validDate.getTime()));
+    setShowJoiningDatePicker(true);
+  }, [joiningDate]);
+
+  const openDueDatePicker = useCallback(() => {
+    const validDate =
+      dueDate instanceof Date && !isNaN(dueDate.getTime()) ? dueDate : new Date();
+    setTempDueDate(new Date(validDate.getTime()));
+    setShowDueDatePicker(true);
+  }, [dueDate]);
+
+  const handleJoiningDateChange = useCallback(
+    (event: DateTimePickerEvent, selectedDate?: Date) => {
+      if (Platform.OS === "android") {
+        setShowJoiningDatePicker(false);
+        if (event.type === "set" && selectedDate && !isNaN(selectedDate.getTime())) {
+          setJoiningDate(startOfDay(selectedDate));
+        }
+      } else {
+        if (selectedDate && !isNaN(selectedDate.getTime())) {
+          setTempJoiningDate(new Date(selectedDate.getTime()));
+        }
+      }
+    },
+    []
+  );
+
+  const handleDueDateChange = useCallback(
+    (event: DateTimePickerEvent, selectedDate?: Date) => {
+      if (Platform.OS === "android") {
+        setShowDueDatePicker(false);
+        if (event.type === "set" && selectedDate && !isNaN(selectedDate.getTime())) {
+          setDueDate(startOfDay(selectedDate));
+        }
+      } else {
+        if (selectedDate && !isNaN(selectedDate.getTime())) {
+          setTempDueDate(new Date(selectedDate.getTime()));
+        }
+      }
+    },
+    []
+  );
+
+  const confirmIosJoiningDate = useCallback(() => {
+    if (tempJoiningDate instanceof Date && !isNaN(tempJoiningDate.getTime())) {
+      setJoiningDate(startOfDay(tempJoiningDate));
+    }
+    setShowJoiningDatePicker(false);
+  }, [tempJoiningDate]);
+
+  const confirmIosDueDate = useCallback(() => {
+    if (tempDueDate instanceof Date && !isNaN(tempDueDate.getTime())) {
+      setDueDate(startOfDay(tempDueDate));
+    }
+    setShowDueDatePicker(false);
+  }, [tempDueDate]);
+
+  /* ----------------------------- Styles ----------------------------- */
+
   const styles = useMemo(
     () =>
       StyleSheet.create({
-        safeArea: { flex: 1, backgroundColor: colors.background },
+        safeArea: {
+          flex: 1,
+          backgroundColor: colors.background,
+        },
         header: {
           paddingHorizontal: spacing.md,
           paddingTop: spacing.sm,
@@ -1432,8 +1348,6 @@ export default function AdvancedBookingScreen() {
           flex: 1,
           paddingHorizontal: spacing.md,
           paddingTop: spacing.md,
-          // Extra bottom padding so buttons don't touch the "chin" / nav bar
-          paddingBottom: insets.bottom + spacing.lg * 2,
         },
         sectionCard: {
           borderWidth: 1,
@@ -1442,6 +1356,11 @@ export default function AdvancedBookingScreen() {
           backgroundColor: colors.cardBackground,
           padding: spacing.md,
           marginBottom: spacing.md,
+          shadowColor: "#000000",
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: Platform.OS === "ios" ? 0.1 : 0.05,
+          shadowRadius: Platform.OS === "ios" ? 10 : 6,
+          elevation: 4,
         },
         sectionTitle: {
           color: colors.textPrimary,
@@ -1449,22 +1368,29 @@ export default function AdvancedBookingScreen() {
           marginBottom: 8,
           fontSize: typography.fontSizeMd,
         },
-        fieldBlock: {
-          marginBottom: spacing.md,
+        input: {
+          backgroundColor: colors.cardSurface,
         },
-        label: {
-          color: colors.textSecondary,
-          fontWeight: "600",
-          marginBottom: 6,
-          fontSize: typography.fontSizeSm,
-        },
-        disabledInput: {
-          backgroundColor: colors.surface,
-          color: colors.textPrimary,
-          padding: 14,
-          borderRadius: radius.lg,
+        dateBtn: {
           borderWidth: 1,
           borderColor: colors.borderColor,
+          borderRadius: radius.lg,
+          backgroundColor: colors.cardSurface,
+          paddingVertical: 14,
+          paddingHorizontal: 12,
+          minHeight: 55,
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 10,
+        },
+        genderRow: {
+          flexDirection: "row",
+          flexWrap: "wrap",
+          gap: spacing.lg,
+        },
+        genderChip: {
+          flexDirection: "row",
+          alignItems: "center",
         },
         row: {
           flexDirection: "row",
@@ -1477,6 +1403,7 @@ export default function AdvancedBookingScreen() {
           flexDirection: "row",
           gap: spacing.md,
           marginTop: spacing.lg,
+          paddingBottom: Platform.OS === "android" ? 72 : 36,
         },
         secondaryBtn: {
           flex: 1,
@@ -1484,26 +1411,51 @@ export default function AdvancedBookingScreen() {
           backgroundColor: colors.surface,
           borderWidth: 1,
           borderColor: colors.borderColor,
-          minHeight: 44,
+          minHeight: 48,
           justifyContent: "center",
         },
         primaryBtn: {
           flex: 1,
           borderRadius: radius.lg,
-          minHeight: 44,
+          minHeight: 48,
           justifyContent: "center",
         },
-        genderChipRow: {
-          flexDirection: "row",
-          flexWrap: "wrap",
-          gap: spacing.lg,
+        // iOS Date Picker Modal
+        datePickerModal: {
+          flex: 1,
+          justifyContent: "flex-end",
+          backgroundColor: "rgba(0,0,0,0.4)",
         },
-        genderChip: {
+        datePickerContainer: {
+          backgroundColor: colors.cardBackground,
+          borderTopLeftRadius: 20,
+          borderTopRightRadius: 20,
+          paddingBottom: insets.bottom + 10,
+        },
+        datePickerHeader: {
           flexDirection: "row",
+          justifyContent: "space-between",
           alignItems: "center",
+          paddingHorizontal: spacing.md,
+          paddingVertical: spacing.sm + 4,
+          borderBottomWidth: 1,
+          borderColor: hexToRgba(colors.textSecondary, 0.12),
+        },
+        datePickerTitle: {
+          fontSize: 17,
+          fontWeight: "600",
+          color: colors.textPrimary,
+        },
+        datePickerBtn: {
+          paddingHorizontal: spacing.sm,
+          paddingVertical: spacing.xs,
+        },
+        datePickerBtnText: {
+          fontSize: 16,
+          fontWeight: "600",
         },
       }),
-    [colors, radius, spacing, typography, insets.bottom]
+    [colors, spacing, radius, typography, insets.bottom]
   );
 
   const headerTitle = isAddMode
@@ -1512,429 +1464,636 @@ export default function AdvancedBookingScreen() {
     ? "Convert to Tenant"
     : "Edit Advance Booking";
 
-  const headerSubtitle = str(currentProperty?.propertyName ?? "", "");
+  const isSubmitting = insertTenant.isPending || updateTenant.isPending;
+  const isLoading = roomsLoading || (tenantsLoading && !isAddMode);
 
-  const inputContentStyle = { minHeight: 44, paddingVertical: 8 };
-
-  // Loading state when editing but tenant not yet loaded
+  // Loading state for edit/convert when tenant not yet loaded
   if (!isAddMode && tenantsLoading && !currentTenant) {
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
           <ActivityIndicator size="large" color={colors.accent} />
+          <PaperText style={{ color: colors.textSecondary, marginTop: 12 }}>
+            Loading booking details...
+          </PaperText>
         </View>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}>
-      {/* header */}
-      <View style={styles.header}>
-        <Pressable
-          style={styles.backBtn}
-          onPress={handleBack}
-          accessibilityRole="button"
-          accessibilityLabel="Go back"
-          android_ripple={{
-            color: hexToRgba(colors.textSecondary, 0.2),
-            borderless: true,
-          }}
-        >
-          <Text style={{ color: colors.textPrimary, fontSize: 18 }}>{"←"}</Text>
-        </Pressable>
-        <View style={{ flex: 1 }}>
-          <PaperText style={styles.headerTitle} numberOfLines={1}>
-            {headerTitle}
-          </PaperText>
-          {!!headerSubtitle && (
-            <PaperText style={styles.headerSubtitle} numberOfLines={1}>
-              {headerSubtitle}
+    <SafeAreaView style={styles.safeArea} edges={["top", "left", "right", "bottom"]}>
+      <View style={{ flex: 1 }}>
+        {/* Header */}
+        <View style={styles.header}>
+          <Pressable
+            style={styles.backBtn}
+            onPress={handleBack}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+            accessibilityHint="Navigate back to bookings list"
+            accessible
+            android_ripple={{
+              color: hexToRgba(colors.textSecondary, 0.2),
+              borderless: true,
+            }}
+          >
+            <MaterialIcons
+              name={I18nManager.isRTL ? "arrow-forward" : "arrow-back"}
+              size={24}
+              color={colors.textPrimary}
+            />
+          </Pressable>
+          <View style={{ flex: 1 }}>
+            <PaperText
+              style={styles.headerTitle}
+              numberOfLines={1}
+              accessible
+              accessibilityRole="header"
+            >
+              {headerTitle}
             </PaperText>
-          )}
+            {currentProperty?.propertyName && (
+              <PaperText style={styles.headerSubtitle} numberOfLines={1}>
+                {currentProperty.propertyName}
+              </PaperText>
+            )}
+          </View>
         </View>
-      </View>
 
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-      >
-        <ScrollView
-          style={styles.body}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={{ flex: 1 }}
+          keyboardVerticalOffset={Platform.OS === "ios" ? insets.top + 56 : 0}
         >
-          {/* Property (read only) */}
-          <View style={styles.fieldBlock}>
-            <Text style={styles.label}>Property</Text>
-            <RNTextInput
-              editable={false}
-              value={str(currentProperty?.propertyName ?? "", "Select property")}
-              style={styles.disabledInput}
-            />
-          </View>
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+            <ScrollView
+              style={styles.body}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+              contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}
+              showsVerticalScrollIndicator={false}
+            >
+              {/* Tenant Details Section */}
+              <View style={styles.sectionCard}>
+                <Text style={styles.sectionTitle} accessible accessibilityRole="header">
+                  Tenant Details
+                </Text>
 
-          {/* Tenant details */}
-          <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>Tenant details</Text>
-
-            <View style={styles.fieldBlock}>
-              <Text style={styles.label}>Tenant name *</Text>
-              <TextInput
-                value={tenantName}
-                onChangeText={setTenantName}
-                mode="outlined"
-                placeholder="Enter tenant name"
-                outlineColor={hexToRgba(colors.textSecondary, 0.22)}
-                activeOutlineColor={colors.accent}
-                style={{ backgroundColor: colors.cardSurface }}
-                textColor={colors.textPrimary}
-                placeholderTextColor={colors.textMuted}
-                contentStyle={inputContentStyle}
-              />
-            </View>
-
-            {/* <View style={styles.row}> */}
-            <View style={styles.fieldBlock}>
-              <Text style={styles.label}>Phone number *</Text>
-              <TextInput
-                value={phone}
-                onChangeText={(t) => setPhone(onlyDigitsMax(t, 10))}
-                mode="outlined"
-                placeholder="10 digit number"
-                outlineColor={hexToRgba(colors.textSecondary, 0.22)}
-                activeOutlineColor={colors.accent}
-                style={{ backgroundColor: colors.cardSurface }}
-                textColor={colors.textPrimary}
-                placeholderTextColor={colors.textMuted}
-                keyboardType={Platform.OS === "ios" ? "number-pad" : "numeric"}
-                maxLength={10}
-                left={
-                  <TextInput.Affix
-                    text="+91"
-                    textStyle={{ color: colors.textSecondary, fontWeight: "600" }}
+                <Labeled label="Tenant Name" required>
+                  <TextInput
+                    value={tenantName}
+                    onChangeText={onNameChange}
+                    placeholder="Enter tenant name"
+                    mode="outlined"
+                    theme={{ roundness: radius.lg }}
+                    outlineColor={hexToRgba(colors.textSecondary, 0.22)}
+                    activeOutlineColor={colors.accent}
+                    style={styles.input}
+                    textColor={colors.textPrimary}
+                    placeholderTextColor={colors.textMuted}
+                    contentStyle={{ minHeight: 48, padding: spacing.sm }}
+                    accessibilityLabel="Tenant name"
+                    accessibilityHint="Enter the tenant's full name"
                   />
-                }
-                contentStyle={inputContentStyle}
-              />
-            </View>
+                </Labeled>
 
-            <View style={styles.fieldBlock}>
-              <Text style={styles.label}>Email (optional)</Text>
-              <TextInput
-                value={email}
-                onChangeText={setEmail}
-                mode="outlined"
-                placeholder="Enter tenant email"
-                outlineColor={hexToRgba(colors.textSecondary, 0.22)}
-                activeOutlineColor={colors.accent}
-                style={{ backgroundColor: colors.cardSurface }}
-                textColor={colors.textPrimary}
-                placeholderTextColor={colors.textMuted}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                contentStyle={inputContentStyle}
-              />
-            </View>
-            {/* </View> */}
+                <Labeled label="Phone Number" required>
+                  <TextInput
+                    value={phone}
+                    onChangeText={onPhoneChange}
+                    placeholder="10 digit number"
+                    mode="outlined"
+                    theme={{ roundness: radius.lg }}
+                    outlineColor={hexToRgba(colors.textSecondary, 0.22)}
+                    activeOutlineColor={colors.accent}
+                    style={styles.input}
+                    textColor={colors.textPrimary}
+                    placeholderTextColor={colors.textMuted}
+                    keyboardType={Platform.OS === "ios" ? "number-pad" : "numeric"}
+                    maxLength={10}
+                    left={
+                      <TextInput.Affix
+                        text="+91"
+                        textStyle={{ color: colors.textSecondary, fontWeight: "600" }}
+                      />
+                    }
+                    contentStyle={{ minHeight: 48, padding: spacing.sm }}
+                    accessibilityLabel="Phone number"
+                    accessibilityHint="Enter 10 digit mobile number"
+                  />
+                </Labeled>
 
-            <View style={styles.fieldBlock}>
-              <Text style={styles.label}>Gender *</Text>
-              <RadioButton.Group
-                onValueChange={(v) => setGender(v === "Female" ? "Female" : "Male")}
-                value={gender}
-              >
-                <View style={styles.genderChipRow}>
-                  <Pressable
-                    style={styles.genderChip}
-                    onPress={() => setGender("Male")}
-                    accessibilityRole="button"
-                    accessibilityLabel="Male"
-                  >
-                    <RadioButton value="Male" />
-                    <Text style={{ color: colors.textPrimary }}>Male</Text>
-                  </Pressable>
-                  <Pressable
-                    style={styles.genderChip}
-                    onPress={() => setGender("Female")}
-                    accessibilityRole="button"
-                    accessibilityLabel="Female"
-                  >
-                    <RadioButton value="Female" />
-                    <Text style={{ color: colors.textPrimary }}>Female</Text>
-                  </Pressable>
-                </View>
-              </RadioButton.Group>
-            </View>
-          </View>
+                <Labeled label="Email (optional)">
+                  <TextInput
+                    value={email}
+                    onChangeText={setEmail}
+                    placeholder="Enter email address"
+                    mode="outlined"
+                    theme={{ roundness: radius.lg }}
+                    outlineColor={hexToRgba(colors.textSecondary, 0.22)}
+                    activeOutlineColor={colors.accent}
+                    style={styles.input}
+                    textColor={colors.textPrimary}
+                    placeholderTextColor={colors.textMuted}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    contentStyle={{ minHeight: 48, padding: spacing.sm }}
+                    accessibilityLabel="Email address"
+                    accessibilityHint="Enter tenant's email address"
+                  />
+                </Labeled>
 
-          {/* Booking details */}
-          <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>Booking details</Text>
-
-            <DateField
-              label="Date of joining *"
-              value={joiningDate}
-              onChange={(d) => setJoiningDate(startOfDay(d))}
-              placeholder="Select date of joining"
-              minimumDate={joiningMinDate}
-              maximumDate={joiningMaxDate}
-            />
-
-            {/* <View style={styles.row}> */}
-            <View style={styles.col}>
-              <RoomSelect label="Room *" value={roomId} onChange={setRoomId} rooms={roomOptions} />
-            </View>
-            <View style={styles.col}>
-              <BedSelect
-                label="Bed *"
-                value={bed}
-                options={bedOptions}
-                onChange={setBed}
-                disabled={!roomId}
-              />
-            </View>
-            {/* </View> */}
-
-            {isConvertMode && (
-              <>
-                <View style={styles.fieldBlock}>
-                  <Text style={styles.label}>Due type *</Text>
+                <Labeled label="Gender" required>
                   <RadioButton.Group
-                    value={dueType}
-                    onValueChange={(v) => {
-                      const mapped =
-                        v === "FirstMonth" ? "FirstMonth" : v === "Custom" ? "Custom" : "Monthly";
-                      setDueType(mapped);
-                    }}
+                    onValueChange={(v) => setGender(v === "Female" ? "Female" : "Male")}
+                    value={gender}
                   >
-                    <View
-                      style={{
-                        flexDirection: "row",
-                        flexWrap: "wrap",
-                        gap: spacing.md,
-                      }}
-                    >
-                      <View style={{ flexDirection: "row", alignItems: "center" }}>
-                        <RadioButton value="Monthly" />
-                        <Text style={{ color: colors.textPrimary }}>Monthly</Text>
-                      </View>
-                      <View style={{ flexDirection: "row", alignItems: "center" }}>
-                        <RadioButton value="FirstMonth" />
-                        <Text style={{ color: colors.textPrimary }}>1st Month</Text>
-                      </View>
-                      <View style={{ flexDirection: "row", alignItems: "center" }}>
-                        <RadioButton value="Custom" />
-                        <Text style={{ color: colors.textPrimary }}>Custom</Text>
-                      </View>
+                    <View style={styles.genderRow}>
+                      <Pressable
+                        style={styles.genderChip}
+                        onPress={() => setGender("Male")}
+                        accessibilityRole="radio"
+                        accessibilityLabel="Male"
+                        accessibilityState={{ checked: gender === "Male" }}
+                      >
+                        <RadioButton value="Male" />
+                        <Text style={{ color: colors.textPrimary }}>Male</Text>
+                      </Pressable>
+                      <Pressable
+                        style={styles.genderChip}
+                        onPress={() => setGender("Female")}
+                        accessibilityRole="radio"
+                        accessibilityLabel="Female"
+                        accessibilityState={{ checked: gender === "Female" }}
+                      >
+                        <RadioButton value="Female" />
+                        <Text style={{ color: colors.textPrimary }}>Female</Text>
+                      </Pressable>
                     </View>
                   </RadioButton.Group>
-                </View>
+                </Labeled>
+              </View>
 
-                <DateField
-                  label="Due date *"
-                  value={dueDate}
-                  onChange={setDueDate}
-                  placeholder="Select due date"
-                  disabled={dueType !== "Custom"}
-                  minimumDate={startOfDay(new Date())}
-                />
-              </>
-            )}
-          </View>
+              {/* Booking Details Section */}
+              <View style={styles.sectionCard}>
+                <Text style={styles.sectionTitle} accessible accessibilityRole="header">
+                  Booking Details
+                </Text>
 
-          {/* Financials */}
-          <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>Financials</Text>
+                <Labeled label="Date of Joining" required>
+                  <Pressable
+                    style={styles.dateBtn}
+                    onPress={openJoiningDatePicker}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Select joining date, current: ${formatDisplayDate(joiningDate)}`}
+                    accessible
+                  >
+                    <MaterialIcons name="event" size={20} color={colors.textSecondary} />
+                    <PaperText
+                      style={{
+                        color: joiningDate ? colors.textPrimary : colors.textMuted,
+                        fontSize: typography.fontSizeMd,
+                        flex: 1,
+                      }}
+                    >
+                      {formatDisplayDate(joiningDate)}
+                    </PaperText>
+                    <MaterialIcons
+                      name="keyboard-arrow-down"
+                      size={20}
+                      color={colors.textSecondary}
+                    />
+                  </Pressable>
+                </Labeled>
 
-            <View style={styles.fieldBlock}>
-              <Text style={styles.label}>Rent amount *</Text>
-              <TextInput
-                value={rentAmount}
-                onChangeText={(t) => setRentAmount(formatAmountInput(t))}
-                mode="outlined"
-                placeholder="e.g., 5,000"
-                outlineColor={hexToRgba(colors.textSecondary, 0.22)}
-                activeOutlineColor={colors.accent}
-                style={{ backgroundColor: colors.cardSurface }}
-                textColor={colors.textPrimary}
-                placeholderTextColor={colors.textMuted}
-                keyboardType={Platform.OS === "ios" ? "number-pad" : "numeric"}
-                maxLength={MAX_AMOUNT_DIGITS + 3}
-                left={
-                  <TextInput.Affix
-                    text="₹"
-                    textStyle={{ color: colors.textSecondary, fontWeight: "600" }}
-                  />
-                }
-                contentStyle={inputContentStyle}
-              />
-            </View>
-
-            <View style={styles.fieldBlock}>
-              <Text style={styles.label}>Deposit amount *</Text>
-              <TextInput
-                value={depositAmount}
-                onChangeText={(t) => setDepositAmount(formatAmountInput(t))}
-                mode="outlined"
-                placeholder="e.g., 10,000"
-                outlineColor={hexToRgba(colors.textSecondary, 0.22)}
-                activeOutlineColor={colors.accent}
-                style={{ backgroundColor: colors.cardSurface }}
-                textColor={colors.textPrimary}
-                placeholderTextColor={colors.textMuted}
-                keyboardType={Platform.OS === "ios" ? "number-pad" : "numeric"}
-                maxLength={MAX_AMOUNT_DIGITS + 3}
-                left={
-                  <TextInput.Affix
-                    text="₹"
-                    textStyle={{ color: colors.textSecondary, fontWeight: "600" }}
-                  />
-                }
-                contentStyle={inputContentStyle}
-              />
-            </View>
-
-            <View style={styles.fieldBlock}>
-              <Text style={styles.label}>Paid advance rent amount{isConvertMode ? " *" : ""}</Text>
-              <TextInput
-                value={advRentCollected}
-                onChangeText={(t) => setAdvRentCollected(formatAmountInput(t))}
-                mode="outlined"
-                placeholder="e.g., 5,000"
-                outlineColor={hexToRgba(colors.textSecondary, 0.22)}
-                activeOutlineColor={colors.accent}
-                style={{ backgroundColor: colors.cardSurface }}
-                textColor={colors.textPrimary}
-                placeholderTextColor={colors.textMuted}
-                keyboardType={Platform.OS === "ios" ? "number-pad" : "numeric"}
-                maxLength={MAX_AMOUNT_DIGITS + 3}
-                left={
-                  <TextInput.Affix
-                    text="₹"
-                    textStyle={{ color: colors.textSecondary, fontWeight: "600" }}
-                  />
-                }
-                contentStyle={inputContentStyle}
-              />
-            </View>
-
-            <View style={styles.fieldBlock}>
-              <Text style={styles.label}>
-                Paid advance deposit amount{isConvertMode ? " *" : ""}
-              </Text>
-              <TextInput
-                value={advDepositCollected}
-                onChangeText={(t) => setAdvDepositCollected(formatAmountInput(t))}
-                mode="outlined"
-                placeholder="e.g., 5,000"
-                outlineColor={hexToRgba(colors.textSecondary, 0.22)}
-                activeOutlineColor={colors.accent}
-                style={{ backgroundColor: colors.cardSurface }}
-                textColor={colors.textPrimary}
-                placeholderTextColor={colors.textMuted}
-                keyboardType={Platform.OS === "ios" ? "number-pad" : "numeric"}
-                maxLength={MAX_AMOUNT_DIGITS + 3}
-                left={
-                  <TextInput.Affix
-                    text="₹"
-                    textStyle={{ color: colors.textSecondary, fontWeight: "600" }}
-                  />
-                }
-                contentStyle={inputContentStyle}
-              />
-            </View>
-
-            {isConvertMode && (
-              <>
-                <View style={styles.fieldBlock}>
-                  <Text style={styles.label}>Collected rent amount (optional)</Text>
-                  <TextInput
-                    value={rentCollected}
-                    onChangeText={(t) => setRentCollected(formatAmountInput(t))}
-                    mode="outlined"
-                    placeholder="e.g., 5,000"
-                    outlineColor={hexToRgba(colors.textSecondary, 0.22)}
-                    activeOutlineColor={colors.accent}
-                    style={{ backgroundColor: colors.cardSurface }}
-                    textColor={colors.textPrimary}
-                    placeholderTextColor={colors.textMuted}
-                    keyboardType={Platform.OS === "ios" ? "number-pad" : "numeric"}
-                    maxLength={MAX_AMOUNT_DIGITS + 3}
-                    left={
-                      <TextInput.Affix
-                        text="₹"
-                        textStyle={{
-                          color: colors.textSecondary,
-                          fontWeight: "600",
-                        }}
+                <View style={styles.row}>
+                  <View style={styles.col}>
+                    <Labeled label="Room" required>
+                      <SheetSelect
+                        value={roomId}
+                        placeholder="Select Room"
+                        options={roomOptions}
+                        onChange={setRoomId}
+                        disabled={roomsLoading}
                       />
-                    }
-                    contentStyle={inputContentStyle}
-                  />
-                </View>
-
-                <View style={styles.fieldBlock}>
-                  <Text style={styles.label}>Collected deposit amount (optional)</Text>
-                  <TextInput
-                    value={depositCollected}
-                    onChangeText={(t) => setDepositCollected(formatAmountInput(t))}
-                    mode="outlined"
-                    placeholder="e.g., 5,000"
-                    outlineColor={hexToRgba(colors.textSecondary, 0.22)}
-                    activeOutlineColor={colors.accent}
-                    style={{ backgroundColor: colors.cardSurface }}
-                    textColor={colors.textPrimary}
-                    placeholderTextColor={colors.textMuted}
-                    keyboardType={Platform.OS === "ios" ? "number-pad" : "numeric"}
-                    maxLength={MAX_AMOUNT_DIGITS + 3}
-                    left={
-                      <TextInput.Affix
-                        text="₹"
-                        textStyle={{
-                          color: colors.textSecondary,
-                          fontWeight: "600",
-                        }}
+                    </Labeled>
+                  </View>
+                  <View style={styles.col}>
+                    <Labeled label="Bed" required>
+                      <SheetSelect
+                        value={bedId}
+                        placeholder="Select Bed"
+                        options={bedOptions}
+                        onChange={setBedId}
+                        disabled={!roomId}
                       />
-                    }
-                    contentStyle={inputContentStyle}
-                  />
+                    </Labeled>
+                  </View>
                 </View>
-              </>
-            )}
-          </View>
 
-          {/* Loading hint for rooms */}
-          {roomsLoading && (
-            <View style={{ marginTop: spacing.sm, alignItems: "center" }}>
-              <ActivityIndicator size="small" color={colors.accent} />
-              <Text style={{ color: colors.textSecondary, marginTop: 4, fontSize: 12 }}>
-                Loading rooms…
-              </Text>
-            </View>
-          )}
+                {/* Convert Mode: Due Type & Due Date */}
+                {isConvertMode && (
+                  <>
+                    <Labeled label="Due Type" required>
+                      <RadioButton.Group
+                        value={dueType}
+                        onValueChange={(v) => {
+                          const mapped =
+                            v === "FirstMonth"
+                              ? "FirstMonth"
+                              : v === "Custom"
+                              ? "Custom"
+                              : "Monthly";
+                          setDueType(mapped);
+                        }}
+                      >
+                        <View style={styles.genderRow}>
+                          <Pressable
+                            style={styles.genderChip}
+                            onPress={() => setDueType("Monthly")}
+                            accessibilityRole="radio"
+                          >
+                            <RadioButton value="Monthly" />
+                            <Text style={{ color: colors.textPrimary }}>Monthly</Text>
+                          </Pressable>
+                          <Pressable
+                            style={styles.genderChip}
+                            onPress={() => setDueType("FirstMonth")}
+                            accessibilityRole="radio"
+                          >
+                            <RadioButton value="FirstMonth" />
+                            <Text style={{ color: colors.textPrimary }}>1st Month</Text>
+                          </Pressable>
+                          <Pressable
+                            style={styles.genderChip}
+                            onPress={() => setDueType("Custom")}
+                            accessibilityRole="radio"
+                          >
+                            <RadioButton value="Custom" />
+                            <Text style={{ color: colors.textPrimary }}>Custom</Text>
+                          </Pressable>
+                        </View>
+                      </RadioButton.Group>
+                    </Labeled>
 
-          {/* Footer buttons */}
-          <View style={styles.footerRow}>
-            <Button
-              mode="outlined"
-              style={styles.secondaryBtn}
-              textColor={colors.textPrimary}
-              onPress={handleBack}
-            >
-              Cancel
-            </Button>
-            <Button
-              mode="contained"
-              style={styles.primaryBtn}
-              onPress={onSubmit}
-              disabled={roomsLoading || (tenantsLoading && !isAddMode) || isSubmitting}
-            >
-              {isConvertMode ? "Save & Convert" : isAddMode ? "Save Booking" : "Save Changes"}
-            </Button>
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+                    <Labeled label="Due Date" required>
+                      <Pressable
+                        style={[styles.dateBtn, dueType !== "Custom" && { opacity: 0.6 }]}
+                        onPress={dueType === "Custom" ? openDueDatePicker : undefined}
+                        accessibilityRole="button"
+                        accessibilityState={{ disabled: dueType !== "Custom" }}
+                        accessible
+                      >
+                        <MaterialIcons name="event" size={20} color={colors.textSecondary} />
+                        <PaperText
+                          style={{
+                            color: dueDate ? colors.textPrimary : colors.textMuted,
+                            fontSize: typography.fontSizeMd,
+                            flex: 1,
+                          }}
+                        >
+                          {formatDisplayDate(dueDate)}
+                        </PaperText>
+                        {dueType === "Custom" && (
+                          <MaterialIcons
+                            name="keyboard-arrow-down"
+                            size={20}
+                            color={colors.textSecondary}
+                          />
+                        )}
+                      </Pressable>
+                    </Labeled>
+                  </>
+                )}
+              </View>
+
+              {/* Financials Section */}
+              <View style={styles.sectionCard}>
+                <Text style={styles.sectionTitle} accessible accessibilityRole="header">
+                  Financials
+                </Text>
+
+                <View style={styles.row}>
+                  <View style={styles.col}>
+                    <Labeled label="Rent Amount" required>
+                      <TextInput
+                        value={rentAmount}
+                        onChangeText={onAmountChange(setRentAmount)}
+                        placeholder="e.g., 5,000"
+                        mode="outlined"
+                        theme={{ roundness: radius.lg }}
+                        outlineColor={hexToRgba(colors.textSecondary, 0.22)}
+                        activeOutlineColor={colors.accent}
+                        style={styles.input}
+                        textColor={colors.textPrimary}
+                        placeholderTextColor={colors.textMuted}
+                        keyboardType={Platform.OS === "ios" ? "number-pad" : "numeric"}
+                        left={
+                          <TextInput.Affix
+                            text="₹"
+                            textStyle={{ color: colors.textSecondary, fontWeight: "600" }}
+                          />
+                        }
+                        contentStyle={{ minHeight: 48, padding: spacing.sm }}
+                        accessibilityLabel="Rent amount"
+                      />
+                    </Labeled>
+                  </View>
+                  <View style={styles.col}>
+                    <Labeled label="Deposit Amount" required>
+                      <TextInput
+                        value={depositAmount}
+                        onChangeText={onAmountChange(setDepositAmount)}
+                        placeholder="e.g., 10,000"
+                        mode="outlined"
+                        theme={{ roundness: radius.lg }}
+                        outlineColor={hexToRgba(colors.textSecondary, 0.22)}
+                        activeOutlineColor={colors.accent}
+                        style={styles.input}
+                        textColor={colors.textPrimary}
+                        placeholderTextColor={colors.textMuted}
+                        keyboardType={Platform.OS === "ios" ? "number-pad" : "numeric"}
+                        left={
+                          <TextInput.Affix
+                            text="₹"
+                            textStyle={{ color: colors.textSecondary, fontWeight: "600" }}
+                          />
+                        }
+                        contentStyle={{ minHeight: 48, padding: spacing.sm }}
+                        accessibilityLabel="Deposit amount"
+                      />
+                    </Labeled>
+                  </View>
+                </View>
+
+                <View style={styles.row}>
+                  <View style={styles.col}>
+                    <Labeled label={`Paid Adv. Rent${isConvertMode ? " *" : ""}`}>
+                      <TextInput
+                        value={advRentPaid}
+                        onChangeText={onAmountChange(setAdvRentPaid)}
+                        placeholder="e.g., 5,000"
+                        mode="outlined"
+                        theme={{ roundness: radius.lg }}
+                        outlineColor={hexToRgba(colors.textSecondary, 0.22)}
+                        activeOutlineColor={colors.accent}
+                        style={styles.input}
+                        textColor={colors.textPrimary}
+                        placeholderTextColor={colors.textMuted}
+                        keyboardType={Platform.OS === "ios" ? "number-pad" : "numeric"}
+                        left={
+                          <TextInput.Affix
+                            text="₹"
+                            textStyle={{ color: colors.textSecondary, fontWeight: "600" }}
+                          />
+                        }
+                        contentStyle={{ minHeight: 48, padding: spacing.sm }}
+                        accessibilityLabel="Paid advance rent"
+                      />
+                    </Labeled>
+                  </View>
+                  <View style={styles.col}>
+                    <Labeled label={`Paid Adv. Deposit${isConvertMode ? " *" : ""}`}>
+                      <TextInput
+                        value={advDepositPaid}
+                        onChangeText={onAmountChange(setAdvDepositPaid)}
+                        placeholder="e.g., 5,000"
+                        mode="outlined"
+                        theme={{ roundness: radius.lg }}
+                        outlineColor={hexToRgba(colors.textSecondary, 0.22)}
+                        activeOutlineColor={colors.accent}
+                        style={styles.input}
+                        textColor={colors.textPrimary}
+                        placeholderTextColor={colors.textMuted}
+                        keyboardType={Platform.OS === "ios" ? "number-pad" : "numeric"}
+                        left={
+                          <TextInput.Affix
+                            text="₹"
+                            textStyle={{ color: colors.textSecondary, fontWeight: "600" }}
+                          />
+                        }
+                        contentStyle={{ minHeight: 48, padding: spacing.sm }}
+                        accessibilityLabel="Paid advance deposit"
+                      />
+                    </Labeled>
+                  </View>
+                </View>
+
+                {/* Convert Mode: Collected amounts */}
+                {isConvertMode && (
+                  <View style={styles.row}>
+                    <View style={styles.col}>
+                      <Labeled label="Collected Rent">
+                        <TextInput
+                          value={rentCollected}
+                          onChangeText={onAmountChange(setRentCollected)}
+                          placeholder="e.g., 5,000"
+                          mode="outlined"
+                          theme={{ roundness: radius.lg }}
+                          outlineColor={hexToRgba(colors.textSecondary, 0.22)}
+                          activeOutlineColor={colors.accent}
+                          style={styles.input}
+                          textColor={colors.textPrimary}
+                          placeholderTextColor={colors.textMuted}
+                          keyboardType={Platform.OS === "ios" ? "number-pad" : "numeric"}
+                          left={
+                            <TextInput.Affix
+                              text="₹"
+                              textStyle={{ color: colors.textSecondary, fontWeight: "600" }}
+                            />
+                          }
+                          contentStyle={{ minHeight: 48, padding: spacing.sm }}
+                          accessibilityLabel="Collected rent"
+                        />
+                      </Labeled>
+                    </View>
+                    <View style={styles.col}>
+                      <Labeled label="Collected Deposit">
+                        <TextInput
+                          value={depositCollected}
+                          onChangeText={onAmountChange(setDepositCollected)}
+                          placeholder="e.g., 5,000"
+                          mode="outlined"
+                          theme={{ roundness: radius.lg }}
+                          outlineColor={hexToRgba(colors.textSecondary, 0.22)}
+                          activeOutlineColor={colors.accent}
+                          style={styles.input}
+                          textColor={colors.textPrimary}
+                          placeholderTextColor={colors.textMuted}
+                          keyboardType={Platform.OS === "ios" ? "number-pad" : "numeric"}
+                          left={
+                            <TextInput.Affix
+                              text="₹"
+                              textStyle={{ color: colors.textSecondary, fontWeight: "600" }}
+                            />
+                          }
+                          contentStyle={{ minHeight: 48, padding: spacing.sm }}
+                          accessibilityLabel="Collected deposit"
+                        />
+                      </Labeled>
+                    </View>
+                  </View>
+                )}
+              </View>
+
+              {/* Loading hint */}
+              {roomsLoading && (
+                <View style={{ marginTop: spacing.sm, alignItems: "center" }}>
+                  <ActivityIndicator size="small" color={colors.accent} />
+                  <PaperText style={{ color: colors.textSecondary, marginTop: 4, fontSize: 12 }}>
+                    Loading rooms...
+                  </PaperText>
+                </View>
+              )}
+
+              <Divider
+                style={{ marginVertical: spacing.sm, backgroundColor: colors.borderColor }}
+              />
+
+              {/* Footer Buttons */}
+              <View style={styles.footerRow}>
+                <Button
+                  mode="outlined"
+                  style={styles.secondaryBtn}
+                  textColor={colors.textPrimary}
+                  onPress={handleBack}
+                  disabled={isSubmitting}
+                  accessibilityLabel="Cancel and go back"
+                  accessibilityHint="Discards changes and returns to bookings list"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  mode="contained"
+                  style={styles.primaryBtn}
+                  onPress={onSubmit}
+                  loading={isSubmitting}
+                  disabled={isLoading || isSubmitting}
+                  accessibilityLabel={
+                    isConvertMode
+                      ? "Save and convert"
+                      : isAddMode
+                      ? "Save booking"
+                      : "Save changes"
+                  }
+                >
+                  {isConvertMode ? "Save & Convert" : isAddMode ? "Save Booking" : "Save Changes"}
+                </Button>
+              </View>
+            </ScrollView>
+          </TouchableWithoutFeedback>
+        </KeyboardAvoidingView>
+      </View>
+
+      {/* Joining Date Picker - Platform specific */}
+      {Platform.OS === "android" && showJoiningDatePicker && (
+        <DateTimePicker
+          value={joiningDate || new Date()}
+          mode="date"
+          display="default"
+          onChange={handleJoiningDateChange}
+          minimumDate={joiningMinDate}
+          maximumDate={joiningMaxDate}
+        />
+      )}
+
+      {/* Due Date Picker - Platform specific */}
+      {Platform.OS === "android" && showDueDatePicker && (
+        <DateTimePicker
+          value={dueDate || new Date()}
+          mode="date"
+          display="default"
+          onChange={handleDueDateChange}
+          minimumDate={startOfDay(new Date())}
+        />
+      )}
+
+      {/* iOS Joining Date Picker Modal */}
+      {Platform.OS === "ios" && showJoiningDatePicker && (
+        <Modal
+          visible={showJoiningDatePicker}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowJoiningDatePicker(false)}
+        >
+          <Pressable
+            style={styles.datePickerModal}
+            onPress={() => setShowJoiningDatePicker(false)}
+          >
+            <Pressable style={styles.datePickerContainer} onPress={() => {}}>
+              <View style={styles.datePickerHeader}>
+                <Pressable
+                  onPress={() => setShowJoiningDatePicker(false)}
+                  style={styles.datePickerBtn}
+                >
+                  <Text style={[styles.datePickerBtnText, { color: colors.error }]}>Cancel</Text>
+                </Pressable>
+                <Text style={styles.datePickerTitle}>Select Joining Date</Text>
+                <Pressable onPress={confirmIosJoiningDate} style={styles.datePickerBtn}>
+                  <Text style={[styles.datePickerBtnText, { color: colors.accent }]}>Done</Text>
+                </Pressable>
+              </View>
+              <DateTimePicker
+                value={
+                  tempJoiningDate instanceof Date && !isNaN(tempJoiningDate.getTime())
+                    ? tempJoiningDate
+                    : new Date()
+                }
+                mode="date"
+                display="spinner"
+                onChange={handleJoiningDateChange}
+                style={{ height: 200 }}
+                textColor={colors.textPrimary}
+                themeVariant="light"
+                minimumDate={joiningMinDate}
+                maximumDate={joiningMaxDate}
+              />
+            </Pressable>
+          </Pressable>
+        </Modal>
+      )}
+
+      {/* iOS Due Date Picker Modal */}
+      {Platform.OS === "ios" && showDueDatePicker && (
+        <Modal
+          visible={showDueDatePicker}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowDueDatePicker(false)}
+        >
+          <Pressable style={styles.datePickerModal} onPress={() => setShowDueDatePicker(false)}>
+            <Pressable style={styles.datePickerContainer} onPress={() => {}}>
+              <View style={styles.datePickerHeader}>
+                <Pressable
+                  onPress={() => setShowDueDatePicker(false)}
+                  style={styles.datePickerBtn}
+                >
+                  <Text style={[styles.datePickerBtnText, { color: colors.error }]}>Cancel</Text>
+                </Pressable>
+                <Text style={styles.datePickerTitle}>Select Due Date</Text>
+                <Pressable onPress={confirmIosDueDate} style={styles.datePickerBtn}>
+                  <Text style={[styles.datePickerBtnText, { color: colors.accent }]}>Done</Text>
+                </Pressable>
+              </View>
+              <DateTimePicker
+                value={
+                  tempDueDate instanceof Date && !isNaN(tempDueDate.getTime())
+                    ? tempDueDate
+                    : new Date()
+                }
+                mode="date"
+                display="spinner"
+                onChange={handleDueDateChange}
+                style={{ height: 200 }}
+                textColor={colors.textPrimary}
+                themeVariant="light"
+                minimumDate={startOfDay(new Date())}
+              />
+            </Pressable>
+          </Pressable>
+        </Modal>
+      )}
     </SafeAreaView>
   );
 }

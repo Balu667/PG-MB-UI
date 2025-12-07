@@ -21,6 +21,8 @@ import SearchBar from "@/src/components/SearchBar";
 import AddButton from "@/src/components/Common/AddButton";
 import AdvancedBookingCard from "@/src/components/property/AdvancedBookingCard";
 import FilterSheet, { Section } from "@/src/components/FilterSheet";
+import StatsGrid from "@/src/components/StatsGrid";
+import type { Metric } from "@/src/components/StatsGrid";
 
 /* ─────────────────────────────────────────────────────────────────────────────
    HELPERS
@@ -104,62 +106,6 @@ const normalizeRange = (from?: Date, to?: Date) => {
     return { from: to, to: from };
   }
   return { from, to };
-};
-
-/* ─────────────────────────────────────────────────────────────────────────────
-   COMPACT STAT CHIP COMPONENT
-───────────────────────────────────────────────────────────────────────────── */
-
-interface StatChipProps {
-  icon: string;
-  label: string;
-  value: number | string;
-  color: string;
-  bgColor: string;
-}
-
-const StatChip: React.FC<StatChipProps> = ({ icon, label, value, color, bgColor }) => {
-  const { colors, spacing, radius } = useTheme();
-
-  return (
-    <View
-      style={{
-        flexDirection: "row",
-        alignItems: "center",
-        backgroundColor: bgColor,
-        paddingHorizontal: 12,
-        paddingVertical: 7,
-        borderRadius: radius.full,
-        gap: 7,
-        borderWidth: 1,
-        borderColor: hexToRgba(color, 0.2),
-      }}
-    >
-      <MaterialCommunityIcons
-        name={icon as keyof typeof MaterialCommunityIcons.glyphMap}
-        size={15}
-        color={color}
-      />
-      <Text
-        style={{
-          fontSize: 12,
-          fontWeight: "600",
-          color: colors.textSecondary,
-        }}
-      >
-        {label}
-      </Text>
-      <Text
-        style={{
-          fontSize: 14,
-          fontWeight: "800",
-          color: color,
-        }}
-      >
-        {value}
-      </Text>
-    </View>
-  );
 };
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -253,6 +199,7 @@ export default function AdvanceBookingTab({ data, refreshing, onRefresh }: Props
 
   // Calculate stats
   const stats = useMemo(() => {
+    const totalBookings = list.length;
     const activeBookings = list.filter((t) => num(t?.status) === 3).length;
     const expiredBookings = list.filter((t) => num(t?.status) === 5).length;
     const cancelledBookings = list.filter((t) => num(t?.status) === 6).length;
@@ -260,8 +207,47 @@ export default function AdvanceBookingTab({ data, refreshing, onRefresh }: Props
       return sum + num(t?.advanceRentAmountPaid) + num(t?.advanceDepositAmountPaid);
     }, 0);
 
-    return { activeBookings, expiredBookings, cancelledBookings, totalAmount };
+    return { totalBookings, activeBookings, expiredBookings, cancelledBookings, totalAmount };
   }, [list]);
+
+  // Metrics for StatsGrid
+  const metrics: Metric[] = useMemo(
+    () => [
+      {
+        key: "total",
+        label: "Total Bookings",
+        value: stats.totalBookings,
+        icon: "calendar-multiple",
+        iconBg: "#DBEAFE",
+        iconColor: "#2563EB",
+      },
+      {
+        key: "active",
+        label: "Active",
+        value: stats.activeBookings,
+        icon: "calendar-check",
+        iconBg: "#DCFCE7",
+        iconColor: "#16A34A",
+      },
+      {
+        key: "expired",
+        label: "Expired",
+        value: stats.expiredBookings,
+        icon: "calendar-remove",
+        iconBg: "#FEE2E2",
+        iconColor: "#DC2626",
+      },
+      {
+        key: "cancelled",
+        label: "Cancelled",
+        value: stats.cancelledBookings,
+        icon: "close-circle",
+        iconBg: "#F3F4F6",
+        iconColor: "#6B7280",
+      },
+    ],
+    [stats]
+  );
 
   // Check if filter is active
   const filterIsActive = useMemo(
@@ -386,21 +372,15 @@ export default function AdvanceBookingTab({ data, refreshing, onRefresh }: Props
           backgroundColor: colors.background,
         },
         header: {
-          paddingHorizontal: spacing.md,
-          paddingTop: spacing.sm,
-        },
-        statsRow: {
-          flexDirection: "row",
-          flexWrap: "wrap",
-          gap: 10,
-          marginBottom: spacing.md,
+          paddingHorizontal: spacing.xs,
+          paddingTop: spacing.xs,
         },
         sectionHeader: {
           flexDirection: "row",
           alignItems: "center",
           gap: 8,
-          marginTop: spacing.sm,
-          marginBottom: spacing.md,
+          marginTop: spacing.xs,
+          marginBottom: spacing.xs,
         },
         sectionIconBadge: {
           width: 28,
@@ -444,30 +424,14 @@ export default function AdvanceBookingTab({ data, refreshing, onRefresh }: Props
   const ListHeader = useMemo(
     () => (
       <View style={styles.header}>
-        {/* Compact stats row */}
-        <View style={styles.statsRow}>
-          <StatChip
-            icon="calendar-check"
-            label="Active"
-            value={stats.activeBookings}
-            color="#10B981"
-            bgColor={hexToRgba("#10B981", 0.1)}
+        {/* Stats Grid */}
+        {metrics.length > 0 && (
+          <StatsGrid
+            metrics={metrics}
+            minVisible={width >= 900 ? 4 : width >= 740 ? 3 : 2}
+            cardHeight={88}
           />
-          <StatChip
-            icon="calendar-remove"
-            label="Expired"
-            value={stats.expiredBookings}
-            color="#EF4444"
-            bgColor={hexToRgba("#EF4444", 0.1)}
-          />
-          <StatChip
-            icon="close-circle"
-            label="Cancelled"
-            value={stats.cancelledBookings}
-            color="#6B7280"
-            bgColor={hexToRgba("#6B7280", 0.1)}
-          />
-        </View>
+        )}
 
         {/* Search bar */}
         <SearchBar
@@ -493,7 +457,7 @@ export default function AdvanceBookingTab({ data, refreshing, onRefresh }: Props
         </View>
       </View>
     ),
-    [styles, stats, filterIsActive, filtered.length, colors.accent]
+    [styles, metrics, width, filterIsActive, filtered.length, colors.accent]
   );
 
   const renderItem = useCallback(
