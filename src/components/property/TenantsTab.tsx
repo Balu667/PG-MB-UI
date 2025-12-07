@@ -14,6 +14,7 @@ import * as Haptics from "expo-haptics";
 
 import SearchBar from "@/src/components/SearchBar";
 import FilterSheet, { Section } from "@/src/components/FilterSheet";
+import StatsGrid, { type Metric } from "@/src/components/StatsGrid";
 import TenantCard from "./TenantCard";
 import AddButton from "../Common/AddButton";
 
@@ -137,6 +138,40 @@ export default function TenantsTab({ data, meta, refreshing, onRefresh }: Props)
 
   const cols = useMemo(() => (width >= 1000 ? 3 : width >= 740 ? 2 : 1), [width]);
 
+  // Calculate metrics for StatsGrid
+  const metrics: Metric[] = useMemo(() => {
+    const totalTenants = num(meta?.totalTenants, 0);
+    const underNotice = num(meta?.underNoticeTenants, 0);
+    const appNotDownloaded = num(meta?.appNotDownloaded, 0);
+
+    return [
+      {
+        key: "total",
+        label: "Total Tenants",
+        value: totalTenants,
+        icon: "account-group",
+        iconBg: "#DBEAFE",
+        iconColor: "#3B82F6",
+      },
+      {
+        key: "notice",
+        label: "Under Notice",
+        value: underNotice,
+        icon: "bell-ring",
+        iconBg: "#FEF3C7",
+        iconColor: "#F59E0B",
+      },
+      {
+        key: "appNotDownloaded",
+        label: "App Not Downloaded",
+        value: appNotDownloaded,
+        icon: "download-off",
+        iconBg: "#FEE2E2",
+        iconColor: "#EF4444",
+      },
+    ];
+  }, [meta]);
+
   const tenants = useMemo(() => {
     let out = list;
 
@@ -221,7 +256,7 @@ export default function TenantsTab({ data, meta, refreshing, onRefresh }: Props)
         columnGap: { gap: spacing.md - 2 },
         listContent: {
           paddingHorizontal: spacing.md,
-          paddingTop: spacing.md,
+          paddingTop: 0,
           paddingBottom: insets.bottom + spacing.lg * 2,
           rowGap: spacing.md - 2,
         },
@@ -256,12 +291,25 @@ export default function TenantsTab({ data, meta, refreshing, onRefresh }: Props)
         contentContainerStyle={s.listContent}
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={
-          <SearchBar
-            placeholder="Search tenant name"
-            onSearch={setQuery}
-            onFilter={() => setSheetOpen(true)}
-            filterActive={filterActive}
-          />
+          <View style={{ paddingHorizontal: spacing.md, paddingTop: spacing.md }}>
+            {/* Stats Grid */}
+            {Array.isArray(metrics) && metrics.length > 0 && (
+              <StatsGrid
+                metrics={metrics}
+                minVisible={width >= 900 ? 3 : width >= 740 ? 2 : 2}
+                cardHeight={88}
+                style={{ marginBottom: spacing.md }}
+              />
+            )}
+
+            {/* Search Bar */}
+            <SearchBar
+              placeholder="Search tenant name"
+              onSearch={setQuery}
+              onFilter={() => setSheetOpen(true)}
+              filterActive={filterActive}
+            />
+          </View>
         }
         ListEmptyComponent={
           <View style={s.emptyWrap}>
