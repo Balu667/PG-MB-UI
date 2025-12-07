@@ -19,6 +19,7 @@ import * as Haptics from "expo-haptics";
 
 import AddButton from "@/src/components/Common/AddButton";
 import PropertyCard from "@/src/components/PropertyCard";
+import SearchBar from "@/src/components/SearchBar";
 import { useGetPropertyDetailsList } from "@/src/hooks/propertyHook";
 import { useTheme } from "@/src/theme/ThemeContext";
 import { hexToRgba } from "@/src/theme";
@@ -164,9 +165,10 @@ interface ListHeaderProps {
   spacing: ReturnType<typeof useTheme>["spacing"];
   radius: ReturnType<typeof useTheme>["radius"];
   isCompact: boolean;
+  onSearchChange: (text: string) => void;
 }
 
-const ListHeader = React.memo<ListHeaderProps>(({ properties, colors, spacing, radius, isCompact }) => (
+const ListHeader = React.memo<ListHeaderProps>(({ properties, colors, spacing, radius, isCompact, onSearchChange }) => (
   <View style={{ marginBottom: spacing.md }}>
     {/* Title Section */}
     <View
@@ -225,6 +227,16 @@ const ListHeader = React.memo<ListHeaderProps>(({ properties, colors, spacing, r
         isCompact={isCompact}
       />
     )}
+
+    {/* Search Bar */}
+    {properties.length > 0 && (
+      <View style={{ marginTop: spacing.sm }}>
+        <SearchBar
+          placeholder="Search by property name..."
+          onSearch={onSearchChange}
+        />
+      </View>
+    )}
   </View>
 ));
 
@@ -237,51 +249,58 @@ ListHeader.displayName = "ListHeader";
 interface EmptyStateProps {
   colors: ReturnType<typeof useTheme>["colors"];
   error: unknown;
+  searchQuery?: string;
 }
 
-const EmptyState = React.memo<EmptyStateProps>(({ colors, error }) => (
-  <View style={{ alignItems: "center", justifyContent: "center", paddingVertical: 60, paddingHorizontal: 32 }}>
-    {/* Icon */}
-    <View
-      style={{
-        width: 120,
-        height: 120,
-        borderRadius: 60,
-        backgroundColor: hexToRgba(colors.textMuted, 0.08),
-        alignItems: "center",
-        justifyContent: "center",
-        marginBottom: 24,
-      }}
-    >
+const EmptyState = React.memo<EmptyStateProps>(({ colors, error, searchQuery }) => {
+  const hasSearchQuery = searchQuery && searchQuery.trim().length > 0;
+  
+  return (
+    <View style={{ alignItems: "center", justifyContent: "center", paddingVertical: 60, paddingHorizontal: 32 }}>
+      {/* Icon */}
       <View
         style={{
-          width: 88,
-          height: 88,
-          borderRadius: 44,
-          backgroundColor: hexToRgba(colors.textMuted, 0.1),
+          width: 120,
+          height: 120,
+          borderRadius: 60,
+          backgroundColor: hexToRgba(colors.textMuted, 0.08),
           alignItems: "center",
           justifyContent: "center",
+          marginBottom: 24,
         }}
       >
-        <MaterialCommunityIcons
-          name={error ? "wifi-off" : "home-city"}
-          size={48}
-          color={colors.textMuted}
-        />
+        <View
+          style={{
+            width: 88,
+            height: 88,
+            borderRadius: 44,
+            backgroundColor: hexToRgba(colors.textMuted, 0.1),
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <MaterialCommunityIcons
+            name={error ? "wifi-off" : hasSearchQuery ? "magnify" : "home-city"}
+            size={48}
+            color={colors.textMuted}
+          />
+        </View>
       </View>
-    </View>
 
-    {/* Message */}
-    <Text style={{ fontSize: 20, fontWeight: "700", color: colors.textPrimary, textAlign: "center", marginBottom: 8 }}>
-      {error ? "Connection Error" : "No Properties Yet"}
-    </Text>
-    <Text style={{ fontSize: 14, color: colors.textMuted, textAlign: "center", lineHeight: 22 }}>
-      {error
-        ? "Couldn't load your properties.\nPull down to retry."
-        : "Start by adding your first property.\nTap the + button below to get started."}
-    </Text>
-  </View>
-));
+      {/* Message */}
+      <Text style={{ fontSize: 20, fontWeight: "700", color: colors.textPrimary, textAlign: "center", marginBottom: 8 }}>
+        {error ? "Connection Error" : hasSearchQuery ? "No Results Found" : "No Properties Yet"}
+      </Text>
+      <Text style={{ fontSize: 14, color: colors.textMuted, textAlign: "center", lineHeight: 22 }}>
+        {error
+          ? "Couldn't load your properties.\nPull down to retry."
+          : hasSearchQuery
+          ? `No properties found matching "${searchQuery}".\nTry a different search term.`
+          : "Start by adding your first property.\nTap the + button below to get started."}
+      </Text>
+    </View>
+  );
+});
 
 EmptyState.displayName = "EmptyState";
 
@@ -324,6 +343,25 @@ const Properties = () => {
   }, [screenWidth]);
 
   const isCompact = screenWidth < 400;
+
+  // Search state
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // Filter properties based on search query
+  const filteredProperties = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return propertyData;
+
+    return propertyData.filter((property: any) => {
+      const propertyName = String(property?.propertyName || "").toLowerCase();
+      return propertyName.includes(query);
+    });
+  }, [propertyData, searchQuery]);
+
+  // Search handler
+  const handleSearchChange = useCallback((text: string) => {
+    setSearchQuery(text);
+  }, []);
 
   // Pull-to-refresh
   const onRefresh = useCallback(() => {
@@ -402,7 +440,7 @@ const Properties = () => {
         style={styles.container}
       >
         <FlatList
-          data={propertyData}
+          data={filteredProperties}
           keyExtractor={(item) => item._id}
           key={`properties-${numColumns}`}
           ListHeaderComponent={
@@ -412,6 +450,7 @@ const Properties = () => {
               spacing={spacing}
               radius={radius}
               isCompact={isCompact}
+              onSearchChange={handleSearchChange}
             />
           }
           renderItem={({ item }) => (
@@ -423,7 +462,7 @@ const Properties = () => {
           numColumns={numColumns}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
-          ListEmptyComponent={<EmptyState colors={colors} error={error} />}
+          ListEmptyComponent={<EmptyState colors={colors} error={error} searchQuery={searchQuery} />}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
