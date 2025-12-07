@@ -1,5 +1,6 @@
 // src/components/AppHeader.tsx
-import React, { useMemo, useState } from "react";
+// Premium redesigned header with Profile, Notifications, and Property selector
+import React, { useMemo, useState, useCallback, useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -11,303 +12,675 @@ import {
   Platform,
   Modal,
   FlatList,
-  Dimensions,
+  Animated,
   ActivityIndicator,
+  useWindowDimensions,
+  I18nManager,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import Entypo from "@expo/vector-icons/Entypo";
-import MaterialIcons from "@expo/vector-icons/MaterialIcons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { MaterialIcons, MaterialCommunityIcons, Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { useDispatch } from "react-redux";
+import { useSelector } from "react-redux";
+import * as Haptics from "expo-haptics";
 
 import { useTheme } from "@/src/theme/ThemeContext";
+import { hexToRgba } from "@/src/theme";
 import { useProperty } from "@/src/context/PropertyContext";
-import { persistor } from "@/src/redux/store";
+import NotificationsSheet from "@/src/components/NotificationsSheet";
 
-interface Props {
+/* ─────────────────────────────────────────────────────────────────────────────
+   TYPES
+───────────────────────────────────────────────────────────────────────────── */
+
+interface AppHeaderProps {
   showBack?: boolean;
   onBackPress?: () => void;
   onNotificationPress?: () => void;
-  avatarUri?: string; // if not provided or falsy -> show initials
+  avatarUri?: string;
 }
 
-const AppHeader: React.FC<Props> = ({
+interface Property {
+  _id: string;
+  propertyName: string;
+  area?: string;
+  city?: string;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   HEADER ICON BUTTON COMPONENT
+───────────────────────────────────────────────────────────────────────────── */
+
+interface HeaderIconButtonProps {
+  icon: string;
+  iconFamily?: "material" | "ionicons" | "material-community";
+  onPress: () => void;
+  badge?: number;
+  accessibilityLabel: string;
+  accessibilityHint?: string;
+}
+
+const HeaderIconButton = React.memo<HeaderIconButtonProps>(
+  ({ icon, iconFamily = "material", onPress, badge, accessibilityLabel, accessibilityHint }) => {
+    const { colors, radius } = useTheme();
+    const scaleAnim = useRef(new Animated.Value(1)).current;
+
+    const handlePressIn = useCallback(() => {
+      Animated.spring(scaleAnim, {
+        toValue: 0.9,
+        useNativeDriver: true,
+        friction: 8,
+      }).start();
+    }, [scaleAnim]);
+
+    const handlePressOut = useCallback(() => {
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        useNativeDriver: true,
+        friction: 8,
+      }).start();
+    }, [scaleAnim]);
+
+    const IconComponent =
+      iconFamily === "ionicons"
+        ? Ionicons
+        : iconFamily === "material-community"
+        ? MaterialCommunityIcons
+        : MaterialIcons;
+
+    return (
+      <Pressable
+        onPress={onPress}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        android_ripple={{ color: hexToRgba("#FFFFFF", 0.2), borderless: true, radius: 22 }}
+        accessibilityRole="button"
+        accessibilityLabel={accessibilityLabel}
+        accessibilityHint={accessibilityHint}
+        accessible
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      >
+        <Animated.View
+          style={[
+            {
+              width: 44,
+              height: 44,
+              borderRadius: 22,
+              backgroundColor: hexToRgba("#FFFFFF", 0.12),
+              justifyContent: "center",
+              alignItems: "center",
+              transform: [{ scale: scaleAnim }],
+            },
+          ]}
+        >
+          <IconComponent name={icon as never} size={22} color="#FFFFFF" />
+          {badge !== undefined && badge > 0 && (
+            <View
+              style={{
+                position: "absolute",
+                top: 6,
+                right: 6,
+                minWidth: 18,
+                height: 18,
+                borderRadius: 9,
+                backgroundColor: "#EF4444",
+                justifyContent: "center",
+                alignItems: "center",
+                paddingHorizontal: 4,
+                borderWidth: 2,
+                borderColor: colors.primary,
+              }}
+            >
+              <Text
+                style={{
+                  color: "#FFFFFF",
+                  fontSize: 10,
+                  fontWeight: "800",
+                }}
+              >
+                {badge > 99 ? "99+" : badge}
+              </Text>
+            </View>
+          )}
+        </Animated.View>
+      </Pressable>
+    );
+  }
+);
+
+HeaderIconButton.displayName = "HeaderIconButton";
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   PROPERTY SELECTOR ITEM
+───────────────────────────────────────────────────────────────────────────── */
+
+interface PropertyItemProps {
+  item: Property;
+  isSelected: boolean;
+  onSelect: (id: string) => void;
+}
+
+const PropertyItem = React.memo<PropertyItemProps>(({ item, isSelected, onSelect }) => {
+  const { colors, spacing, radius } = useTheme();
+
+  const getInitials = (name?: string) => {
+    if (!name) return "PG";
+    const parts = name.trim().split(/\s+/).slice(0, 2);
+    return parts.map((w) => (w[0] ?? "").toUpperCase()).join("") || "PG";
+  };
+
+  const initials = getInitials(item.propertyName);
+  const subtitle = [item.area, item.city].filter(Boolean).join(", ");
+
+  return (
+    <TouchableOpacity
+      style={[
+        {
+          flexDirection: "row",
+          alignItems: "center",
+          paddingVertical: 14,
+          paddingHorizontal: 16,
+          gap: 14,
+          backgroundColor: isSelected ? hexToRgba(colors.accent, 0.08) : "transparent",
+          borderRadius: isSelected ? radius.lg : 0,
+          marginHorizontal: isSelected ? 8 : 0,
+          marginVertical: isSelected ? 4 : 0,
+        },
+      ]}
+      activeOpacity={0.7}
+      onPress={() => {
+        Haptics.selectionAsync();
+        onSelect(item._id);
+      }}
+      accessibilityRole="button"
+      accessibilityLabel={`Select ${item.propertyName}`}
+      accessibilityState={{ selected: isSelected }}
+      accessible
+    >
+      {/* Avatar */}
+      <View
+        style={{
+          width: 44,
+          height: 44,
+          borderRadius: 12,
+          backgroundColor: isSelected ? colors.accent : hexToRgba(colors.accent, 0.12),
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <Text
+          style={{
+            color: isSelected ? "#FFFFFF" : colors.accent,
+            fontWeight: "700",
+            fontSize: 14,
+            letterSpacing: 0.5,
+          }}
+        >
+          {initials}
+        </Text>
+      </View>
+
+      {/* Text content */}
+      <View style={{ flex: 1 }}>
+        <Text
+          style={{
+            fontSize: 16,
+            color: colors.textPrimary,
+            fontWeight: isSelected ? "700" : "500",
+          }}
+          numberOfLines={1}
+        >
+          {item.propertyName}
+        </Text>
+        {subtitle ? (
+          <Text
+            style={{
+              fontSize: 13,
+              color: colors.textSecondary,
+              marginTop: 2,
+            }}
+            numberOfLines={1}
+          >
+            {subtitle}
+          </Text>
+        ) : null}
+      </View>
+
+      {/* Check icon */}
+      {isSelected && (
+        <View
+          style={{
+            width: 24,
+            height: 24,
+            borderRadius: 12,
+            backgroundColor: colors.accent,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <MaterialIcons name="check" size={16} color="#FFFFFF" />
+        </View>
+      )}
+    </TouchableOpacity>
+  );
+});
+
+PropertyItem.displayName = "PropertyItem";
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   MAIN COMPONENT
+───────────────────────────────────────────────────────────────────────────── */
+
+const AppHeader: React.FC<AppHeaderProps> = ({
   showBack = false,
   onBackPress,
   onNotificationPress,
   avatarUri,
 }) => {
-  const { colors, spacing, radius } = useTheme();
+  const { colors, spacing, radius, typography } = useTheme();
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
   const { properties, selectedId, setSelected, loading } = useProperty();
-  const [showMenu, setShowMenu] = useState(false);
-  const dispatch = useDispatch();
 
-  const currentTitle =
-    properties.find((p) => p._id === selectedId)?.propertyName ?? "Select property";
+  // Redux profile data
+  const profileData = useSelector(
+    (state: { profileDetails?: { profileData?: Record<string, unknown> } }) =>
+      state?.profileDetails?.profileData
+  );
 
-  // ---- utils ----
-  const getInitials = (name?: string) => {
+  const [showPropertyMenu, setShowPropertyMenu] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
+
+  // Animations
+  const menuAnim = useRef(new Animated.Value(0)).current;
+  const backdropAnim = useRef(new Animated.Value(0)).current;
+
+  // Get current property
+  const currentProperty = useMemo(
+    () => properties.find((p) => p._id === selectedId),
+    [properties, selectedId]
+  );
+
+  const currentTitle = currentProperty?.propertyName ?? "Select property";
+
+  // Utilities
+  const getInitials = useCallback((name?: string) => {
     if (!name) return "PG";
     const parts = name.trim().split(/\s+/).slice(0, 2);
-    const letters = parts.map((w) => (w[0] ?? "").toUpperCase()).join("");
-    return letters || "PG";
-  };
+    return parts.map((w) => (w[0] ?? "").toUpperCase()).join("") || "PG";
+  }, []);
 
-  // show initials if no avatarUri
   const shouldShowInitials = !avatarUri || avatarUri.trim().length === 0;
-  const initials = useMemo(() => getInitials(currentTitle), [currentTitle]);
+  const initials = useMemo(() => getInitials(currentTitle), [currentTitle, getInitials]);
 
-  const logout = async () => {
-    try {
-      await AsyncStorage.removeItem("userToken");
-      await persistor.purge();
-      dispatch({ type: "LOGOUT" });
-    } finally {
-      router.replace("/public");
+  // Get user name for profile
+  const userName = useMemo(() => {
+    if (!profileData) return "";
+    return String(profileData.name ?? profileData.userName ?? profileData.fullName ?? "");
+  }, [profileData]);
+
+  const userInitials = useMemo(() => getInitials(userName || "User"), [userName, getInitials]);
+
+  // Animation helpers
+  const openMenu = useCallback(() => {
+    setShowPropertyMenu(true);
+    Animated.parallel([
+      Animated.spring(menuAnim, {
+        toValue: 1,
+        useNativeDriver: true,
+        friction: 8,
+        tension: 65,
+      }),
+      Animated.timing(backdropAnim, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+    ]).start();
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  }, [menuAnim, backdropAnim]);
+
+  const closeMenu = useCallback(() => {
+    Animated.parallel([
+      Animated.spring(menuAnim, {
+        toValue: 0,
+        useNativeDriver: true,
+        friction: 8,
+      }),
+      Animated.timing(backdropAnim, {
+        toValue: 0,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+    ]).start(() => setShowPropertyMenu(false));
+  }, [menuAnim, backdropAnim]);
+
+  const handlePropertySelect = useCallback(
+    (id: string) => {
+      setSelected(id);
+      closeMenu();
+    },
+    [setSelected, closeMenu]
+  );
+
+  const handleNotificationPress = useCallback(() => {
+    if (onNotificationPress) {
+      onNotificationPress();
+    } else {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      setShowNotifications(true);
     }
-  };
+  }, [onNotificationPress]);
 
-  const s = useMemo(
+  const handleProfilePress = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    router.push("/protected/profile");
+  }, []);
+
+  // Styles
+  const styles = useMemo(
     () =>
       StyleSheet.create({
         wrapper: {
           backgroundColor: colors.primary,
           paddingHorizontal: spacing.md,
-          paddingBottom: 20,
-          paddingTop: insets.top + 18,
+          paddingBottom: spacing.md + 4,
+          paddingTop: insets.top + spacing.sm,
         },
-        row: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-        leftRow: { flexDirection: "row", alignItems: "center", gap: 10 },
-        actionRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-        avatarImg: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.white },
-        avatarBubble: {
+        mainRow: {
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+        },
+        leftSection: {
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 12,
+          flex: 1,
+          maxWidth: width * 0.6,
+        },
+        rightSection: {
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 8,
+        },
+        avatarContainer: {
+          width: 44,
+          height: 44,
+          borderRadius: 14,
+          backgroundColor: hexToRgba("#FFFFFF", 0.15),
+          alignItems: "center",
+          justifyContent: "center",
+          borderWidth: 2,
+          borderColor: hexToRgba("#FFFFFF", 0.25),
+        },
+        avatarImage: {
           width: 40,
           height: 40,
-          borderRadius: 20,
-          backgroundColor: colors.white,
+          borderRadius: 12,
+        },
+        avatarText: {
+          color: "#FFFFFF",
+          fontWeight: "700",
+          fontSize: 15,
+          letterSpacing: 0.5,
+        },
+        propertySelector: {
+          flex: 1,
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 8,
+          paddingVertical: 6,
+          paddingHorizontal: 10,
+          borderRadius: radius.lg,
+          backgroundColor: hexToRgba("#FFFFFF", 0.1),
+        },
+        propertyText: {
+          flex: 1,
+          fontSize: 15,
+          color: "#FFFFFF",
+          fontWeight: "600",
+        },
+        backButton: {
+          width: 44,
+          height: 44,
+          borderRadius: 14,
+          backgroundColor: hexToRgba("#FFFFFF", 0.12),
           alignItems: "center",
           justifyContent: "center",
         },
-        avatarText: { color: colors.primary, fontWeight: "700", fontSize: 16, letterSpacing: 0.3 },
-
-        ddBtn: { flexDirection: "row", alignItems: "center", gap: 6, maxWidth: 220 },
-        ddTxt: { fontSize: 16, color: colors.textWhite, fontWeight: "600" },
-
-        iconWrap: {
-          width: 40,
-          height: 40,
-          borderRadius: 20,
-          justifyContent: "center",
-          alignItems: "center",
+        // Modal styles
+        modalOverlay: {
+          flex: 1,
+          backgroundColor: "transparent",
         },
-        backWrap: {
-          width: 40,
-          height: 40,
-          borderRadius: 20,
-          justifyContent: "center",
-          alignItems: "center",
-        },
-
-        modalOverlay: { flex: 1, backgroundColor: "transparent" },
-
-        menu: {
+        menuContainer: {
           position: "absolute",
           left: spacing.md,
           right: spacing.md,
-          backgroundColor: colors.background,
-          borderRadius: 14,
-          paddingVertical: 8,
           top: insets.top + 70,
-          maxHeight: Dimensions.get("window").height * 0.45,
-          shadowColor: colors.shadow,
-          shadowOffset: { width: 0, height: 4 },
+          backgroundColor: colors.cardBackground,
+          borderRadius: radius.xl,
+          overflow: "hidden",
+          maxHeight: 400,
+          shadowColor: "#000000",
+          shadowOffset: { width: 0, height: 8 },
           shadowOpacity: 0.15,
-          shadowRadius: 12,
-          elevation: 12,
+          shadowRadius: 24,
+          elevation: 16,
         },
-        listContent: { paddingVertical: 4 },
-
-        itemRow: {
-          flexDirection: "row",
+        menuHeader: {
+          paddingHorizontal: spacing.md,
+          paddingVertical: spacing.md,
+          borderBottomWidth: 1,
+          borderBottomColor: hexToRgba(colors.textSecondary, 0.1),
+        },
+        menuTitle: {
+          fontSize: 13,
+          fontWeight: "600",
+          color: colors.textSecondary,
+          textTransform: "uppercase",
+          letterSpacing: 1,
+        },
+        listContent: {
+          paddingVertical: spacing.sm,
+        },
+        separator: {
+          height: 1,
+          backgroundColor: hexToRgba(colors.textSecondary, 0.08),
+          marginHorizontal: spacing.md,
+        },
+        loadingContainer: {
+          paddingVertical: 32,
           alignItems: "center",
-          paddingVertical: 10,
-          paddingHorizontal: 14,
-          gap: 10,
+          gap: 12,
         },
-        itemAvatar: {
-          width: 30,
-          height: 30,
-          borderRadius: 15,
-          backgroundColor: colors.surface,
+        emptyContainer: {
+          paddingVertical: 32,
+          paddingHorizontal: spacing.md,
           alignItems: "center",
-          justifyContent: "center",
         },
-        itemAvatarText: { color: colors.accent, fontWeight: "700", fontSize: 12 },
-        itemTxt: { fontSize: 16, color: colors.textPrimary, flex: 1 },
-        itemSelected: {
-          backgroundColor: colors.surface,
+        emptyText: {
+          color: colors.textSecondary,
+          fontSize: 15,
         },
-        checkIcon: { marginLeft: 8 },
-
-        sep: { height: 1, backgroundColor: colors.surface },
-
-        loadingWrap: {
-          paddingVertical: 16,
-          paddingHorizontal: 16,
-          flexDirection: "row",
-          alignItems: "center",
-          gap: 10,
-        },
-        emptyWrap: {
-          paddingVertical: 16,
-          paddingHorizontal: 16,
-        },
-        emptyTxt: { color: colors.textSecondary },
       }),
-    [colors, spacing, insets.top, radius]
+    [colors, spacing, radius, insets.top, width]
   );
+
+  // Render property menu
+  const renderPropertyMenu = () => {
+    const translateY = menuAnim.interpolate({
+      inputRange: [0, 1],
+      outputRange: [-20, 0],
+    });
+
+    const opacity = menuAnim.interpolate({
+      inputRange: [0, 1],
+      outputRange: [0, 1],
+    });
+
+    return (
+      <Modal
+        visible={showPropertyMenu}
+        transparent
+        animationType="none"
+        onRequestClose={closeMenu}
+        statusBarTranslucent
+      >
+        <Animated.View
+          style={[
+            styles.modalOverlay,
+            {
+              backgroundColor: hexToRgba("#000000", 0.4),
+              opacity: backdropAnim,
+            },
+          ]}
+        >
+          <Pressable style={{ flex: 1 }} onPress={closeMenu}>
+            <Animated.View
+              style={[
+                styles.menuContainer,
+                {
+                  transform: [{ translateY }],
+                  opacity,
+                },
+              ]}
+            >
+              {/* Header */}
+              <View style={styles.menuHeader}>
+                <Text style={styles.menuTitle}>Your Properties</Text>
+              </View>
+
+              {/* Content */}
+              {loading ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="small" color={colors.accent} />
+                  <Text style={{ color: colors.textSecondary, fontWeight: "500" }}>
+                    Loading properties...
+                  </Text>
+                </View>
+              ) : properties.length === 0 ? (
+                <View style={styles.emptyContainer}>
+                  <MaterialCommunityIcons
+                    name="home-off-outline"
+                    size={48}
+                    color={colors.textMuted}
+                  />
+                  <Text style={[styles.emptyText, { marginTop: 12 }]}>No properties found</Text>
+                </View>
+              ) : (
+                <FlatList
+                  data={properties}
+                  keyExtractor={(item) => item._id}
+                  contentContainerStyle={styles.listContent}
+                  renderItem={({ item }) => (
+                    <PropertyItem
+                      item={item}
+                      isSelected={selectedId === item._id}
+                      onSelect={handlePropertySelect}
+                    />
+                  )}
+                  ItemSeparatorComponent={() => <View style={styles.separator} />}
+                  showsVerticalScrollIndicator={false}
+                />
+              )}
+            </Animated.View>
+          </Pressable>
+        </Animated.View>
+      </Modal>
+    );
+  };
 
   return (
     <>
-      <StatusBar barStyle="light-content" backgroundColor={colors.primary} />
+      <StatusBar barStyle="light-content" backgroundColor={colors.primary} translucent={false} />
 
-      <View style={s.wrapper}>
-        <View style={s.row}>
-          <View style={s.leftRow}>
+      <View style={styles.wrapper}>
+        <View style={styles.mainRow}>
+          {/* Left Section */}
+          <View style={styles.leftSection}>
             {showBack ? (
               <Pressable
                 onPress={onBackPress}
-                android_ripple={{ color: "#ffffff44", borderless: true }}
-                style={s.backWrap}
+                android_ripple={{ color: hexToRgba("#FFFFFF", 0.2), borderless: true }}
+                style={styles.backButton}
                 accessibilityRole="button"
+                accessibilityLabel="Go back"
+                accessibilityHint="Navigate to previous screen"
+                accessible
               >
-                <Entypo name="chevron-left" size={26} color="#fff" />
+                <MaterialIcons
+                  name={I18nManager.isRTL ? "arrow-forward" : "arrow-back"}
+                  size={24}
+                  color="#FFFFFF"
+                />
               </Pressable>
             ) : shouldShowInitials ? (
-              <View style={s.avatarBubble}>
-                <Text style={s.avatarText}>{initials}</Text>
+              <View style={styles.avatarContainer}>
+                <Text style={styles.avatarText}>{initials}</Text>
               </View>
             ) : (
-              <Image source={{ uri: avatarUri }} style={s.avatarImg} />
+              <View style={styles.avatarContainer}>
+                <Image source={{ uri: avatarUri }} style={styles.avatarImage} />
+              </View>
             )}
 
+            {/* Property Selector */}
             <TouchableOpacity
-              style={s.ddBtn}
+              style={styles.propertySelector}
               activeOpacity={0.7}
-              onPress={() => !loading && setShowMenu(true)}
+              onPress={() => !loading && openMenu()}
               disabled={loading}
+              accessibilityRole="button"
+              accessibilityLabel={`Current property: ${currentTitle}. Tap to change.`}
+              accessibilityHint="Opens property selection menu"
+              accessible
             >
-              <Text style={s.ddTxt} numberOfLines={1}>
+              <Text style={styles.propertyText} numberOfLines={1}>
                 {currentTitle}
               </Text>
               {loading ? (
-                <ActivityIndicator size="small" color="#fff" />
+                <ActivityIndicator size="small" color="#FFFFFF" />
               ) : (
-                <Entypo name="chevron-down" size={18} color="#fff" />
+                <MaterialIcons name="keyboard-arrow-down" size={22} color="#FFFFFF" />
               )}
             </TouchableOpacity>
           </View>
 
-          <View style={s.actionRow}>
-            <Pressable
-              onPress={onNotificationPress}
-              android_ripple={{ color: "#ffffff44", borderless: true }}
-              style={({ pressed }) => [
-                s.iconWrap,
-                pressed && Platform.OS === "ios" && { backgroundColor: "#ffffff22" },
-              ]}
-              accessibilityRole="button"
+          {/* Right Section - Action Buttons */}
+          <View style={styles.rightSection}>
+            {/* Notifications */}
+            <HeaderIconButton
+              icon="notifications-outline"
+              iconFamily="ionicons"
+              onPress={handleNotificationPress}
+              badge={3}
               accessibilityLabel="Notifications"
-            >
-              <MaterialIcons name="notifications" size={24} color="#fff" />
-            </Pressable>
+              accessibilityHint="Opens notifications panel"
+            />
 
-            <Pressable
-              onPress={logout}
-              android_ripple={{ color: "#ffffff44", borderless: true }}
-              style={({ pressed }) => [
-                s.iconWrap,
-                pressed && Platform.OS === "ios" && { backgroundColor: "#ffffff22" },
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel="Logout"
-            >
-              <MaterialIcons name="logout" size={24} color="#fff" />
-            </Pressable>
+            {/* Profile */}
+            <HeaderIconButton
+              icon="person-outline"
+              iconFamily="ionicons"
+              onPress={handleProfilePress}
+              accessibilityLabel="Profile"
+              accessibilityHint="Opens profile screen"
+            />
           </View>
         </View>
       </View>
 
-      <Modal
-        visible={showMenu}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowMenu(false)}
-      >
-        <Pressable style={s.modalOverlay} onPress={() => setShowMenu(false)}>
-          <View style={s.menu}>
-            {loading ? (
-              <View style={s.loadingWrap}>
-                <ActivityIndicator size="small" color={colors.accent} />
-                <Text style={{ color: colors.textPrimary, fontWeight: "600" }}>
-                  Loading properties…
-                </Text>
-              </View>
-            ) : properties.length === 0 ? (
-              <View style={s.emptyWrap}>
-                <Text style={s.emptyTxt}>No properties found</Text>
-              </View>
-            ) : (
-              <FlatList
-                data={properties}
-                keyExtractor={(i) => i._id}
-                contentContainerStyle={s.listContent}
-                renderItem={({ item }) => {
-                  const isSelected = selectedId === item._id;
-                  const itemInitials = getInitials(item.propertyName);
+      {/* Property Selection Modal */}
+      {renderPropertyMenu()}
 
-                  return (
-                    <TouchableOpacity
-                      style={[s.itemRow, isSelected && s.itemSelected]}
-                      activeOpacity={0.8}
-                      onPress={() => {
-                        setSelected(item._id);
-                        setShowMenu(false);
-                      }}
-                    >
-                      {/* Left initials bubble */}
-                      <View style={s.itemAvatar}>
-                        <Text style={s.itemAvatarText}>{itemInitials}</Text>
-                      </View>
-
-                      {/* Title */}
-                      <Text style={s.itemTxt} numberOfLines={1}>
-                        {item.propertyName}
-                      </Text>
-
-                      {/* Right check for selected */}
-                      {isSelected ? (
-                        <MaterialIcons
-                          name="check-circle"
-                          size={20}
-                          color={colors.accent}
-                          style={s.checkIcon}
-                        />
-                      ) : null}
-                    </TouchableOpacity>
-                  );
-                }}
-                ItemSeparatorComponent={() => <View style={s.sep} />}
-                showsVerticalScrollIndicator={false}
-              />
-            )}
-          </View>
-        </Pressable>
-      </Modal>
+      {/* Notifications Sheet */}
+      <NotificationsSheet
+        visible={showNotifications}
+        onClose={() => setShowNotifications(false)}
+      />
     </>
   );
 };
 
-export default AppHeader;
+export default React.memo(AppHeader);
