@@ -905,25 +905,15 @@ export default function AdvancedBookingScreen() {
 
   const todayStart = useMemo(() => startOfDay(new Date()), []);
 
+  // For all modes (Add, Edit, Convert): joining date must be from tomorrow onwards
   const joiningMinDate = useMemo(() => {
-    if (isAddMode) {
-      return addDays(todayStart, 1); // tomorrow
-    }
-    if (initialJoiningDate.current) {
-      return startOfDay(addMonths(initialJoiningDate.current, -1)); // 1 month back
-    }
-    return undefined;
-  }, [isAddMode, todayStart]);
+    return addDays(todayStart, 1); // tomorrow
+  }, [todayStart]);
 
+  // No max date limit - can select any future date
   const joiningMaxDate = useMemo(() => {
-    if (isAddMode) {
-      return undefined;
-    }
-    if (initialJoiningDate.current) {
-      return startOfDay(initialJoiningDate.current);
-    }
     return undefined;
-  }, [isAddMode]);
+  }, []);
 
   /* ----------------------------- Navigation ----------------------------- */
 
@@ -988,17 +978,10 @@ export default function AdvancedBookingScreen() {
       errs.push("• Date of joining is required.");
     } else {
       const jdStart = startOfDay(joiningDate);
-      if (isAddMode) {
-        const tomorrow = addDays(todayStart, 1);
-        if (jdStart.getTime() < tomorrow.getTime()) {
-          errs.push("• For advance booking, joining date must be from tomorrow onwards.");
-        }
-      } else if (initialJoiningDate.current) {
-        const minAllowed = startOfDay(addMonths(initialJoiningDate.current, -1));
-        const maxAllowed = startOfDay(initialJoiningDate.current);
-        if (jdStart.getTime() < minAllowed.getTime() || jdStart.getTime() > maxAllowed.getTime()) {
-          errs.push("• Joining date can only be changed up to 1 month earlier than original.");
-        }
+      const tomorrow = addDays(todayStart, 1);
+      // For all modes: joining date must be from tomorrow onwards
+      if (jdStart.getTime() < tomorrow.getTime()) {
+        errs.push("• Joining date must be from tomorrow onwards.");
       }
     }
 
