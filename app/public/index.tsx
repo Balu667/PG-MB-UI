@@ -79,6 +79,8 @@ interface FeatureItemProps {
 
 const FeatureItem = React.memo<FeatureItemProps>(({ icon, text, delay }) => {
   const { colors, spacing } = useTheme();
+  const { height } = useWindowDimensions();
+  const isCompact = height < 800;
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(20)).current;
 
@@ -107,25 +109,25 @@ const FeatureItem = React.memo<FeatureItemProps>(({ icon, text, delay }) => {
       style={{
         flexDirection: "row",
         alignItems: "center",
-        gap: 10,
-        marginBottom: 12,
+        gap: isCompact ? 8 : 10,
+        marginBottom: isCompact ? 8 : 12,
         opacity: fadeAnim,
         transform: [{ translateX: slideAnim }],
       }}
     >
       <View
         style={{
-          width: 28,
-          height: 28,
-          borderRadius: 14,
+          width: isCompact ? 24 : 28,
+          height: isCompact ? 24 : 28,
+          borderRadius: isCompact ? 12 : 14,
           backgroundColor: hexToRgba(colors.accent, 0.15),
           alignItems: "center",
           justifyContent: "center",
         }}
       >
-        <MaterialCommunityIcons name={icon as never} size={14} color={colors.accent} />
+        <MaterialCommunityIcons name={icon as never} size={isCompact ? 12 : 14} color={colors.accent} />
       </View>
-      <Text style={{ fontSize: 13, color: colors.textSecondary, flex: 1 }}>{text}</Text>
+      <Text style={{ fontSize: isCompact ? 12 : 13, color: colors.textSecondary, flex: 1 }}>{text}</Text>
     </Animated.View>
   );
 });
@@ -156,9 +158,12 @@ export default function LoginScreen() {
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const shakeAnim = useRef(new Animated.Value(0)).current;
 
-  // Responsive sizing
-  const isSmallScreen = width < 350 || height < 650;
-  const isLargeScreen = width > 500 || height > 900;
+  // Responsive sizing - calculate based on pixel density
+  // High DPI Android devices (like Realme P4 Pro) have smaller effective screen area
+  const effectiveHeight = height;
+  const isSmallScreen = width < 350 || effectiveHeight < 700;
+  const isCompactScreen = effectiveHeight < 800; // For high-DPI Android devices
+  const isLargeScreen = width > 500 && effectiveHeight > 900;
   const isTablet = width > 768;
   const cardMaxWidth = Math.min(width - spacing.md * 2, 480);
 
@@ -313,6 +318,8 @@ export default function LoginScreen() {
         scrollContent: {
           flexGrow: 1,
           justifyContent: "space-between",
+          minHeight: effectiveHeight - insets.top - 20, // Ensure scrollability
+          paddingBottom: isCompactScreen ? 100 : 20, // Extra padding for compact screens
         },
         // Background elements
         bgCircle1: {
@@ -342,12 +349,12 @@ export default function LoginScreen() {
         },
         logoSection: {
           alignItems: "center",
-          paddingTop: isLargeScreen ? 80 : isSmallScreen ? 20 : 50,
-          paddingBottom: isLargeScreen ? 40 : 20,
+          paddingTop: isLargeScreen ? 80 : isCompactScreen ? 16 : isSmallScreen ? 20 : 40,
+          paddingBottom: isLargeScreen ? 40 : isCompactScreen ? 12 : 20,
         },
         logo: {
-          width: isLargeScreen ? 200 : isSmallScreen ? 140 : 170,
-          height: isLargeScreen ? 130 : isSmallScreen ? 90 : 110,
+          width: isLargeScreen ? 200 : isCompactScreen ? 130 : isSmallScreen ? 140 : 170,
+          height: isLargeScreen ? 130 : isCompactScreen ? 85 : isSmallScreen ? 90 : 110,
         },
         // Card
         card: {
@@ -475,8 +482,8 @@ export default function LoginScreen() {
         },
         // Features
         featuresSection: {
-          marginTop: spacing.lg,
-          paddingTop: spacing.md,
+          marginTop: isCompactScreen ? spacing.md : spacing.lg,
+          paddingTop: isCompactScreen ? spacing.sm : spacing.md,
           borderTopWidth: 1,
           borderTopColor: hexToRgba(colors.textSecondary, 0.1),
         },
@@ -486,7 +493,7 @@ export default function LoginScreen() {
           color: colors.textMuted,
           textTransform: "uppercase",
           letterSpacing: 1,
-          marginBottom: 12,
+          marginBottom: isCompactScreen ? 8 : 12,
         },
         // Footer
         footer: {
@@ -532,10 +539,13 @@ export default function LoginScreen() {
       radius,
       isLargeScreen,
       isSmallScreen,
+      isCompactScreen,
+      effectiveHeight,
       width,
       cardMaxWidth,
       error,
       isFocused,
+      insets.top,
       insets.bottom,
     ]
   );

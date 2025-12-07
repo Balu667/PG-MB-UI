@@ -14,7 +14,6 @@ import {
   Pressable,
   Modal,
   Animated,
-  Easing,
   AccessibilityInfo,
   BackHandler,
   AppState,
@@ -35,6 +34,7 @@ import Toast from "react-native-toast-message";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { jwtDecode } from "jwt-decode";
 import { useDispatch } from "react-redux";
+import * as Clipboard from "expo-clipboard";
 
 import { useTheme } from "@/src/theme/ThemeContext";
 import { hexToRgba } from "@/src/theme";
@@ -59,16 +59,16 @@ interface OtpBoxProps {
   isFocused: boolean;
   hasError: boolean;
   index: number;
+  size: number;
 }
 
-const OtpBox = React.memo<OtpBoxProps>(({ value, isFocused, hasError, index }) => {
+const OtpBox = React.memo<OtpBoxProps>(({ value, isFocused, hasError, index, size }) => {
   const { colors, radius } = useTheme();
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const bounceAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (value) {
-      // Bounce animation when digit is entered
       Animated.sequence([
         Animated.timing(scaleAnim, {
           toValue: 1.1,
@@ -86,7 +86,6 @@ const OtpBox = React.memo<OtpBoxProps>(({ value, isFocused, hasError, index }) =
 
   useEffect(() => {
     if (isFocused) {
-      // Pulse animation for focused box
       Animated.loop(
         Animated.sequence([
           Animated.timing(bounceAnim, {
@@ -119,15 +118,11 @@ const OtpBox = React.memo<OtpBoxProps>(({ value, isFocused, hasError, index }) =
     : colors.cardSurface;
 
   return (
-    <Animated.View
-      style={{
-        transform: [{ scale: scaleAnim }],
-      }}
-    >
+    <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
       <Animated.View
         style={{
-          width: 60,
-          height: 60,
+          width: size,
+          height: size,
           borderRadius: radius.lg,
           borderWidth: 2,
           borderColor,
@@ -151,7 +146,7 @@ const OtpBox = React.memo<OtpBoxProps>(({ value, isFocused, hasError, index }) =
       >
         <Text
           style={{
-            fontSize: 28,
+            fontSize: size * 0.45,
             fontWeight: "700",
             color: value ? colors.textPrimary : colors.textMuted,
           }}
@@ -163,7 +158,7 @@ const OtpBox = React.memo<OtpBoxProps>(({ value, isFocused, hasError, index }) =
             style={{
               position: "absolute",
               width: 2,
-              height: 28,
+              height: size * 0.45,
               backgroundColor: colors.accent,
               borderRadius: 1,
             }}
@@ -184,9 +179,10 @@ interface TimerProps {
   seconds: number;
   onResend: () => void;
   isResending: boolean;
+  isCompact: boolean;
 }
 
-const ResendTimer = React.memo<TimerProps>(({ seconds, onResend, isResending }) => {
+const ResendTimer = React.memo<TimerProps>(({ seconds, onResend, isResending, isCompact }) => {
   const { colors, spacing, radius } = useTheme();
 
   const formatTime = (sec: number): string => {
@@ -199,15 +195,15 @@ const ResendTimer = React.memo<TimerProps>(({ seconds, onResend, isResending }) 
     return (
       <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
         <ActivityIndicator size="small" color={colors.accent} />
-        <Text style={{ fontSize: 14, color: colors.textSecondary }}>Sending...</Text>
+        <Text style={{ fontSize: isCompact ? 13 : 14, color: colors.textSecondary }}>Sending...</Text>
       </View>
     );
   }
 
   if (seconds > 0) {
     return (
-      <View style={{ alignItems: "center", gap: 8 }}>
-        <Text style={{ fontSize: 14, color: colors.textSecondary }}>
+      <View style={{ alignItems: "center", gap: isCompact ? 6 : 8 }}>
+        <Text style={{ fontSize: isCompact ? 13 : 14, color: colors.textSecondary }}>
           Resend code in
         </Text>
         <View
@@ -216,13 +212,13 @@ const ResendTimer = React.memo<TimerProps>(({ seconds, onResend, isResending }) 
             alignItems: "center",
             gap: 6,
             backgroundColor: hexToRgba(colors.accent, 0.1),
-            paddingHorizontal: 16,
-            paddingVertical: 8,
+            paddingHorizontal: isCompact ? 12 : 16,
+            paddingVertical: isCompact ? 6 : 8,
             borderRadius: radius.full,
           }}
         >
-          <MaterialCommunityIcons name="timer-outline" size={18} color={colors.accent} />
-          <Text style={{ fontSize: 16, fontWeight: "700", color: colors.accent }}>
+          <MaterialCommunityIcons name="timer-outline" size={isCompact ? 16 : 18} color={colors.accent} />
+          <Text style={{ fontSize: isCompact ? 14 : 16, fontWeight: "700", color: colors.accent }}>
             {formatTime(seconds)}
           </Text>
         </View>
@@ -231,8 +227,8 @@ const ResendTimer = React.memo<TimerProps>(({ seconds, onResend, isResending }) 
   }
 
   return (
-    <View style={{ alignItems: "center", gap: 8 }}>
-      <Text style={{ fontSize: 14, color: colors.textSecondary }}>
+    <View style={{ alignItems: "center", gap: isCompact ? 6 : 8 }}>
+      <Text style={{ fontSize: isCompact ? 13 : 14, color: colors.textSecondary }}>
         Didn't receive the code?
       </Text>
       <Pressable
@@ -244,8 +240,8 @@ const ResendTimer = React.memo<TimerProps>(({ seconds, onResend, isResending }) 
           flexDirection: "row",
           alignItems: "center",
           gap: 6,
-          paddingHorizontal: 20,
-          paddingVertical: 12,
+          paddingHorizontal: isCompact ? 16 : 20,
+          paddingVertical: isCompact ? 10 : 12,
           borderRadius: radius.lg,
           backgroundColor: pressed
             ? hexToRgba(colors.accent, 0.15)
@@ -256,8 +252,8 @@ const ResendTimer = React.memo<TimerProps>(({ seconds, onResend, isResending }) 
         accessibilityHint="Sends a new verification code to your phone"
         accessible
       >
-        <MaterialCommunityIcons name="refresh" size={18} color={colors.accent} />
-        <Text style={{ fontSize: 15, fontWeight: "600", color: colors.accent }}>
+        <MaterialCommunityIcons name="refresh" size={isCompact ? 16 : 18} color={colors.accent} />
+        <Text style={{ fontSize: isCompact ? 14 : 15, fontWeight: "600", color: colors.accent }}>
           Resend Code
         </Text>
       </Pressable>
@@ -277,6 +273,7 @@ export default function OtpScreen() {
   const { width, height } = useWindowDimensions();
   const router = useRouter();
   const dispatch = useDispatch();
+  const scrollViewRef = useRef<ScrollView>(null);
 
   type OtpRouteParams = RouteProp<RootStackParamList, "otp">;
   const { params } = useRoute<OtpRouteParams>();
@@ -289,6 +286,8 @@ export default function OtpScreen() {
   const [isResending, setIsResending] = useState(false);
   const [showBackModal, setShowBackModal] = useState(false);
   const [reduceMotion, setReduceMotion] = useState(false);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const [clipboardOtp, setClipboardOtp] = useState<string | null>(null);
 
   // Timer state
   const [secondsLeft, setSecondsLeft] = useState(RESEND_TIMER);
@@ -303,9 +302,11 @@ export default function OtpScreen() {
 
   // Responsive sizing
   const isSmallScreen = width < 350 || height < 650;
-  const isLargeScreen = width > 500 || height > 900;
+  const isCompactScreen = height < 800;
+  const isLargeScreen = width > 500 && height > 900;
   const isTablet = width > 768;
   const cardMaxWidth = Math.min(width - spacing.md * 2, 480);
+  const otpBoxSize = isCompactScreen ? 52 : isSmallScreen ? 50 : isTablet ? 70 : 60;
 
   // Format phone for display
   const formattedPhone = useMemo(() => {
@@ -315,6 +316,85 @@ export default function OtpScreen() {
     }
     return `+91 ${phone}`;
   }, [params?.phoneNumber]);
+
+  // Keyboard listeners
+  useEffect(() => {
+    const showListener = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
+      () => {
+        setKeyboardVisible(true);
+        // Scroll to make OTP input visible
+        setTimeout(() => {
+          scrollViewRef.current?.scrollToEnd({ animated: true });
+        }, 100);
+      }
+    );
+    const hideListener = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
+      () => setKeyboardVisible(false)
+    );
+
+    return () => {
+      showListener.remove();
+      hideListener.remove();
+    };
+  }, []);
+
+  // Check clipboard for OTP on mount and focus
+  const checkClipboardForOtp = useCallback(async () => {
+    try {
+      const content = await Clipboard.getStringAsync();
+      if (content) {
+        const digits = content.replace(/\D/g, "");
+        if (digits.length === OTP_LENGTH) {
+          setClipboardOtp(digits);
+        }
+      }
+    } catch {
+      // Clipboard access denied
+    }
+  }, []);
+
+  useEffect(() => {
+    checkClipboardForOtp();
+  }, [checkClipboardForOtp]);
+
+  // Paste OTP from clipboard
+  const handlePasteFromClipboard = useCallback(async () => {
+    try {
+      const content = await Clipboard.getStringAsync();
+      if (content) {
+        const digits = content.replace(/\D/g, "").slice(0, OTP_LENGTH);
+        if (digits.length > 0) {
+          const newOtp = digits.split("");
+          while (newOtp.length < OTP_LENGTH) {
+            newOtp.push("");
+          }
+          setOtp(newOtp);
+          setClipboardOtp(null);
+          setError("");
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          if (digits.length === OTP_LENGTH) {
+            Keyboard.dismiss();
+            setFocusedIndex(-1);
+          } else {
+            setFocusedIndex(digits.length);
+          }
+          Toast.show({
+            type: "success",
+            text1: "OTP Pasted",
+            text2: "Code has been filled from clipboard",
+          });
+        }
+      }
+    } catch {
+      Toast.show({
+        type: "error",
+        text1: "Paste Failed",
+        text2: "Could not access clipboard",
+      });
+    }
+  }, []);
 
   // Timer functions
   const restartTimer = useCallback(() => {
@@ -329,7 +409,6 @@ export default function OtpScreen() {
     }, 1000);
   }, []);
 
-  // Initialize timer
   useEffect(() => {
     restartTimer();
     return () => {
@@ -339,18 +418,19 @@ export default function OtpScreen() {
     };
   }, [restartTimer]);
 
-  // Handle app state changes (resume from background)
+  // App state changes
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (state) => {
       if (state === "active") {
         const elapsed = Math.round((Date.now() - lastTickRef.current) / 1000);
         setSecondsLeft(Math.max(RESEND_TIMER - elapsed, 0));
+        checkClipboardForOtp();
       }
     });
     return () => subscription.remove();
-  }, []);
+  }, [checkClipboardForOtp]);
 
-  // Handle hardware back button
+  // Back button handler
   useFocusEffect(
     useCallback(() => {
       const handleBack = () => {
@@ -362,7 +442,7 @@ export default function OtpScreen() {
     }, [])
   );
 
-  // Check for reduced motion
+  // Reduced motion
   useEffect(() => {
     AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion);
   }, []);
@@ -391,7 +471,7 @@ export default function OtpScreen() {
     ]).start();
   }, [reduceMotion, logoAnim, cardAnim]);
 
-  // Shake animation for errors
+  // Shake animation
   const triggerShake = useCallback(() => {
     Animated.sequence([
       Animated.timing(shakeAnim, { toValue: 10, duration: 50, useNativeDriver: true }),
@@ -448,10 +528,11 @@ export default function OtpScreen() {
     restartTimer();
     setOtp(Array(OTP_LENGTH).fill(""));
     setError("");
+    setFocusedIndex(0);
     inputRef.current?.focus();
   });
 
-  // Handle OTP input change
+  // Handle OTP input - FIXED BACKSPACE LOGIC
   const handleOtpChange = useCallback(
     (text: string) => {
       setError("");
@@ -474,35 +555,40 @@ export default function OtpScreen() {
       }
 
       // Handle single digit
-      const newOtp = [...otp];
-      newOtp[focusedIndex] = digits;
-      setOtp(newOtp);
+      if (digits.length === 1) {
+        const newOtp = [...otp];
+        newOtp[focusedIndex] = digits;
+        setOtp(newOtp);
 
-      if (digits && focusedIndex < OTP_LENGTH - 1) {
-        setFocusedIndex(focusedIndex + 1);
-      }
-
-      // Auto-submit when complete
-      if (newOtp.every((d) => d) && digits) {
-        Keyboard.dismiss();
-        setFocusedIndex(-1);
+        if (focusedIndex < OTP_LENGTH - 1) {
+          setFocusedIndex(focusedIndex + 1);
+        } else {
+          Keyboard.dismiss();
+          setFocusedIndex(-1);
+        }
       }
     },
     [otp, focusedIndex]
   );
 
-  // Handle backspace
+  // Handle backspace - COMPLETELY FIXED
   const handleKeyPress = useCallback(
     (e: { nativeEvent: { key: string } }) => {
       if (e.nativeEvent.key === "Backspace") {
+        setError("");
         const newOtp = [...otp];
+        
+        // If current position has a value, clear it
         if (newOtp[focusedIndex]) {
           newOtp[focusedIndex] = "";
           setOtp(newOtp);
+          // Stay at current position
         } else if (focusedIndex > 0) {
-          setFocusedIndex(focusedIndex - 1);
-          newOtp[focusedIndex - 1] = "";
+          // If current is empty, move back and clear previous
+          const prevIndex = focusedIndex - 1;
+          newOtp[prevIndex] = "";
           setOtp(newOtp);
+          setFocusedIndex(prevIndex);
         }
       }
     },
@@ -514,6 +600,15 @@ export default function OtpScreen() {
     setFocusedIndex(index);
     inputRef.current?.focus();
     Haptics.selectionAsync();
+  }, []);
+
+  // Clear all OTP
+  const handleClearAll = useCallback(() => {
+    setOtp(Array(OTP_LENGTH).fill(""));
+    setFocusedIndex(0);
+    setError("");
+    inputRef.current?.focus();
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   }, []);
 
   // Submit OTP
@@ -537,7 +632,7 @@ export default function OtpScreen() {
     resendOtp({ id: params.userId, phoneNumber: params.phoneNumber });
   }, [params.userId, params.phoneNumber, resendOtp]);
 
-  // Handle back navigation
+  // Back navigation
   const handleBack = useCallback(() => {
     setShowBackModal(true);
   }, []);
@@ -561,7 +656,7 @@ export default function OtpScreen() {
         },
         scrollContent: {
           flexGrow: 1,
-          justifyContent: "space-between",
+          paddingBottom: keyboardVisible ? 20 : (isCompactScreen ? 80 : 40),
         },
         bgCircle1: {
           position: "absolute",
@@ -588,7 +683,7 @@ export default function OtpScreen() {
           alignItems: "center",
           paddingHorizontal: spacing.md,
           paddingTop: spacing.sm,
-          paddingBottom: spacing.sm,
+          paddingBottom: isCompactScreen ? spacing.xs : spacing.sm,
         },
         backButton: {
           width: 44,
@@ -604,19 +699,19 @@ export default function OtpScreen() {
         },
         illustrationSection: {
           alignItems: "center",
-          paddingTop: isLargeScreen ? 40 : isSmallScreen ? 10 : 20,
-          paddingBottom: isLargeScreen ? 30 : 15,
+          paddingTop: isCompactScreen ? 8 : isLargeScreen ? 40 : 20,
+          paddingBottom: isCompactScreen ? 8 : 15,
         },
         illustration: {
-          width: isLargeScreen ? 220 : isSmallScreen ? 140 : 180,
-          height: isLargeScreen ? 160 : isSmallScreen ? 100 : 130,
+          width: isCompactScreen ? 140 : isLargeScreen ? 220 : 180,
+          height: isCompactScreen ? 90 : isLargeScreen ? 160 : 130,
         },
         card: {
           backgroundColor: hexToRgba(colors.cardBackground, 0.95),
           borderRadius: radius.xxl,
           borderWidth: 1,
           borderColor: colors.borderColor,
-          padding: isLargeScreen ? spacing.lg : spacing.md,
+          padding: isCompactScreen ? spacing.md : isLargeScreen ? spacing.lg : spacing.md,
           width: cardMaxWidth,
           alignSelf: "center",
           shadowColor: "#000000",
@@ -627,7 +722,7 @@ export default function OtpScreen() {
         },
         cardHeader: {
           alignItems: "center",
-          marginBottom: spacing.md,
+          marginBottom: isCompactScreen ? spacing.sm : spacing.md,
         },
         securityBadge: {
           flexDirection: "row",
@@ -635,38 +730,38 @@ export default function OtpScreen() {
           gap: 6,
           backgroundColor: hexToRgba(colors.success, 0.1),
           paddingHorizontal: 12,
-          paddingVertical: 6,
+          paddingVertical: isCompactScreen ? 4 : 6,
           borderRadius: radius.full,
-          marginBottom: spacing.md,
+          marginBottom: isCompactScreen ? spacing.sm : spacing.md,
         },
         securityText: {
-          fontSize: 12,
+          fontSize: isCompactScreen ? 11 : 12,
           fontWeight: "600",
           color: colors.success,
         },
         title: {
-          fontSize: isLargeScreen ? 28 : 24,
+          fontSize: isCompactScreen ? 22 : isLargeScreen ? 28 : 24,
           fontWeight: "800",
           color: colors.textPrimary,
-          marginBottom: 8,
+          marginBottom: isCompactScreen ? 4 : 8,
           textAlign: "center",
         },
         subtitle: {
-          fontSize: 15,
+          fontSize: isCompactScreen ? 14 : 15,
           color: colors.textSecondary,
           textAlign: "center",
-          lineHeight: 22,
+          lineHeight: isCompactScreen ? 20 : 22,
         },
         phoneRow: {
           flexDirection: "row",
           alignItems: "center",
           justifyContent: "center",
           gap: 8,
-          marginTop: 12,
-          marginBottom: spacing.lg,
+          marginTop: isCompactScreen ? 8 : 12,
+          marginBottom: isCompactScreen ? spacing.md : spacing.lg,
         },
         phoneText: {
-          fontSize: 17,
+          fontSize: isCompactScreen ? 15 : 17,
           fontWeight: "700",
           color: colors.textPrimary,
         },
@@ -679,21 +774,43 @@ export default function OtpScreen() {
           justifyContent: "center",
         },
         otpSection: {
-          marginBottom: spacing.lg,
+          marginBottom: isCompactScreen ? spacing.md : spacing.lg,
+        },
+        otpLabelRow: {
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          marginBottom: isCompactScreen ? 12 : 16,
         },
         otpLabel: {
-          fontSize: 13,
+          fontSize: isCompactScreen ? 12 : 13,
           fontWeight: "600",
           color: colors.textSecondary,
           textTransform: "uppercase",
           letterSpacing: 0.5,
-          textAlign: "center",
-          marginBottom: 16,
+        },
+        otpActions: {
+          flexDirection: "row",
+          gap: 8,
+        },
+        actionButton: {
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 4,
+          paddingHorizontal: 10,
+          paddingVertical: 6,
+          borderRadius: radius.md,
+          backgroundColor: hexToRgba(colors.accent, 0.1),
+        },
+        actionButtonText: {
+          fontSize: 12,
+          fontWeight: "600",
+          color: colors.accent,
         },
         otpBoxes: {
           flexDirection: "row",
           justifyContent: "center",
-          gap: isTablet ? 20 : 14,
+          gap: isCompactScreen ? 10 : isTablet ? 20 : 14,
         },
         hiddenInput: {
           position: "absolute",
@@ -706,17 +823,17 @@ export default function OtpScreen() {
           alignItems: "center",
           justifyContent: "center",
           gap: 6,
-          marginTop: 12,
+          marginTop: isCompactScreen ? 8 : 12,
           paddingHorizontal: spacing.md,
         },
         errorText: {
-          fontSize: 14,
+          fontSize: isCompactScreen ? 13 : 14,
           color: colors.error,
           textAlign: "center",
         },
         buttonContainer: {
-          marginTop: spacing.sm,
-          marginBottom: spacing.md,
+          marginTop: isCompactScreen ? spacing.sm : spacing.sm,
+          marginBottom: isCompactScreen ? spacing.md : spacing.md,
           borderRadius: radius.lg,
           overflow: "hidden",
         },
@@ -724,26 +841,25 @@ export default function OtpScreen() {
           borderRadius: radius.lg,
         },
         buttonContent: {
-          height: 56,
+          height: isCompactScreen ? 50 : 56,
           justifyContent: "center",
           alignItems: "center",
         },
         buttonLabel: {
           color: "#FFFFFF",
-          fontSize: 17,
+          fontSize: isCompactScreen ? 16 : 17,
           fontWeight: "700",
           letterSpacing: 0.3,
         },
         loadingContainer: {
-          height: 56,
+          height: isCompactScreen ? 50 : 56,
           justifyContent: "center",
           alignItems: "center",
         },
         timerSection: {
           alignItems: "center",
-          marginTop: spacing.sm,
+          marginTop: isCompactScreen ? spacing.xs : spacing.sm,
         },
-        // Modal styles
         modalOverlay: {
           flex: 1,
           backgroundColor: hexToRgba("#000000", 0.6),
@@ -823,8 +939,10 @@ export default function OtpScreen() {
       width,
       isLargeScreen,
       isSmallScreen,
+      isCompactScreen,
       isTablet,
       cardMaxWidth,
+      keyboardVisible,
     ]
   );
 
@@ -837,7 +955,7 @@ export default function OtpScreen() {
           translucent={false}
         />
 
-        {/* Background decorative elements */}
+        {/* Background */}
         <View style={StyleSheet.absoluteFill} pointerEvents="none">
           <Animated.View
             style={[
@@ -863,7 +981,7 @@ export default function OtpScreen() {
           />
         </View>
 
-        {/* Header with back button */}
+        {/* Header */}
         <View style={styles.header}>
           <Pressable
             onPress={handleBack}
@@ -885,9 +1003,10 @@ export default function OtpScreen() {
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : "height"}
           style={{ flex: 1 }}
-          keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
+          keyboardVerticalOffset={Platform.OS === "ios" ? 10 : 0}
         >
           <ScrollView
+            ref={scrollViewRef}
             contentContainerStyle={styles.scrollContent}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
@@ -966,7 +1085,43 @@ export default function OtpScreen() {
 
                 {/* OTP Input */}
                 <View style={styles.otpSection}>
-                  <Text style={styles.otpLabel}>Verification Code</Text>
+                  <View style={styles.otpLabelRow}>
+                    <Text style={styles.otpLabel}>Verification Code</Text>
+                    <View style={styles.otpActions}>
+                      {/* Paste from clipboard button */}
+                      <Pressable
+                        onPress={handlePasteFromClipboard}
+                        style={({ pressed }) => [
+                          styles.actionButton,
+                          pressed && { opacity: 0.7 },
+                        ]}
+                        accessibilityRole="button"
+                        accessibilityLabel="Paste OTP from clipboard"
+                        accessible
+                      >
+                        <MaterialCommunityIcons name="content-paste" size={14} color={colors.accent} />
+                        <Text style={styles.actionButtonText}>Paste</Text>
+                      </Pressable>
+                      {/* Clear button */}
+                      {otp.some((d) => d) && (
+                        <Pressable
+                          onPress={handleClearAll}
+                          style={({ pressed }) => [
+                            styles.actionButton,
+                            { backgroundColor: hexToRgba(colors.error, 0.1) },
+                            pressed && { opacity: 0.7 },
+                          ]}
+                          accessibilityRole="button"
+                          accessibilityLabel="Clear all OTP digits"
+                          accessible
+                        >
+                          <MaterialIcons name="clear" size={14} color={colors.error} />
+                          <Text style={[styles.actionButtonText, { color: colors.error }]}>Clear</Text>
+                        </Pressable>
+                      )}
+                    </View>
+                  </View>
+
                   <View style={styles.otpBoxes}>
                     {otp.map((digit, index) => (
                       <Pressable
@@ -981,16 +1136,17 @@ export default function OtpScreen() {
                           isFocused={focusedIndex === index}
                           hasError={!!error}
                           index={index}
+                          size={otpBoxSize}
                         />
                       </Pressable>
                     ))}
                   </View>
 
-                  {/* Hidden input for keyboard */}
+                  {/* Hidden input */}
                   <TextInput
                     ref={inputRef}
                     style={styles.hiddenInput}
-                    value={otp.join("")}
+                    value=""
                     onChangeText={handleOtpChange}
                     onKeyPress={handleKeyPress}
                     keyboardType="number-pad"
@@ -1060,6 +1216,7 @@ export default function OtpScreen() {
                     seconds={secondsLeft}
                     onResend={handleResend}
                     isResending={isResending}
+                    isCompact={isCompactScreen}
                   />
                 </View>
               </Animated.View>
@@ -1067,7 +1224,7 @@ export default function OtpScreen() {
           </ScrollView>
         </KeyboardAvoidingView>
 
-        {/* Back Confirmation Modal */}
+        {/* Back Modal */}
         <Modal
           visible={showBackModal}
           transparent
