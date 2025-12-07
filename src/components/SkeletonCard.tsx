@@ -11,37 +11,39 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useTheme } from "@/src/theme/ThemeContext";
 import { hexToRgba } from "@/src/theme";
 
+/* ─────────────────────────────────────────────────────────────────────────────
+   SKELETON CARD - Matches PropertyCard design (No Images)
+───────────────────────────────────────────────────────────────────────────── */
+
 const SkeletonCard: React.FC = () => {
-  const { width: screenWidth, fontScale } = useWindowDimensions();
-  const { colors, scheme } = useTheme();
+  const { width: screenWidth } = useWindowDimensions();
+  const { colors, radius, spacing, scheme } = useTheme();
 
-  // --- match PropertyCard grid logic ---
-  let numColumns = 2;
-  if (screenWidth >= 900) numColumns = 3;
-  else if (screenWidth >= 600) numColumns = 2;
-  else numColumns = 1;
+  // Responsive sizing - match PropertyCard
+  const numColumns = screenWidth >= 1024 ? 4 : screenWidth >= 768 ? 3 : screenWidth >= 600 ? 2 : 1;
+  const cardMargin = 8;
+  const cardWidth = (screenWidth - spacing.md * 2 - cardMargin * (numColumns - 1)) / numColumns;
+  const isCompact = cardWidth < 320;
 
-  const cardMargin = 12;
-  const cardWidth = (screenWidth - cardMargin * (numColumns + 1)) / numColumns;
-
-  // --- reduced motion support for accessibility ---
+  // Reduced motion support
   const [reduceMotion, setReduceMotion] = useState(false);
   useEffect(() => {
     let mounted = true;
     AccessibilityInfo.isReduceMotionEnabled().then((res) => mounted && setReduceMotion(res));
     const sub = AccessibilityInfo.addEventListener?.("reduceMotionChanged", setReduceMotion);
     return () => {
-      // @ts-expect-error RN < 0.73 compat
+      mounted = false;
+      // @ts-expect-error RN compat
       sub?.remove?.();
     };
   }, []);
 
-  // --- shimmer animation ---
-  const anim = useRef(new Animated.Value(0)).current;
+  // Shimmer animation
+  const shimmerAnim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     if (reduceMotion) return;
     const loop = Animated.loop(
-      Animated.timing(anim, {
+      Animated.timing(shimmerAnim, {
         toValue: 1,
         duration: 1200,
         useNativeDriver: true,
@@ -49,143 +51,30 @@ const SkeletonCard: React.FC = () => {
     );
     loop.start();
     return () => loop.stop();
-  }, [anim, reduceMotion]);
+  }, [shimmerAnim, reduceMotion]);
 
-  const shimmerWidth = Math.max(120, Math.min(cardWidth * 0.55, 240));
-  const translateX = anim.interpolate({
+  const shimmerWidth = Math.max(100, cardWidth * 0.5);
+  const translateX = shimmerAnim.interpolate({
     inputRange: [0, 1],
     outputRange: [-shimmerWidth, cardWidth + shimmerWidth],
   });
 
-  // lighter shimmer on dark; brighter on light
-  const shimmerTint = scheme === "dark" ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.55)";
+  // Theme-aware colors
+  const shimmerTint = scheme === "dark" ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.6)";
+  const surfaceBg = scheme === "dark"
+    ? hexToRgba(colors.white, 0.06)
+    : hexToRgba(colors.black, 0.04);
 
-  const dividerColor = hexToRgba(colors.textSecondary, scheme === "dark" ? 0.14 : 0.18);
-  const surfaceTint = useMemo(
-    () => ({
-      backgroundColor:
-        scheme === "dark" ? hexToRgba(colors.white, 0.06) : hexToRgba(colors.black, 0.04),
-    }),
-    [scheme, colors]
-  );
-
-  const baseRadius = 20;
-  const minCardHeight = Math.max(245, 220 * fontScale);
-
-  const styles = useMemo(
-    () =>
-      StyleSheet.create({
-        shadow: {
-          shadowColor: "#000",
-          shadowOffset: { width: 0, height: 6 },
-          shadowOpacity: 0.11,
-          shadowRadius: 10,
-          elevation: 12,
-          borderRadius: baseRadius - 4,
-        },
-        card: {
-          minHeight: minCardHeight,
-          borderRadius: baseRadius,
-          overflow: "hidden",
-          backgroundColor: colors.cardBackground,
-        },
-
-        header: {
-          paddingVertical: 15,
-          paddingHorizontal: 20,
-          borderTopLeftRadius: baseRadius,
-          borderTopRightRadius: baseRadius,
-        },
-
-        // content
-        section: { paddingHorizontal: 15, paddingVertical: 14, gap: 7 },
-
-        statRow: {
-          flexDirection: "row",
-          justifyContent: "space-between",
-          gap: 7,
-        },
-        statPill: {
-          width: "48%",
-          height: Math.max(48, 42 * fontScale),
-          borderRadius: 12,
-          ...surfaceTint,
-          overflow: "hidden",
-        },
-
-        financialRow: {
-          flexDirection: "row",
-          justifyContent: "space-between",
-          paddingHorizontal: 16,
-          paddingVertical: 10,
-          borderTopWidth: StyleSheet.hairlineWidth,
-          borderBottomWidth: StyleSheet.hairlineWidth,
-          borderColor: dividerColor,
-          backgroundColor: colors.cardBackground,
-          gap: 10,
-        },
-        finBlock: {
-          flex: 1,
-          height: Math.max(38, 34 * fontScale),
-          borderRadius: 10,
-          ...surfaceTint,
-          overflow: "hidden",
-        },
-
-        footer: {
-          paddingHorizontal: 18,
-          paddingVertical: 12,
-          backgroundColor: colors.cardBackground,
-          borderBottomLeftRadius: baseRadius,
-          borderBottomRightRadius: baseRadius,
-        },
-
-        // skeleton bars
-        barLg: { height: Math.max(18, 16 * fontScale), borderRadius: 8 },
-        barSm: {
-          height: Math.max(14, 12 * fontScale),
-          borderRadius: 8,
-          marginTop: 10,
-          width: "65%",
-        },
-
-        // shimmer overlay
-        shimmerWrap: { ...StyleSheet.absoluteFillObject, overflow: "hidden" },
-        shimmerStripe: {
-          position: "absolute",
-          left: 0,
-          top: 0,
-          bottom: 0,
-          width: shimmerWidth,
-          transform: [{ translateX }],
-          opacity: 0.7,
-        },
-      }),
-    [
-      baseRadius,
-      colors.cardBackground,
-      dividerColor,
-      fontScale,
-      minCardHeight,
-      shimmerWidth,
-      surfaceTint,
-      translateX,
-    ]
-  );
-
-  const Shimmer: React.FC<{ style?: any }> = ({ style }) => (
-    <View
-      accessible={true}
-      accessibilityRole={Platform.OS === "web" ? undefined : "image"}
-      importantForAccessibility="no"
-      pointerEvents="none"
-      style={[style]}
-    >
-      {/* base */}
-      <View style={{ flex: 1, backgroundColor: colors.cardSurface }} />
-      {/* overlay */}
+  // Shimmer component
+  const Shimmer: React.FC<{ style?: object }> = ({ style }) => (
+    <View style={[style, { overflow: "hidden", backgroundColor: surfaceBg }]}>
       {!reduceMotion && (
-        <Animated.View style={styles.shimmerStripe}>
+        <Animated.View
+          style={[
+            StyleSheet.absoluteFill,
+            { width: shimmerWidth, transform: [{ translateX }] },
+          ]}
+        >
           <LinearGradient
             colors={["transparent", shimmerTint, "transparent"]}
             start={{ x: 0, y: 0 }}
@@ -197,9 +86,124 @@ const SkeletonCard: React.FC = () => {
     </View>
   );
 
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        container: {
+          width: numColumns === 1 ? "100%" : cardWidth,
+          marginBottom: cardMargin,
+        },
+        card: {
+          backgroundColor: colors.cardBackground,
+          borderRadius: radius.xl,
+          overflow: "hidden",
+          borderWidth: 1,
+          borderColor: hexToRgba(colors.borderColor, 0.5),
+          ...(Platform.OS === "ios"
+            ? {
+                shadowColor: "#000000",
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.1,
+                shadowRadius: 12,
+              }
+            : { elevation: 5 }),
+        },
+        headerArea: {
+          height: isCompact ? 100 : 110,
+          backgroundColor: hexToRgba(colors.primary, 0.2),
+          paddingHorizontal: isCompact ? 14 : 16,
+          paddingTop: isCompact ? 14 : 16,
+          paddingBottom: isCompact ? 12 : 14,
+        },
+        headerTopRow: {
+          flexDirection: "row",
+          justifyContent: "space-between",
+          marginBottom: 10,
+        },
+        headerLeft: {
+          flex: 1,
+          marginRight: 10,
+        },
+        propertyIdSkeleton: {
+          width: 80,
+          height: 20,
+          borderRadius: radius.md,
+          marginBottom: 8,
+        },
+        nameSkeleton: {
+          width: "85%",
+          height: isCompact ? 20 : 22,
+          borderRadius: radius.md,
+          marginBottom: 6,
+        },
+        locationSkeleton: {
+          width: "70%",
+          height: 14,
+          borderRadius: radius.sm,
+        },
+        headerRight: {
+          alignItems: "flex-end",
+          gap: 6,
+        },
+        badgeSkeleton: {
+          width: 90,
+          height: 28,
+          borderRadius: radius.full,
+        },
+        menuSkeleton: {
+          width: 32,
+          height: 32,
+          borderRadius: 16,
+        },
+        content: {
+          padding: isCompact ? 14 : 16,
+        },
+        infoRow: {
+          flexDirection: "row",
+          justifyContent: "space-between",
+          marginBottom: 12,
+        },
+        mealBadgeSkeleton: {
+          width: 80,
+          height: 28,
+          borderRadius: radius.full,
+        },
+        occupancySkeleton: {
+          width: 100,
+          height: 32,
+          borderRadius: radius.full,
+        },
+        statsGrid: {
+          flexDirection: "row",
+          gap: isCompact ? 6 : 8,
+          marginBottom: 14,
+        },
+        statItem: {
+          flex: 1,
+          height: isCompact ? 70 : 75,
+          borderRadius: radius.md,
+        },
+        divider: {
+          height: 1,
+          backgroundColor: hexToRgba(colors.borderColor, 0.5),
+          marginBottom: 14,
+        },
+        financialRow: {
+          flexDirection: "row",
+          gap: 8,
+        },
+        financialItem: {
+          flex: 1,
+          height: isCompact ? 75 : 80,
+          borderRadius: radius.md,
+        },
+      }),
+    [colors, radius, cardWidth, numColumns, isCompact, surfaceBg]
+  );
+
   return (
     <View
-      style={[styles.shadow, { width: cardWidth, margin: cardMargin / 2 }]}
+      style={styles.container}
       accessible
       accessibilityRole="progressbar"
       accessibilityLabel="Loading property card"
@@ -207,44 +211,45 @@ const SkeletonCard: React.FC = () => {
       pointerEvents="none"
     >
       <View style={styles.card}>
-        {/* Header gradient to match PropertyCard */}
-        <LinearGradient
-          colors={colors.enabledGradient}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.header}
-        >
-          <Shimmer style={styles.barLg} />
-          <Shimmer style={styles.barSm} />
-        </LinearGradient>
-
-        {/* Stats grid (5 pills) */}
-        <View style={styles.section}>
-          <View style={styles.statRow}>
-            <Shimmer style={styles.statPill} />
-            <Shimmer style={styles.statPill} />
-          </View>
-          <View style={styles.statRow}>
-            <Shimmer style={styles.statPill} />
-            <Shimmer style={styles.statPill} />
-          </View>
-          <View style={styles.statRow}>
-            <Shimmer style={[styles.statPill, { width: "48%" }]} />
+        {/* Header Gradient Area */}
+        <View style={styles.headerArea}>
+          <View style={styles.headerTopRow}>
+            <View style={styles.headerLeft}>
+              <Shimmer style={styles.propertyIdSkeleton} />
+              <Shimmer style={styles.nameSkeleton} />
+              <Shimmer style={styles.locationSkeleton} />
+            </View>
+            <View style={styles.headerRight}>
+              <Shimmer style={styles.badgeSkeleton} />
+              <Shimmer style={styles.menuSkeleton} />
+            </View>
           </View>
         </View>
 
-        {/* Financial row (3 blocks) */}
-        <View style={styles.financialRow}>
-          <Shimmer style={styles.finBlock} />
-          <Shimmer style={styles.finBlock} />
-          <Shimmer style={styles.finBlock} />
-        </View>
+        {/* Content */}
+        <View style={styles.content}>
+          {/* Info Row */}
+          <View style={styles.infoRow}>
+            <Shimmer style={styles.mealBadgeSkeleton} />
+            <Shimmer style={styles.occupancySkeleton} />
+          </View>
 
-        {/* Footer */}
-        <View style={styles.footer}>
-          <Shimmer
-            style={{ height: Math.max(12, 10 * fontScale), borderRadius: 8, width: "35%" }}
-          />
+          {/* Stats Grid */}
+          <View style={styles.statsGrid}>
+            {[1, 2, 3, 4, 5].map((i) => (
+              <Shimmer key={i} style={styles.statItem} />
+            ))}
+          </View>
+
+          {/* Divider */}
+          <View style={styles.divider} />
+
+          {/* Financial Row */}
+          <View style={styles.financialRow}>
+            <Shimmer style={styles.financialItem} />
+            <Shimmer style={styles.financialItem} />
+            <Shimmer style={styles.financialItem} />
+          </View>
         </View>
       </View>
     </View>

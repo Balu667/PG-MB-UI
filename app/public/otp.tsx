@@ -89,15 +89,15 @@ const OtpBox = React.memo<OtpBoxProps>(({ value, isFocused, hasError, index, siz
       Animated.loop(
         Animated.sequence([
           Animated.timing(bounceAnim, {
-            toValue: 1,
+          toValue: 1,
             duration: 600,
-            useNativeDriver: true,
-          }),
+          useNativeDriver: true,
+        }),
           Animated.timing(bounceAnim, {
             toValue: 0,
             duration: 600,
-            useNativeDriver: true,
-          }),
+          useNativeDriver: true,
+        }),
         ])
       ).start();
     } else {
@@ -487,18 +487,18 @@ export default function OtpScreen() {
   const onVerifySuccess = useCallback(
     async (token: string) => {
       try {
-        await AsyncStorage.setItem("userToken", token);
-        const decoded = jwtDecode<JwtPayload>(token);
-        dispatch(
-          setProfileDetails({
-            userId: decoded._id,
-            signedIn: true,
-            phoneNumber: decoded.phoneNumber,
-            role: decoded.role,
-          })
-        );
+    await AsyncStorage.setItem("userToken", token);
+    const decoded = jwtDecode<JwtPayload>(token);
+    dispatch(
+      setProfileDetails({
+        userId: decoded._id,
+        signedIn: true,
+        phoneNumber: decoded.phoneNumber,
+        role: decoded.role,
+      })
+    );
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        router.replace("/protected/(tabs)");
+    router.replace("/protected/(tabs)");
       } catch {
         setError("Something went wrong. Please try again.");
         setIsVerifying(false);
@@ -958,7 +958,7 @@ export default function OtpScreen() {
         {/* Background */}
         <View style={StyleSheet.absoluteFill} pointerEvents="none">
           <Animated.View
-            style={[
+        style={[
               styles.bgCircle1,
               {
                 opacity: logoAnim.interpolate({
@@ -983,11 +983,11 @@ export default function OtpScreen() {
 
         {/* Header */}
         <View style={styles.header}>
-          <Pressable
+        <Pressable
             onPress={handleBack}
             style={({ pressed }) => [styles.backButton, pressed && { opacity: 0.7 }]}
             android_ripple={{ color: hexToRgba(colors.textSecondary, 0.2), borderless: true }}
-            accessibilityRole="button"
+          accessibilityRole="button"
             accessibilityLabel="Go back"
             accessibilityHint="Returns to the login screen"
             accessible
@@ -997,7 +997,7 @@ export default function OtpScreen() {
               size={24}
               color={colors.textPrimary}
             />
-          </Pressable>
+        </Pressable>
         </View>
 
         <KeyboardAvoidingView
@@ -1030,16 +1030,16 @@ export default function OtpScreen() {
                   },
                 ]}
               >
-                <Image
-                  source={require("@/assets/images/otp-image.png")}
+            <Image
+              source={require("@/assets/images/otp-image.png")}
                   style={styles.illustration}
-                  resizeMode="contain"
+              resizeMode="contain"
                   accessibilityLabel="OTP verification illustration"
-                />
-              </Animated.View>
+            />
+          </Animated.View>
 
               {/* OTP Card */}
-              <Animated.View
+          <Animated.View
                 style={[
                   styles.card,
                   {
@@ -1065,7 +1065,7 @@ export default function OtpScreen() {
                   <Text style={styles.title}>Enter OTP</Text>
                   <Text style={styles.subtitle}>
                     We've sent a 4-digit verification code to
-                  </Text>
+            </Text>
                   <View style={styles.phoneRow}>
                     <Text style={styles.phoneText}>{formattedPhone}</Text>
                     <Pressable
@@ -1095,7 +1095,7 @@ export default function OtpScreen() {
                           styles.actionButton,
                           pressed && { opacity: 0.7 },
                         ]}
-                        accessibilityRole="button"
+                accessibilityRole="button"
                         accessibilityLabel="Paste OTP from clipboard"
                         accessible
                       >
@@ -1120,7 +1120,7 @@ export default function OtpScreen() {
                         </Pressable>
                       )}
                     </View>
-                  </View>
+            </View>
 
                   <View style={styles.otpBoxes}>
                     {otp.map((digit, index) => (
@@ -1139,8 +1139,8 @@ export default function OtpScreen() {
                           size={otpBoxSize}
                         />
                       </Pressable>
-                    ))}
-                  </View>
+              ))}
+            </View>
 
                   {/* Hidden input */}
                   <TextInput
@@ -1165,7 +1165,7 @@ export default function OtpScreen() {
                       <MaterialIcons name="error-outline" size={16} color={colors.error} />
                       <Text style={styles.errorText}>{error}</Text>
                     </View>
-                  ) : null}
+            ) : null}
                 </View>
 
                 {/* Verify Button */}
@@ -1207,8 +1207,8 @@ export default function OtpScreen() {
                         Verify & Continue
                       </Button>
                     </LinearGradient>
-                  )}
-                </View>
+              )}
+            </View>
 
                 {/* Resend Timer */}
                 <View style={styles.timerSection}>
@@ -1219,7 +1219,7 @@ export default function OtpScreen() {
                     isCompact={isCompactScreen}
                   />
                 </View>
-              </Animated.View>
+          </Animated.View>
             </View>
           </ScrollView>
         </KeyboardAvoidingView>

@@ -11,6 +11,7 @@ export default function ProtectedLayout() {
   // Screens that should NOT show AppHeader (we handle header ourselves)
   const HEADERLESS = new Set([
     "/protected/AddandEditProperty",
+    "/protected/property/edit", // hide header for Add/Edit Property screen
     "/protected/rooms", // hide header for Add/Edit Room screen
     "/protected/advancedBooking",
     "/protected/tenant", // hide header for Add/Edit Tenant screen
