@@ -133,7 +133,7 @@ const OtpBox = React.memo<OtpBoxProps>(({ value, isFocused, hasError, index, siz
           shadowOffset: { width: 0, height: isFocused ? 4 : 2 },
           shadowOpacity: isFocused ? 0.2 : 0.08,
           shadowRadius: isFocused ? 8 : 4,
-          elevation: isFocused ? 6 : 2,
+          // elevation: isFocused ? 6 : 2,
           transform: [
             {
               scale: bounceAnim.interpolate({

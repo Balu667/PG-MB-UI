@@ -16,10 +16,8 @@ import {
   ActivityIndicator,
   Pressable,
   StatusBar,
-  ScrollView,
   useWindowDimensions,
   I18nManager,
-  Alert,
   TextInput,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
@@ -47,7 +45,6 @@ const formatPhoneDisplay = (phone: string): string => {
 const cleanPhoneNumber = (text: string): string => {
   let digits = text.replace(/\D/g, "");
   
-  // Handle paste cases with country code
   if (text.includes("+91")) {
     digits = digits.slice(-10);
   } else if (digits.startsWith("91") && digits.length === 12) {
@@ -75,12 +72,11 @@ interface FeatureItemProps {
   icon: string;
   text: string;
   delay: number;
+  isCompact: boolean;
 }
 
-const FeatureItem = React.memo<FeatureItemProps>(({ icon, text, delay }) => {
-  const { colors, spacing } = useTheme();
-  const { height } = useWindowDimensions();
-  const isCompact = height < 800;
+const FeatureItem = React.memo<FeatureItemProps>(({ icon, text, delay, isCompact }) => {
+  const { colors } = useTheme();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(20)).current;
 
@@ -109,25 +105,25 @@ const FeatureItem = React.memo<FeatureItemProps>(({ icon, text, delay }) => {
       style={{
         flexDirection: "row",
         alignItems: "center",
-        gap: isCompact ? 8 : 10,
-        marginBottom: isCompact ? 8 : 12,
+        gap: isCompact ? 6 : 8,
+        marginBottom: isCompact ? 6 : 10,
         opacity: fadeAnim,
         transform: [{ translateX: slideAnim }],
       }}
     >
       <View
         style={{
-          width: isCompact ? 24 : 28,
-          height: isCompact ? 24 : 28,
-          borderRadius: isCompact ? 12 : 14,
+          width: isCompact ? 20 : 24,
+          height: isCompact ? 20 : 24,
+          borderRadius: isCompact ? 10 : 12,
           backgroundColor: hexToRgba(colors.accent, 0.15),
           alignItems: "center",
           justifyContent: "center",
         }}
       >
-        <MaterialCommunityIcons name={icon as never} size={isCompact ? 12 : 14} color={colors.accent} />
+        <MaterialCommunityIcons name={icon as never} size={isCompact ? 10 : 12} color={colors.accent} />
       </View>
-      <Text style={{ fontSize: isCompact ? 12 : 13, color: colors.textSecondary, flex: 1 }}>{text}</Text>
+      <Text style={{ fontSize: isCompact ? 11 : 12, color: colors.textSecondary, flex: 1 }}>{text}</Text>
     </Animated.View>
   );
 });
@@ -143,13 +139,14 @@ export default function LoginScreen() {
   const [error, setError] = useState("");
   const [isFocused, setIsFocused] = useState(false);
   const [reduceMotion, setReduceMotion] = useState(false);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
 
   const inputRef = useRef<TextInput>(null);
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const router = useRouter();
-  const { colors, spacing, radius, typography } = useTheme();
+  const { colors, spacing, radius } = useTheme();
 
   // Animations
   const logoAnim = useRef(new Animated.Value(0)).current;
@@ -158,14 +155,28 @@ export default function LoginScreen() {
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const shakeAnim = useRef(new Animated.Value(0)).current;
 
-  // Responsive sizing - calculate based on pixel density
-  // High DPI Android devices (like Realme P4 Pro) have smaller effective screen area
-  const effectiveHeight = height;
-  const isSmallScreen = width < 350 || effectiveHeight < 700;
-  const isCompactScreen = effectiveHeight < 800; // For high-DPI Android devices
-  const isLargeScreen = width > 500 && effectiveHeight > 900;
+  // Responsive sizing
+  const isCompactScreen = height < 750;
+  const isVeryCompact = height < 680;
+  const isLargeScreen = width > 500 && height > 900;
   const isTablet = width > 768;
   const cardMaxWidth = Math.min(width - spacing.md * 2, 480);
+
+  // Keyboard listeners
+  useEffect(() => {
+    const showListener = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
+      () => setKeyboardVisible(true)
+    );
+    const hideListener = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
+      () => setKeyboardVisible(false)
+    );
+    return () => {
+      showListener.remove();
+      hideListener.remove();
+    };
+  }, []);
 
   // Check for reduced motion
   useEffect(() => {
@@ -236,11 +247,10 @@ export default function LoginScreen() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
   }, [shakeAnim]);
 
-  // API integration - Login returns user data for OTP verification
+  // API integration
   const onLoginSuccess = useCallback(
     (data: { token: string; name: string; _id?: string; userId?: string }) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      // Use _id or userId from API response, fallback to token if not available
       const userId = data._id || data.userId || data.token;
       nav.navigate("otp", { phoneNumber: phone, userId });
     },
@@ -256,13 +266,11 @@ export default function LoginScreen() {
     setPhone(cleaned);
     setError("");
 
-    // Auto dismiss keyboard when 10 digits
     if (cleaned.length === 10) {
       Keyboard.dismiss();
     }
   }, []);
 
-  // Handle input focus
   const handleInputFocus = useCallback(() => {
     setIsFocused(true);
   }, []);
@@ -307,6 +315,10 @@ export default function LoginScreen() {
   const isValid = phone.length === 10 && isValidIndianPhone(phone);
   const canSubmit = isValid && !isLoading;
 
+  // Hide features and footer when keyboard is open on compact screens
+  const showFeatures = !keyboardVisible || !isCompactScreen;
+  const showFooter = !keyboardVisible;
+
   // Styles
   const styles = useMemo(
     () =>
@@ -315,13 +327,10 @@ export default function LoginScreen() {
           flex: 1,
           backgroundColor: colors.background,
         },
-        scrollContent: {
-          flexGrow: 1,
+        innerContainer: {
+          flex: 1,
           justifyContent: "space-between",
-          minHeight: effectiveHeight - insets.top - 20, // Ensure scrollability
-          paddingBottom: isCompactScreen ? 100 : 20, // Extra padding for compact screens
         },
-        // Background elements
         bgCircle1: {
           position: "absolute",
           width: isLargeScreen ? width * 1.4 : width * 1.2,
@@ -342,27 +351,25 @@ export default function LoginScreen() {
           right: isLargeScreen ? -width * 0.35 : -width * 0.25,
           opacity: 0.7,
         },
-        // Content
         mainContent: {
           flex: 1,
           paddingHorizontal: spacing.md,
+          justifyContent: "center",
         },
         logoSection: {
           alignItems: "center",
-          paddingTop: isLargeScreen ? 80 : isCompactScreen ? 16 : isSmallScreen ? 20 : 40,
-          paddingBottom: isLargeScreen ? 40 : isCompactScreen ? 12 : 20,
+          marginBottom: isVeryCompact ? 8 : isCompactScreen ? 12 : 20,
         },
         logo: {
-          width: isLargeScreen ? 200 : isCompactScreen ? 130 : isSmallScreen ? 140 : 170,
-          height: isLargeScreen ? 130 : isCompactScreen ? 85 : isSmallScreen ? 90 : 110,
+          width: isVeryCompact ? 100 : isCompactScreen ? 120 : isLargeScreen ? 180 : 150,
+          height: isVeryCompact ? 65 : isCompactScreen ? 78 : isLargeScreen ? 117 : 98,
         },
-        // Card
         card: {
           backgroundColor: hexToRgba(colors.cardBackground, 0.95),
           borderRadius: radius.xxl,
           borderWidth: 1,
           borderColor: colors.borderColor,
-          padding: isLargeScreen ? spacing.lg : spacing.md,
+          padding: isVeryCompact ? spacing.sm + 4 : isCompactScreen ? spacing.md : spacing.lg,
           width: cardMaxWidth,
           alignSelf: "center",
           shadowColor: "#000000",
@@ -372,28 +379,27 @@ export default function LoginScreen() {
           elevation: 8,
         },
         cardHeader: {
-          marginBottom: spacing.md,
+          marginBottom: isVeryCompact ? spacing.xs : isCompactScreen ? spacing.sm : spacing.md,
         },
         welcomeText: {
-          fontSize: isLargeScreen ? 28 : 24,
+          fontSize: isVeryCompact ? 20 : isCompactScreen ? 22 : isLargeScreen ? 28 : 24,
           fontWeight: "800",
           color: colors.textPrimary,
-          marginBottom: 8,
+          marginBottom: isVeryCompact ? 4 : 6,
         },
         subtitleText: {
-          fontSize: 15,
+          fontSize: isVeryCompact ? 13 : 14,
           color: colors.textSecondary,
-          lineHeight: 22,
+          lineHeight: isVeryCompact ? 18 : 20,
         },
-        // Input section
         inputSection: {
-          marginTop: spacing.sm,
+          marginTop: isVeryCompact ? spacing.xs : spacing.sm,
         },
         inputLabel: {
-          fontSize: 13,
+          fontSize: isVeryCompact ? 11 : 12,
           fontWeight: "600",
           color: colors.textSecondary,
-          marginBottom: 8,
+          marginBottom: isVeryCompact ? 4 : 6,
           textTransform: "uppercase",
           letterSpacing: 0.5,
         },
@@ -408,56 +414,54 @@ export default function LoginScreen() {
             : isFocused
             ? colors.accent
             : hexToRgba(colors.textSecondary, 0.15),
-          paddingHorizontal: 16,
-          height: 60,
-          gap: 12,
+          paddingHorizontal: isVeryCompact ? 12 : 16,
+          height: isVeryCompact ? 50 : 56,
+          gap: 10,
         },
         countryCode: {
           flexDirection: "row",
           alignItems: "center",
-          gap: 8,
-          paddingRight: 12,
+          gap: 6,
+          paddingRight: 10,
           borderRightWidth: 1,
           borderRightColor: hexToRgba(colors.textSecondary, 0.2),
         },
         flagEmoji: {
-          fontSize: 20,
+          fontSize: isVeryCompact ? 16 : 18,
         },
         countryCodeText: {
-          fontSize: 16,
+          fontSize: isVeryCompact ? 14 : 15,
           fontWeight: "700",
           color: colors.textPrimary,
         },
         phoneInput: {
           flex: 1,
-          fontSize: 18,
+          fontSize: isVeryCompact ? 16 : 17,
           fontWeight: "600",
           color: colors.textPrimary,
           letterSpacing: 1,
         },
         clearButton: {
-          width: 32,
-          height: 32,
-          borderRadius: 16,
+          width: 28,
+          height: 28,
+          borderRadius: 14,
           backgroundColor: hexToRgba(colors.textSecondary, 0.1),
           alignItems: "center",
           justifyContent: "center",
         },
-        // Error
         errorContainer: {
           flexDirection: "row",
           alignItems: "center",
-          gap: 6,
-          marginTop: 10,
+          gap: 4,
+          marginTop: 6,
         },
         errorText: {
-          fontSize: 13,
+          fontSize: 12,
           color: colors.error,
           flex: 1,
         },
-        // Button
         buttonContainer: {
-          marginTop: spacing.md,
+          marginTop: isVeryCompact ? spacing.sm : spacing.md,
           borderRadius: radius.lg,
           overflow: "hidden",
         },
@@ -465,72 +469,69 @@ export default function LoginScreen() {
           borderRadius: radius.lg,
         },
         buttonContent: {
-          height: 56,
+          height: isVeryCompact ? 48 : 52,
           justifyContent: "center",
           alignItems: "center",
         },
         buttonLabel: {
           color: "#FFFFFF",
-          fontSize: 17,
+          fontSize: isVeryCompact ? 15 : 16,
           fontWeight: "700",
           letterSpacing: 0.3,
         },
         loadingContainer: {
-          height: 56,
+          height: isVeryCompact ? 48 : 52,
           justifyContent: "center",
           alignItems: "center",
         },
-        // Features
         featuresSection: {
-          marginTop: isCompactScreen ? spacing.md : spacing.lg,
-          paddingTop: isCompactScreen ? spacing.sm : spacing.md,
+          marginTop: isVeryCompact ? spacing.sm : spacing.md,
+          paddingTop: isVeryCompact ? spacing.xs : spacing.sm,
           borderTopWidth: 1,
           borderTopColor: hexToRgba(colors.textSecondary, 0.1),
         },
         featuresTitle: {
-          fontSize: 12,
+          fontSize: isVeryCompact ? 10 : 11,
           fontWeight: "600",
           color: colors.textMuted,
           textTransform: "uppercase",
           letterSpacing: 1,
-          marginBottom: isCompactScreen ? 8 : 12,
+          marginBottom: isVeryCompact ? 6 : 8,
         },
-        // Footer
         footer: {
           paddingHorizontal: spacing.md,
-          paddingBottom: insets.bottom + spacing.md,
-          paddingTop: spacing.md,
-          gap: spacing.md,
+          paddingBottom: insets.bottom + (isVeryCompact ? spacing.xs : spacing.sm),
+          paddingTop: isVeryCompact ? spacing.xs : spacing.sm,
+          gap: isVeryCompact ? spacing.xs : spacing.sm,
         },
         helpButton: {
           flexDirection: "row",
           alignItems: "center",
           justifyContent: "center",
-          gap: 8,
-          paddingVertical: 14,
+          gap: 6,
+          paddingVertical: isVeryCompact ? 10 : 12,
           borderRadius: radius.lg,
           backgroundColor: hexToRgba(colors.accent, 0.08),
         },
         helpButtonText: {
-          fontSize: 15,
+          fontSize: isVeryCompact ? 13 : 14,
           fontWeight: "600",
           color: colors.accent,
         },
         legalText: {
-          fontSize: 12,
+          fontSize: isVeryCompact ? 10 : 11,
           color: colors.textMuted,
           textAlign: "center",
-          lineHeight: 18,
+          lineHeight: isVeryCompact ? 14 : 16,
         },
         linkText: {
           color: colors.link,
           fontWeight: "600",
         },
         versionText: {
-          fontSize: 11,
+          fontSize: isVeryCompact ? 9 : 10,
           color: colors.textMuted,
           textAlign: "center",
-          marginTop: 8,
         },
       }),
     [
@@ -538,14 +539,12 @@ export default function LoginScreen() {
       spacing,
       radius,
       isLargeScreen,
-      isSmallScreen,
       isCompactScreen,
-      effectiveHeight,
+      isVeryCompact,
       width,
       cardMaxWidth,
       error,
       isFocused,
-      insets.top,
       insets.bottom,
     ]
   );
@@ -590,12 +589,8 @@ export default function LoginScreen() {
           style={{ flex: 1 }}
           keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
         >
-          <ScrollView
-            contentContainerStyle={styles.scrollContent}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-            bounces={false}
-          >
+          <View style={styles.innerContainer}>
+            {/* Main Content */}
             <View style={styles.mainContent}>
               {/* Logo Section */}
               <Animated.View
@@ -650,8 +645,7 @@ export default function LoginScreen() {
                 <View style={styles.cardHeader}>
                   <Text style={styles.welcomeText}>Welcome! 👋</Text>
                   <Text style={styles.subtitleText}>
-                    Enter your mobile number to continue. We'll send you a one-time verification
-                    code.
+                    Enter your mobile number to continue. We'll send you a verification code.
                   </Text>
                 </View>
 
@@ -696,7 +690,7 @@ export default function LoginScreen() {
                         accessibilityLabel="Clear phone number"
                         accessible
                       >
-                        <MaterialIcons name="close" size={18} color={colors.textSecondary} />
+                        <MaterialIcons name="close" size={16} color={colors.textSecondary} />
                       </Pressable>
                     )}
                   </View>
@@ -704,7 +698,7 @@ export default function LoginScreen() {
                   {/* Error Message */}
                   {error ? (
                     <View style={styles.errorContainer}>
-                      <MaterialIcons name="error-outline" size={16} color={colors.error} />
+                      <MaterialIcons name="error-outline" size={14} color={colors.error} />
                       <Text style={styles.errorText}>{error}</Text>
                     </View>
                   ) : null}
@@ -757,61 +751,61 @@ export default function LoginScreen() {
                   )}
                 </Animated.View>
 
-                {/* Features */}
-                <View style={styles.featuresSection}>
-                  <Text style={styles.featuresTitle}>What you can do</Text>
-                  <FeatureItem icon="home-city" text="Manage multiple PG properties" delay={400} />
-                  <FeatureItem icon="account-group" text="Track tenants and bookings" delay={500} />
-                  <FeatureItem
-                    icon="cash-multiple"
-                    text="Collect rent and manage dues"
-                    delay={600}
-                  />
-                </View>
+                {/* Features - Hide when keyboard is open on compact screens */}
+                {showFeatures && (
+                  <View style={styles.featuresSection}>
+                    <Text style={styles.featuresTitle}>What you can do</Text>
+                    <FeatureItem icon="home-city" text="Manage multiple PG properties" delay={400} isCompact={isCompactScreen} />
+                    <FeatureItem icon="account-group" text="Track tenants and bookings" delay={500} isCompact={isCompactScreen} />
+                    <FeatureItem icon="cash-multiple" text="Collect rent and manage dues" delay={600} isCompact={isCompactScreen} />
+                  </View>
+                )}
               </Animated.View>
             </View>
 
-            {/* Footer */}
-            <Animated.View
-              style={[
-                styles.footer,
-                {
-                  opacity: footerAnim,
-                  transform: [
-                    {
-                      translateY: footerAnim.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [20, 0],
-                      }),
-                    },
-                  ],
-                },
-              ]}
-            >
-              {/* Help Button */}
-              <Pressable
-                onPress={handleHelpPress}
-                style={({ pressed }) => [styles.helpButton, pressed && { opacity: 0.8 }]}
-                accessibilityRole="button"
-                accessibilityLabel="Help and Support"
-                accessibilityHint="Opens help and support page"
-                accessible
+            {/* Footer - Hide when keyboard is open */}
+            {showFooter && (
+              <Animated.View
+                style={[
+                  styles.footer,
+                  {
+                    opacity: footerAnim,
+                    transform: [
+                      {
+                        translateY: footerAnim.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [20, 0],
+                        }),
+                      },
+                    ],
+                  },
+                ]}
               >
-                <Ionicons name="help-circle-outline" size={20} color={colors.accent} />
-                <Text style={styles.helpButtonText}>Need Help?</Text>
-              </Pressable>
+                {/* Help Button */}
+                <Pressable
+                  onPress={handleHelpPress}
+                  style={({ pressed }) => [styles.helpButton, pressed && { opacity: 0.8 }]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Help and Support"
+                  accessibilityHint="Opens help and support page"
+                  accessible
+                >
+                  <Ionicons name="help-circle-outline" size={18} color={colors.accent} />
+                  <Text style={styles.helpButtonText}>Need Help?</Text>
+                </Pressable>
 
-              {/* Legal Text */}
-              <Text style={styles.legalText}>
-                By continuing, you agree to our{" "}
-                <Text style={styles.linkText}>Terms of Service</Text> and{" "}
-                <Text style={styles.linkText}>Privacy Policy</Text>.
-              </Text>
+                {/* Legal Text */}
+                <Text style={styles.legalText}>
+                  By continuing, you agree to our{" "}
+                  <Text style={styles.linkText}>Terms of Service</Text> and{" "}
+                  <Text style={styles.linkText}>Privacy Policy</Text>.
+                </Text>
 
-              {/* Version */}
-              <Text style={styles.versionText}>Version 1.0.0</Text>
-            </Animated.View>
-          </ScrollView>
+                {/* Version */}
+                <Text style={styles.versionText}>Version 1.0.0</Text>
+              </Animated.View>
+            )}
+          </View>
         </KeyboardAvoidingView>
       </SafeAreaView>
     </TouchableWithoutFeedback>
