@@ -56,7 +56,8 @@ const useGetLogin = (
 };
 
 const useVerifyOtp = (
-  onSuccessFunctions: (data: OtpResponse["data"]) => void
+  onSuccessFunctions: (data: OtpResponse["data"]) => void,
+  options?: { onError?: (error: Error) => void }
 ) => {
   return useMutation<OtpResponse, Error, OtpPayload>({
     mutationFn: (data) =>
@@ -69,17 +70,21 @@ const useVerifyOtp = (
         },
       }),
     onError: (error) => {
-      Toast.show({
-        type: "error",
-        text1: "OTP Verification Failed",
-        text2: error.message,
-      });
+      if (options?.onError) {
+        options.onError(error);
+      } else {
+        Toast.show({
+          type: "error",
+          text1: "OTP Verification Failed",
+          text2: error.message,
+        });
+      }
     },
     onSuccess: (data) => {
       Toast.show({
-        type: "error",
-        text1: "OTP Verification Failed",
-        text2: data?.data?.message,
+        type: "success",
+        text1: "OTP Verified",
+        text2: data?.message || "Logging you in...",
       });
       onSuccessFunctions(data.data);
     },
@@ -89,7 +94,7 @@ const useVerifyOtp = (
 const useResendOtp = (
   onSuccessFunctions: (data: OtpResponse["data"]) => void
 ) => {
-  return useMutation<OtpResponse, Error, { phoneNumber: string }>({
+  return useMutation<OtpResponse, Error, { phoneNumber: string; id?: string }>({
     mutationFn: (data) =>
       fetchData<OtpResponse>({
         url: `pgowner/resendOtp`,
