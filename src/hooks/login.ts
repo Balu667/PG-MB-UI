@@ -9,7 +9,7 @@ interface LoginPayload {
 
 interface LoginResponse {
   message: string;
-  data: { token: string; name: string }; // Update with actual shape
+  data: { token: string; name: string; _id?: string; userId?: string }; // Flexible shape for API response
 }
 
 interface OtpPayload {
