@@ -1,6 +1,6 @@
 // src/components/property/AdvanceBookingTab.tsx
 // Premium Advance Booking Tab - Compact, modern design
-import React, { useMemo, useState, useCallback } from "react";
+import React, { useMemo, useState, useCallback, RefObject } from "react";
 import {
   FlatList,
   StyleSheet,
@@ -9,6 +9,8 @@ import {
   RefreshControl,
   Platform,
   useWindowDimensions,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -179,9 +181,11 @@ interface Props {
   data: Record<string, unknown>[];
   refreshing: boolean;
   onRefresh: () => void;
+  scrollRef?: RefObject<FlatList>;
+  onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
 }
 
-export default function AdvanceBookingTab({ data, refreshing, onRefresh }: Props) {
+export default function AdvanceBookingTab({ data, refreshing, onRefresh, scrollRef, onScroll }: Props) {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -480,6 +484,7 @@ export default function AdvanceBookingTab({ data, refreshing, onRefresh }: Props
   return (
     <View style={styles.container}>
       <FlatList
+        ref={scrollRef}
         data={filtered}
         keyExtractor={keyExtractor}
         renderItem={renderItem}
@@ -497,6 +502,8 @@ export default function AdvanceBookingTab({ data, refreshing, onRefresh }: Props
             tintColor={colors.accent}
           />
         }
+        onScroll={onScroll}
+        scrollEventThrottle={16}
         removeClippedSubviews
         initialNumToRender={10}
         windowSize={10}

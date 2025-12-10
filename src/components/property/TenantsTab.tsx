@@ -1,5 +1,5 @@
 // src/components/property/TenantsTab.tsx
-import React, { useMemo, useState, useCallback } from "react";
+import React, { useMemo, useState, useCallback, RefObject } from "react";
 import {
   FlatList,
   useWindowDimensions,
@@ -7,6 +7,8 @@ import {
   View,
   RefreshControl,
   Text,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -35,6 +37,8 @@ type Props = {
   };
   refreshing: boolean;
   onRefresh: () => void;
+  scrollRef?: RefObject<FlatList>;
+  onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
 };
 
 const tenantSections: Section[] = [
@@ -120,7 +124,7 @@ const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDat
 const addDays = (d: Date, days: number) =>
   new Date(d.getFullYear(), d.getMonth(), d.getDate() + days, 0, 0, 0, 0);
 
-export default function TenantsTab({ data, meta, refreshing, onRefresh }: Props) {
+export default function TenantsTab({ data, meta, refreshing, onRefresh, scrollRef, onScroll }: Props) {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -283,6 +287,7 @@ export default function TenantsTab({ data, meta, refreshing, onRefresh }: Props)
   return (
     <>
       <FlatList
+        ref={scrollRef}
         data={tenants?.filter((item) => item?.status === 1 || item?.status === 2)}
         keyExtractor={(t: any, i) => String(t?._id ?? t?.id ?? i)}
         renderItem={({ item }) => <TenantCard tenant={item} onDelete={handleDelete} />}
@@ -290,6 +295,8 @@ export default function TenantsTab({ data, meta, refreshing, onRefresh }: Props)
         columnWrapperStyle={cols > 1 ? s.columnGap : undefined}
         contentContainerStyle={s.listContent}
         showsVerticalScrollIndicator={false}
+        onScroll={onScroll}
+        scrollEventThrottle={16}
         ListHeaderComponent={
           <View style={{ paddingHorizontal: spacing.md, paddingTop: spacing.md }}>
             {/* Stats Grid */}

@@ -12,6 +12,8 @@ import {
   Animated,
   useWindowDimensions,
   ListRenderItemInfo,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
@@ -56,6 +58,8 @@ interface Props {
   refreshing: boolean;
   onRefresh: () => void;
   propertyId: string;
+  scrollRef?: React.RefObject<FlatList>;
+  onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
 }
 
 const str = (v: unknown, fallback = ""): string =>
@@ -1076,6 +1080,8 @@ export default function DuesTab({
   refreshing,
   onRefresh,
   propertyId,
+  scrollRef,
+  onScroll,
 }: Props) {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -1238,6 +1244,7 @@ export default function DuesTab({
   return (
     <>
       <FlatList
+        ref={scrollRef}
         data={filtered}
         keyExtractor={keyExtractor}
         numColumns={columns}
@@ -1256,6 +1263,8 @@ export default function DuesTab({
             colors={[colors.accent]}
           />
         }
+        onScroll={onScroll}
+        scrollEventThrottle={16}
         removeClippedSubviews
         initialNumToRender={8}
         maxToRenderPerBatch={8}

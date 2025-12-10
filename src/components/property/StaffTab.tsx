@@ -16,6 +16,8 @@ import {
   Alert,
   Animated,
   I18nManager,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Switch } from "react-native-paper";
@@ -76,6 +78,8 @@ interface Props {
   onRefresh: () => void;
   /** Current property ID for navigation */
   propertyId: string;
+  scrollRef?: React.RefObject<FlatList>;
+  onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -816,7 +820,7 @@ ListHeader.displayName = "ListHeader";
    MAIN COMPONENT
 ───────────────────────────────────────────────────────────────────────────── */
 
-const StaffTab: React.FC<Props> = ({ data, refreshing, onRefresh, propertyId }) => {
+const StaffTab: React.FC<Props> = ({ data, refreshing, onRefresh, propertyId, scrollRef, onScroll }) => {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const { colors, spacing } = useTheme();
@@ -1077,6 +1081,7 @@ const StaffTab: React.FC<Props> = ({ data, refreshing, onRefresh, propertyId }) 
   return (
     <>
       <FlatList
+        ref={scrollRef}
         data={filteredData}
         keyExtractor={keyExtractor}
         numColumns={columns}
@@ -1095,6 +1100,8 @@ const StaffTab: React.FC<Props> = ({ data, refreshing, onRefresh, propertyId }) 
             colors={[colors.accent]}
           />
         }
+        onScroll={onScroll}
+        scrollEventThrottle={16}
         removeClippedSubviews={Platform.OS === "android"}
         initialNumToRender={10}
         maxToRenderPerBatch={10}

@@ -1218,7 +1218,7 @@ export default function OtpScreen() {
                     isResending={isResending}
                     isCompact={isCompactScreen}
                   />
-                </View>
+            </View>
           </Animated.View>
             </View>
           </ScrollView>

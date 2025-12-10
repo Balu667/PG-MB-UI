@@ -13,6 +13,8 @@ import {
   useWindowDimensions,
   Alert,
   ActivityIndicator,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
@@ -65,6 +67,8 @@ interface Props {
   propertyName?: string;
   /** Property address for receipt generation */
   propertyAddress?: string;
+  scrollRef?: React.RefObject<FlatList>;
+  onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
 }
 
 interface DateFilter {
@@ -911,6 +915,8 @@ const CollectionsTab: React.FC<Props> = ({
   onRefresh,
   propertyName = "PGMS",
   propertyAddress = "",
+  scrollRef,
+  onScroll,
 }) => {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -1068,6 +1074,7 @@ const CollectionsTab: React.FC<Props> = ({
   return (
     <>
       <FlatList
+        ref={scrollRef}
         data={filtered}
         keyExtractor={keyExtractor}
         renderItem={renderItem}
@@ -1083,6 +1090,8 @@ const CollectionsTab: React.FC<Props> = ({
             colors={[colors.accent]}
           />
         }
+        onScroll={onScroll}
+        scrollEventThrottle={16}
         removeClippedSubviews={Platform.OS === "android"}
         initialNumToRender={8}
         maxToRenderPerBatch={8}

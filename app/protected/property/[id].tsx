@@ -1,9 +1,10 @@
 // app/protected/property/[id].tsx
-import React, { useMemo, useState, useEffect } from "react";
-import { ScrollView, StyleSheet, Text, View, ActivityIndicator } from "react-native";
+import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
+import { ScrollView, StyleSheet, Text, View, ActivityIndicator, FlatList, NativeScrollEvent, NativeSyntheticEvent } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useProperty } from "@/src/context/PropertyContext";
+import ScrollToTopButton from "@/src/components/ScrollToTopButton";
 
 import TopInfo from "@/src/components/property/TopInfo";
 import SegmentBar from "@/src/components/property/SegmentBar";
@@ -520,6 +521,45 @@ export default function PropertyDetails() {
   );
 
   const [activeTab, setActiveTab] = useState<TabKey>(tab as TabKey);
+  const [showScrollToTop, setShowScrollToTop] = useState(false);
+
+  // Scroll refs for each tab
+  const scrollRefs = useRef<Record<TabKey, React.RefObject<FlatList<any> | ScrollView | null>>>({
+    "Property Details": React.createRef<ScrollView>(),
+    "PG Layout": React.createRef<ScrollView>(),
+    "Advance Booking": React.createRef<FlatList<any>>(),
+    "Rooms": React.createRef<FlatList<any>>(),
+    "Tenants": React.createRef<FlatList<any>>(),
+    "Expenses": React.createRef<FlatList<any>>(),
+    "Dues": React.createRef<FlatList<any>>(),
+    "Collections": React.createRef<FlatList<any>>(),
+    "Staff": React.createRef<FlatList<any>>(),
+  });
+
+  // Scroll handler for all tabs
+  const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const offsetY = event.nativeEvent.contentOffset.y;
+    setShowScrollToTop(offsetY > 200); // Show button after 200px scroll
+  }, []);
+
+  // Scroll to top handler
+  const scrollToTop = useCallback(() => {
+    const currentRef = scrollRefs.current[activeTab];
+    if (currentRef?.current) {
+      if ("scrollToOffset" in currentRef.current) {
+        // FlatList
+        (currentRef.current as FlatList).scrollToOffset({ offset: 0, animated: true });
+      } else {
+        // ScrollView
+        (currentRef.current as ScrollView).scrollTo({ y: 0, animated: true });
+      }
+    }
+  }, [activeTab]);
+
+  // Reset scroll visibility when tab changes
+  useEffect(() => {
+    setShowScrollToTop(false);
+  }, [activeTab]);
 
   useEffect(() => {
     if (!selectedId) return;
@@ -646,6 +686,8 @@ export default function PropertyDetails() {
           data={tenantsAdvance ?? []}
           refreshing={!!tenantsAdvanceQuery?.isFetching}
           onRefresh={tenantsAdvanceQuery?.refetch}
+          scrollRef={scrollRefs.current["Advance Booking"] as React.RefObject<FlatList<any>>}
+          onScroll={handleScroll}
         />
       ) : activeTab === "Rooms" ? (
         <RoomsTab
@@ -653,6 +695,8 @@ export default function PropertyDetails() {
           meta={roomsMeta}
           refreshing={!!roomsQuery?.isFetching}
           onRefresh={roomsQuery?.refetch}
+          scrollRef={scrollRefs.current["Rooms"] as React.RefObject<FlatList<any>>}
+          onScroll={handleScroll}
         />
       ) : activeTab === "Tenants" ? (
         <TenantsTab
@@ -660,6 +704,8 @@ export default function PropertyDetails() {
           meta={tenantsMeta}
           refreshing={!!tenantsActiveQuery?.isFetching}
           onRefresh={tenantsActiveQuery?.refetch}
+          scrollRef={scrollRefs.current["Tenants"] as React.RefObject<FlatList<any>>}
+          onScroll={handleScroll}
         />
       ) : activeTab === "Expenses" ? (
         <ExpensesTab
@@ -667,6 +713,8 @@ export default function PropertyDetails() {
           refreshing={!!expensesQuery?.isFetching}
           onRefresh={expensesQuery?.refetch}
           propertyId={id as string}
+          scrollRef={scrollRefs.current["Expenses"] as React.RefObject<FlatList<any>>}
+          onScroll={handleScroll}
         />
       ) : activeTab === "Dues" ? (
         <DuesTab
@@ -675,6 +723,8 @@ export default function PropertyDetails() {
           refreshing={!!duesQuery?.isFetching}
           onRefresh={duesQuery?.refetch}
           propertyId={id as string}
+          scrollRef={scrollRefs.current["Dues"] as React.RefObject<FlatList<any>>}
+          onScroll={handleScroll}
         />
       ) : activeTab === "Collections" ? (
         <CollectionsTab
@@ -684,6 +734,8 @@ export default function PropertyDetails() {
           onRefresh={paymentsQuery?.refetch}
           propertyName={propName}
           propertyAddress={propAddress}
+          scrollRef={scrollRefs.current["Collections"] as React.RefObject<FlatList<any>>}
+          onScroll={handleScroll}
         />
       ) : activeTab === "Staff" ? (
         <StaffTab
@@ -691,12 +743,17 @@ export default function PropertyDetails() {
           refreshing={!!employeesQuery?.isFetching}
           onRefresh={employeesQuery?.refetch}
           propertyId={id as string}
+          scrollRef={scrollRefs.current["Staff"] as React.RefObject<FlatList<any>>}
+          onScroll={handleScroll}
         />
       ) : (
         <ScrollView
+          ref={scrollRefs.current["Property Details"] as React.RefObject<ScrollView>}
           style={{ flex: 1 }}
           contentContainerStyle={styles.bodyContent}
           showsVerticalScrollIndicator={false}
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
         >
           {activeTab === "Property Details" && (
             <InfoCard
@@ -711,6 +768,11 @@ export default function PropertyDetails() {
             />
           )}
         </ScrollView>
+      )}
+
+      {/* Scroll to Top Button - Only show for tabs that support scrolling */}
+      {activeTab !== "Property Details" && activeTab !== "PG Layout" && (
+        <ScrollToTopButton visible={showScrollToTop} onPress={scrollToTop} />
       )}
     </SafeAreaView>
   );

@@ -1,6 +1,6 @@
 // src/components/property/ExpensesTab.tsx
 // Premium Expenses Tab - Modern design with rich UI elements
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, RefObject } from "react";
 import {
   FlatList,
   StyleSheet,
@@ -11,6 +11,8 @@ import {
   RefreshControl,
   Pressable,
   Platform,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
@@ -47,6 +49,8 @@ type Props = {
   refreshing: boolean;
   onRefresh: () => void;
   propertyId: string;
+  scrollRef?: RefObject<FlatList>;
+  onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
 };
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -446,6 +450,8 @@ export default function ExpensesTab({
   refreshing,
   onRefresh,
   propertyId,
+  scrollRef,
+  onScroll,
 }: Props) {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -657,6 +663,7 @@ export default function ExpensesTab({
   return (
     <>
       <FlatList
+        ref={scrollRef}
         data={expenses}
         keyExtractor={keyExtractor}
         numColumns={columns}
@@ -675,6 +682,8 @@ export default function ExpensesTab({
             colors={[colors.accent]}
           />
         }
+        onScroll={onScroll}
+        scrollEventThrottle={16}
         removeClippedSubviews
         initialNumToRender={10}
         maxToRenderPerBatch={10}

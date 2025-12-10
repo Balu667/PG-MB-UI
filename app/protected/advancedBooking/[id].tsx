@@ -826,34 +826,44 @@ export default function AdvancedBookingScreen() {
     currentTenant,
   ]);
 
-  // Reset bed when room changes (only if moving to a different room)
-  // CRITICAL: Don't reset while rooms are loading to prevent race condition
+  // Track previous roomId to detect room changes
+  const previousRoomId = useRef<string>("");
+
+  // Reset bed when room changes (clear bed if room changed to a different one)
   useEffect(() => {
     // Skip this effect if we just prefilled (to prevent clearing the prefilled bed)
     if (justPrefilled.current) {
       justPrefilled.current = false;
+      previousRoomId.current = roomId;
       return;
     }
 
     // Don't run reset logic while rooms are loading
     if (roomsLoading) return;
 
-    // In edit/convert mode, never reset if this is the tenant's original room+bed combo
-    if (!isAddMode && currentTenant) {
-      const ctRoomId = str(
-        (currentTenant.roomId as Record<string, unknown>)?._id ??
-          currentTenant.roomId ??
-          "",
-        ""
-      );
-      const ctBed = str(currentTenant.bedNumber ?? "", "").toUpperCase();
-      
-      // If current selection matches tenant's original, don't reset
-      if (roomId === ctRoomId && bedId.toUpperCase() === ctBed) {
+    // Detect if room actually changed (not just initial load)
+    const roomChanged = previousRoomId.current !== "" && previousRoomId.current !== roomId;
+
+    // If room changed, clear bed (unless it's the tenant's original room in edit/convert mode)
+    if (roomChanged) {
+      // In edit/convert mode, only clear if moving away from tenant's original room
+      if (!isAddMode && currentTenant && previousRoomId.current === tenantOriginalRoomId) {
+        // Moving away from original room - clear bed
+        setBedId("");
+        previousRoomId.current = roomId;
+        return;
+      }
+      // In add mode or moving to a different room - always clear bed
+      if (isAddMode || previousRoomId.current !== tenantOriginalRoomId) {
+        setBedId("");
+        previousRoomId.current = roomId;
         return;
       }
     }
-    
+
+    // Update previous roomId
+    previousRoomId.current = roomId;
+
     // If no room selected, clear bed
     if (!roomId) {
       setBedId("");

@@ -1,7 +1,9 @@
 // app/protected/tenant/[id].tsx
-import React, { useEffect, useMemo, useState } from "react";
+// Add/Edit Tenant Screen - Premium design with proper validation and bed binding
+import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import {
   ActivityIndicator,
+  Alert,
   BackHandler,
   KeyboardAvoidingView,
   Platform,
@@ -9,14 +11,17 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput as RNTextInput,
   View,
+  Keyboard,
+  TouchableWithoutFeedback,
+  I18nManager,
+  Modal,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { MaterialIcons } from "@expo/vector-icons";
-import DateTimePicker from "@react-native-community/datetimepicker";
+import DateTimePicker, { DateTimePickerEvent } from "@react-native-community/datetimepicker";
 import {
   Button,
   RadioButton,
@@ -24,8 +29,9 @@ import {
   TextInput,
   Portal,
   Dialog,
+  Divider,
 } from "react-native-paper";
-import Toast from "react-native-toast-message";
+import { useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 
 import { useTheme } from "@/src/theme/ThemeContext";
@@ -38,13 +44,15 @@ import {
   useUpdateTenant,
 } from "@/src/hooks/tenants";
 
-/* ----------------------------- small helpers ----------------------------- */
+/* ─────────────────────────────────────────────────────────────────────────────
+   HELPERS & CONSTANTS
+───────────────────────────────────────────────────────────────────────────── */
 
-const str = (v: any, fallback = "") => (v == null ? fallback : String(v));
-const num = (v: any, fallback = 0) =>
+const str = (v: unknown, fallback = "") => (v == null ? fallback : String(v));
+const num = (v: unknown, fallback = 0) =>
   typeof v === "number" ? v : Number(v ?? fallback) || fallback;
 
-const parseISODate = (v: any): Date | null => {
+const parseISODate = (v: unknown): Date | null => {
   try {
     const s = str(v, "");
     if (!s) return null;
@@ -55,17 +63,13 @@ const parseISODate = (v: any): Date | null => {
   }
 };
 
-const formatDisplayDate = (d: Date | null) => {
-  if (!d) return "Select date";
-  try {
-    return d.toLocaleDateString("en-IN", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
-  } catch {
-    return d.toISOString().slice(0, 10);
-  }
+const formatDisplayDate = (d: Date | null): string => {
+  if (!d || !(d instanceof Date) || isNaN(d.getTime())) return "Select date";
+  return d.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
 };
 
 const formatDateYMD = (d: Date): string => {
@@ -82,7 +86,6 @@ const addMonths = (d: Date, months: number) => {
   const nd = new Date(d.getTime());
   const day = nd.getDate();
   nd.setMonth(nd.getMonth() + months);
-  // clamp to last day of month if overflow
   if (nd.getDate() < day) {
     nd.setDate(0);
   }
@@ -98,99 +101,51 @@ const firstOfNextMonth = (base: Date) => {
   return new Date(y, m + 1, 1, 0, 0, 0, 0);
 };
 
-const unwrapPayload = (resp: any): any => {
-  if (!resp) return {};
-  if (resp.data && typeof resp.data === "object" && !Array.isArray(resp.data)) {
-    return resp.data;
-  }
-  return resp;
+// Format number to Indian currency format
+const formatIndianNumber = (num: string): string => {
+  const cleaned = num.replace(/[^0-9]/g, "");
+  if (!cleaned) return "";
+  const number = parseInt(cleaned, 10);
+  if (isNaN(number)) return cleaned;
+  return number.toLocaleString("en-IN");
 };
 
-const isErrorPayload = (payload: any): boolean => {
-  if (!payload || typeof payload !== "object") return false;
-  if (payload.success === false) return true;
-  if (typeof payload.statusCode === "number" && payload.statusCode >= 400) return true;
-  return false;
+const parseFormattedNumber = (formatted: string): string => {
+  return formatted.replace(/[^0-9]/g, "");
 };
 
-const getPayloadMessage = (
-  payload: any,
-  fallback = "Something went wrong. Please try again."
-): string => {
-  if (!payload || typeof payload !== "object") return fallback;
-
-  const nested = payload.data && typeof payload.data === "object" ? payload.data : null;
-  const msg = payload.errorMessage || payload.message || nested?.errorMessage || nested?.message;
-
-  if (typeof msg === "string" && msg.trim().length > 0) return msg.trim();
-  return fallback;
-};
-
-const getErrorMessageFromError = (
-  err: any,
-  fallback = "Something went wrong. Please try again."
-): string => {
-  if (!err) return fallback;
-  const data = err?.response?.data ?? err?.data ?? err;
-  if (data && typeof data === "object") {
-    return getPayloadMessage(data, fallback);
-  }
-  if (typeof data === "string" && data.trim().length > 0) return data.trim();
-  if (typeof err?.message === "string" && err.message.trim().length > 0) {
-    return err.message.trim();
-  }
-  return fallback;
-};
-
-/* ------------------- digits & currency formatting ------------------ */
-
+const BED_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const MAX_AMOUNT_DIGITS = 9;
 
-const onlyDigitsMax = (value: string, max: number) =>
-  value.replace(/[^\d]/g, "").slice(0, max);
+type DueType = "Monthly" | "FirstMonth" | "Custom";
+type BedDisplayStatus = "Filled" | "AdvBooked" | "UnderNotice" | "Available";
 
-/** Format a numeric string as Indian currency with commas, but keep it as plain text (no ₹). */
-const formatAmountInput = (value: string): string => {
-  const digits = onlyDigitsMax(value, MAX_AMOUNT_DIGITS);
-  if (!digits) return "";
-  const n = Number(digits);
-  if (!Number.isFinite(n)) return "";
-  return n.toLocaleString("en-IN");
-};
+/* ─────────────────────────────────────────────────────────────────────────────
+   ROOM & BED HELPERS
+───────────────────────────────────────────────────────────────────────────── */
 
-/** Parse formatted text like "5,000" to a number (5000). */
-const parseAmount = (value: string): number => {
-  const digits = value.replace(/[^\d]/g, "");
-  if (!digits) return 0;
-  const n = Number(digits);
-  return Number.isFinite(n) ? n : 0;
-};
-
-/* ---------------- rooms extraction (same idea as AdvancedBooking) --------------- */
-
-const extractRooms = (resp: any): any[] => {
+const extractRooms = (resp: unknown): Record<string, unknown>[] => {
   if (!resp) return [];
-  if (resp && typeof resp === "object" && !Array.isArray(resp)) {
-    if (Array.isArray(resp.data)) {
-      const first = resp.data[0];
-      if (first && Array.isArray(first.rooms)) return first.rooms;
-      return resp.data;
+  const r = resp as Record<string, unknown>;
+  if (r && typeof r === "object" && !Array.isArray(r)) {
+    if (Array.isArray(r.data)) {
+      const first = (r.data as Record<string, unknown>[])[0];
+      if (first && Array.isArray(first.rooms)) return first.rooms as Record<string, unknown>[];
+      return r.data as Record<string, unknown>[];
     }
-    if (Array.isArray(resp.rooms)) return resp.rooms;
+    if (Array.isArray(r.rooms)) return r.rooms as Record<string, unknown>[];
   }
   if (Array.isArray(resp)) {
-    const first = resp[0];
-    if (first && Array.isArray(first.rooms)) return first.rooms;
-    return resp;
+    const first = (resp as Record<string, unknown>[])[0];
+    if (first && Array.isArray(first.rooms)) return first.rooms as Record<string, unknown>[];
+    return resp as Record<string, unknown>[];
   }
   return [];
 };
 
-/* ---------------- room status & bed helpers (same as AdvancedBooking) ----------- */
+type DerivedRoomStatus = "Available" | "Partial" | "Filled";
 
-type DerivedStatus = "Available" | "Partial" | "Filled";
-
-const deriveRoomStatus = (room: any): DerivedStatus => {
+const deriveRoomStatus = (room: Record<string, unknown>): DerivedRoomStatus => {
   const totalBeds =
     num(room?.totalBeds) ||
     num(room?.bedsTotal) ||
@@ -198,11 +153,9 @@ const deriveRoomStatus = (room: any): DerivedStatus => {
     num(room?.capacity) ||
     num(room?.beds) ||
     0;
-
   const occupiedBeds = num(room?.occupiedBeds);
   const underNotice = num(room?.underNotice);
   const advanceBookings = num(room?.advancedBookings) || num(room?.advanceBookingBeds);
-
   const hasVacantField = room?.vacantBeds !== undefined && room?.vacantBeds !== null;
   const vacantBeds = hasVacantField
     ? num(room?.vacantBeds)
@@ -214,10 +167,6 @@ const deriveRoomStatus = (room: any): DerivedStatus => {
   return "Partial";
 };
 
-const BED_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-
-type BedDisplayStatus = "Filled" | "AdvBooked" | "UnderNotice" | "Available";
-
 const bedStatusFromTenantStatuses = (codes: number[]): BedDisplayStatus => {
   if (!codes || codes.length === 0) return "Available";
   if (codes.some((c) => c === 1)) return "Filled";
@@ -226,594 +175,224 @@ const bedStatusFromTenantStatuses = (codes: number[]): BedDisplayStatus => {
   return "Available";
 };
 
-/* ------------------------ Date field ------------------------ */
+/* ─────────────────────────────────────────────────────────────────────────────
+   LABELED COMPONENT
+───────────────────────────────────────────────────────────────────────────── */
 
-interface DateFieldProps {
+const Labeled = React.memo(
+  ({
+    label,
+    children,
+    required,
+  }: {
+    label: string;
+    children: React.ReactNode;
+    required?: boolean;
+  }) => {
+    const { colors } = useTheme();
+    return (
+      <View style={{ marginTop: 8, marginBottom: 10 }}>
+        <PaperText
+          style={{ color: colors.textPrimary, fontWeight: "600", marginBottom: 6 }}
+          accessible
+          accessibilityRole="text"
+        >
+          {label}
+          {required && <Text style={{ color: colors.error }}> *</Text>}
+        </PaperText>
+        {children}
+      </View>
+    );
+  }
+);
+Labeled.displayName = "Labeled";
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   SHEET SELECT COMPONENT (Generic Dropdown)
+───────────────────────────────────────────────────────────────────────────── */
+
+interface SheetSelectOption {
+  id: string;
   label: string;
-  value: Date | null;
-  placeholder?: string;
-  onChange: (date: Date) => void;
-  minimumDate?: Date;
-  maximumDate?: Date;
+  sublabel?: string;
+  status?: string;
+  statusColor?: string;
   disabled?: boolean;
 }
 
-/** Premium date picker (iOS: custom dialog, Android: native dialog) */
-const DateField: React.FC<DateFieldProps> = ({
-  label,
+interface SheetSelectProps {
+  value?: string;
+  options: SheetSelectOption[];
+  placeholder: string;
+  onChange: (v: string) => void;
+  disabled?: boolean;
+}
+
+const SheetSelect = React.memo(function SheetSelect({
   value,
-  placeholder = "Select date",
-  onChange: onChangeDate,
-  minimumDate,
-  maximumDate,
+  options,
+  placeholder,
+  onChange,
   disabled,
-}) => {
+}: SheetSelectProps) {
   const { colors, radius, spacing, typography } = useTheme();
   const [open, setOpen] = useState(false);
-  const [draft, setDraft] = useState<Date>(value ?? new Date());
 
-  useEffect(() => {
-    if (!open && value) {
-      setDraft(value);
-    }
-  }, [value, open]);
-
-  const handleOpen = () => {
-    if (disabled) return;
-    Haptics.selectionAsync();
-    setDraft(value ?? new Date());
-    setOpen(true);
-  };
-
-  const handleDoneIOS = () => {
-    setOpen(false);
-    if (draft) {
-      Haptics.selectionAsync();
-      onChangeDate(draft);
-    }
-  };
-
-  const handleAndroidChange = (event: any, selectedDate?: Date) => {
-    if (Platform.OS !== "android") return;
-    if (event.type === "set" && selectedDate) {
-      setOpen(false);
-      Haptics.selectionAsync();
-      onChangeDate(selectedDate);
-    } else {
-      // dismissed
-      setOpen(false);
-    }
-  };
+  const selectedOption = options.find((o) => o.id === value);
 
   return (
-    <View style={{ marginBottom: spacing.md }}>
-      <Text
-        style={{
-          color: colors.textSecondary,
-          fontWeight: "600",
-          marginBottom: 6,
-          fontSize: typography.fontSizeSm,
-        }}
-      >
-        {label}
-      </Text>
+    <>
       <Pressable
-        disabled={disabled}
-        onPress={handleOpen}
+        onPress={() => {
+          if (disabled) return;
+          Haptics.selectionAsync();
+          setOpen(true);
+        }}
         style={{
           borderWidth: 1,
           borderColor: colors.borderColor,
           borderRadius: radius.lg,
           backgroundColor: disabled ? colors.surface : colors.cardSurface,
-          paddingVertical: 12,
+          paddingVertical: 14,
           paddingHorizontal: 12,
-          minHeight: 48,
-          justifyContent: "center",
-          opacity: disabled ? 0.7 : 1,
+          opacity: disabled ? 0.6 : 1,
+          minHeight: 55,
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
         }}
         accessibilityRole="button"
-        accessibilityLabel={label}
-        accessibilityHint={placeholder}
+        accessibilityLabel={placeholder}
+        accessibilityHint="Opens selection menu"
         accessible
       >
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-          <MaterialIcons
-            name="event"
-            size={18}
-            color={disabled ? colors.textMuted : colors.textSecondary}
-          />
+        <View style={{ flex: 1 }}>
           <PaperText
             style={{
-              color: value ? colors.textPrimary : colors.textMuted,
-              fontSize: typography.fontSizeSm,
+              color: selectedOption ? colors.textPrimary : colors.textMuted,
+              fontSize: typography.fontSizeMd,
             }}
+            numberOfLines={1}
           >
-            {value ? formatDisplayDate(value) : placeholder}
+            {selectedOption?.label || placeholder}
           </PaperText>
-        </View>
-      </Pressable>
-
-      {/* iOS: custom dialog with inline picker */}
-      {Platform.OS === "ios" && (
-        <Portal>
-          <Dialog
-            visible={open}
-            onDismiss={() => setOpen(false)}
-            style={{ backgroundColor: colors.cardBackground }}
-          >
-            <Dialog.Title style={{ color: colors.textPrimary }}>{label}</Dialog.Title>
-            <Dialog.Content>
-              <DateTimePicker
-                value={draft ?? new Date()}
-                mode="date"
-                display="inline"
-                minimumDate={minimumDate}
-                maximumDate={maximumDate}
-                onChange={(_, d) => {
-                  if (d) setDraft(d);
-                }}
-              />
-            </Dialog.Content>
-            <Dialog.Actions>
-              <Button onPress={() => setOpen(false)} textColor={colors.textPrimary}>
-                Cancel
-              </Button>
-              <Button onPress={handleDoneIOS} textColor={colors.accent}>
-                Done
-              </Button>
-            </Dialog.Actions>
-          </Dialog>
-        </Portal>
-      )}
-
-      {/* Android: pure native dialog, closed via event.type */}
-      {Platform.OS === "android" && open && (
-        <DateTimePicker
-          value={value ?? draft ?? new Date()}
-          mode="date"
-          display="calendar"
-          minimumDate={minimumDate}
-          maximumDate={maximumDate}
-          onChange={handleAndroidChange}
-        />
-      )}
-    </View>
-  );
-};
-
-/* ------------------------ Room & Bed selects ------------------------ */
-
-interface RoomOption {
-  id: string;
-  roomNo: string;
-  status: DerivedStatus;
-}
-
-interface RoomSelectProps {
-  label: string;
-  value?: string; // roomId
-  onChange: (id: string) => void;
-  rooms: RoomOption[];
-}
-
-const RoomSelect: React.FC<RoomSelectProps> = ({ label, value, onChange, rooms }) => {
-  const { colors, radius, spacing, typography } = useTheme();
-  const insets = useSafeAreaInsets();
-  const [open, setOpen] = useState(false);
-
-  const statusColor = useMemo(
-    () => ({
-      Available: colors.availableBeds,
-      Partial: colors.advBookedBeds,
-      Filled: colors.filledBeds,
-    }),
-    [colors]
-  );
-
-  const selectedRoom = rooms.find((r) => r.id === value);
-
-  return (
-    <>
-      <View style={{ marginBottom: spacing.md }}>
-        <Text
-          style={{
-            color: colors.textSecondary,
-            fontWeight: "600",
-            marginBottom: 6,
-            fontSize: typography.fontSizeSm,
-          }}
-        >
-          {label}
-        </Text>
-        <Pressable
-          onPress={() => {
-            Haptics.selectionAsync();
-            setOpen(true);
-          }}
-          style={{
-            borderWidth: 1,
-            borderColor: colors.borderColor,
-            borderRadius: radius.lg,
-            backgroundColor: colors.cardSurface,
-            paddingVertical: 12,
-            paddingHorizontal: 12,
-            minHeight: 48,
-            justifyContent: "center",
-          }}
-          accessibilityRole="button"
-          accessibilityLabel={label}
-          accessibilityHint="Opens room selection"
-          accessible
-        >
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "space-between",
-            }}
-          >
+          {selectedOption?.sublabel && (
             <PaperText
               style={{
-                color: selectedRoom ? colors.textPrimary : colors.textMuted,
-                fontSize: typography.fontSizeSm,
+                color: colors.textSecondary,
+                fontSize: 12,
+                marginTop: 2,
               }}
               numberOfLines={1}
             >
-              {selectedRoom ? `Room - ${selectedRoom.roomNo}` : "Select room"}
+              {selectedOption.sublabel}
             </PaperText>
-            <MaterialIcons
-              name={open ? "keyboard-arrow-up" : "keyboard-arrow-down"}
-              size={20}
-              color={colors.textSecondary}
-            />
-          </View>
-        </Pressable>
-      </View>
+          )}
+        </View>
+        <MaterialIcons
+          name={open ? "keyboard-arrow-up" : "keyboard-arrow-down"}
+          size={20}
+          color={colors.textSecondary}
+        />
+      </Pressable>
 
-      {open && (
-        <Portal>
-          <View
+      <Portal>
+        <Dialog
+          visible={open}
+          onDismiss={() => setOpen(false)}
+          style={{
+            backgroundColor: colors.cardBackground,
+            borderTopLeftRadius: 18,
+            borderTopRightRadius: 18,
+          }}
+        >
+          <Dialog.Title
             style={{
-              position: "absolute",
-              left: 0,
-              right: 0,
-              top: 0,
-              bottom: 0,
-              justifyContent: "flex-end",
-              backgroundColor: hexToRgba(colors.backDrop ?? "#000000", 0.35),
+              color: colors.textPrimary,
+              marginBottom: 6,
+              fontWeight: "700",
+              fontSize: typography.fontSizeMd,
             }}
           >
-            <Pressable
-              style={{ flex: 1 }}
-              onPress={() => setOpen(false)}
-              accessibilityLabel="Close room selection"
-              accessibilityRole="button"
-              accessible
-            />
-            <View
-              style={{
-                backgroundColor: colors.cardBackground,
-                borderTopLeftRadius: 18,
-                borderTopRightRadius: 18,
-                paddingHorizontal: spacing.md,
-                paddingTop: spacing.md,
-                paddingBottom: spacing.lg + insets.bottom + 8,
-              }}
+            {placeholder}
+          </Dialog.Title>
+          <Dialog.ScrollArea>
+            <ScrollView
+              style={{ maxHeight: 400 }}
+              contentContainerStyle={{ padding: spacing.sm }}
+              keyboardShouldPersistTaps="always"
             >
-              <View style={{ alignItems: "center", marginBottom: spacing.sm }}>
-                <View
-                  style={{
-                    width: 40,
-                    height: 4,
-                    borderRadius: 999,
-                    backgroundColor: hexToRgba(colors.textSecondary, 0.25),
-                  }}
-                />
-              </View>
-              <PaperText
-                style={{
-                  color: colors.textPrimary,
-                  fontSize: typography.fontSizeMd,
-                  fontWeight: "700",
-                  marginBottom: 8,
-                }}
-              >
-                Select room
-              </PaperText>
-              <ScrollView
-                style={{ maxHeight: 380 }}
-                keyboardShouldPersistTaps="handled"
-                showsVerticalScrollIndicator={false}
-                contentContainerStyle={{ paddingBottom: spacing.md }}
-              >
-                {rooms.length === 0 ? (
-                  <PaperText style={{ color: colors.textMuted, paddingVertical: 8 }}>
-                    No rooms available.
-                  </PaperText>
-                ) : (
-                  rooms.map((r) => {
-                    const selected = r.id === value;
-                    const bg = selected ? hexToRgba(colors.accent, 0.14) : "transparent";
-                    const border = selected ? colors.accent : "transparent";
-                    return (
-                      <Pressable
-                        key={r.id}
-                        onPress={() => {
-                          Haptics.selectionAsync();
-                          onChange(r.id);
-                          setOpen(false);
-                        }}
+              {options.length === 0 ? (
+                <PaperText style={{ color: colors.textMuted, paddingVertical: 12 }}>
+                  No options available.
+                </PaperText>
+              ) : (
+                options.map((opt) => {
+                  const isSelected = opt.id === value;
+                  const isDisabled = !!opt.disabled;
+
+                  return (
+                    <Pressable
+                      key={opt.id}
+                      disabled={isDisabled}
+                      onPress={() => {
+                        if (isDisabled) return;
+                        Haptics.selectionAsync();
+                        onChange(opt.id);
+                        setOpen(false);
+                      }}
+                      style={{
+                        paddingVertical: 14,
+                        borderBottomWidth: 1,
+                        borderColor: hexToRgba(colors.textSecondary, 0.12),
+                        minHeight: 52,
+                        justifyContent: "center",
+                        backgroundColor: isSelected
+                          ? hexToRgba(colors.accent, 0.1)
+                          : "transparent",
+                        borderRadius: isSelected ? 10 : 0,
+                        paddingHorizontal: 10,
+                        marginBottom: 4,
+                        opacity: isDisabled ? 0.4 : 1,
+                      }}
+                      accessibilityRole="button"
+                      accessibilityLabel={opt.label}
+                      accessibilityState={{ selected: isSelected, disabled: isDisabled }}
+                      accessible
+                    >
+                      <View
                         style={{
-                          paddingVertical: 14,
-                          borderBottomWidth: StyleSheet.hairlineWidth,
-                          borderColor: hexToRgba(colors.textSecondary, 0.16),
-                          backgroundColor: bg,
-                          borderWidth: selected ? 1 : 0,
-                          borderRadius: 10,
-                          marginBottom: 6,
-                          paddingHorizontal: 8,
+                          flexDirection: "row",
+                          alignItems: "center",
+                          justifyContent: "space-between",
                         }}
-                        accessibilityRole="button"
-                        accessibilityLabel={`Select room ${r.roomNo}`}
-                        accessible
                       >
-                        <View
-                          style={{
-                            flexDirection: "row",
-                            justifyContent: "space-between",
-                            alignItems: "center",
-                          }}
-                        >
+                        <View style={{ flex: 1 }}>
                           <PaperText
                             style={{
                               color: colors.textPrimary,
-                              fontSize: typography.fontSizeSm,
+                              fontWeight: isSelected ? "700" : "500",
+                              fontSize: 14,
                             }}
                           >
-                            Room - {r.roomNo}
+                            {opt.label}
                           </PaperText>
-                          <View
-                            style={{
-                              backgroundColor:
-                                statusColor[r.status] ?? hexToRgba(colors.textSecondary, 0.2),
-                              borderRadius: 999,
-                              paddingHorizontal: 10,
-                              paddingVertical: 4,
-                            }}
-                          >
-                            <Text
+                          {opt.sublabel && (
+                            <PaperText
                               style={{
-                                color: colors.white,
-                                fontSize: 11,
-                                fontWeight: "700",
-                                textTransform: "uppercase",
+                                color: colors.textSecondary,
+                                fontSize: 12,
+                                marginTop: 2,
                               }}
                             >
-                              {r.status}
-                            </Text>
-                          </View>
+                              {opt.sublabel}
+                            </PaperText>
+                          )}
                         </View>
-                      </Pressable>
-                    );
-                  })
-                )}
-              </ScrollView>
-              <Button onPress={() => setOpen(false)} textColor={colors.accent}>
-                Close
-              </Button>
-            </View>
-          </View>
-        </Portal>
-      )}
-    </>
-  );
-};
-
-interface BedOption {
-  value: string;
-  status: BedDisplayStatus;
-  disabled?: boolean;
-}
-
-interface BedSelectProps {
-  label: string;
-  value?: string;
-  options: BedOption[];
-  onChange: (v: string) => void;
-  disabled?: boolean;
-}
-
-const BedSelect: React.FC<BedSelectProps> = ({ label, value, options, onChange, disabled }) => {
-  const { colors, radius, spacing, typography } = useTheme();
-  const insets = useSafeAreaInsets();
-  const [open, setOpen] = useState(false);
-
-  const selectedOption = options.find((o) => o.value === value);
-  const bedStatusColors = useMemo(
-    () => ({
-      Filled: colors.filledBeds,
-      AdvBooked: colors.advBookedBeds,
-      UnderNotice: colors.underNoticeBeds ?? colors.advBookedBeds,
-      Available: colors.availableBeds ?? colors.success,
-    }),
-    [colors]
-  );
-
-  return (
-    <>
-      <View style={{ marginBottom: spacing.md }}>
-        <Text
-          style={{
-            color: colors.textSecondary,
-            fontWeight: "600",
-            marginBottom: 6,
-            fontSize: typography.fontSizeSm,
-          }}
-        >
-          {label}
-        </Text>
-        <Pressable
-          disabled={disabled}
-          onPress={() => {
-            if (disabled) return;
-            Haptics.selectionAsync();
-            setOpen(true);
-          }}
-          style={{
-            borderWidth: 1,
-            borderColor: colors.borderColor,
-            borderRadius: radius.lg,
-            backgroundColor: disabled ? colors.surface : colors.cardSurface,
-            paddingVertical: 12,
-            paddingHorizontal: 12,
-            minHeight: 48,
-            justifyContent: "center",
-            opacity: disabled ? 0.7 : 1,
-          }}
-          accessibilityRole="button"
-          accessibilityLabel={label}
-          accessibilityHint={disabled ? "Select a room first" : "Opens bed selection"}
-          accessible
-        >
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "space-between",
-            }}
-          >
-            <PaperText
-              style={{
-                color: selectedOption ? colors.textPrimary : colors.textMuted,
-                fontSize: typography.fontSizeSm,
-              }}
-            >
-              {selectedOption
-                ? `Bed ${selectedOption.value} (${selectedOption.status})`
-                : value
-                  ? `Bed ${String(value).toUpperCase()}`
-                  : "Select bed"}
-            </PaperText>
-            <MaterialIcons
-              name={open ? "keyboard-arrow-up" : "keyboard-arrow-down"}
-              size={20}
-              color={colors.textSecondary}
-            />
-          </View>
-        </Pressable>
-      </View>
-
-      {open && (
-        <Portal>
-          <View
-            style={{
-              position: "absolute",
-              left: 0,
-              right: 0,
-              bottom: 0,
-              top: 0,
-              justifyContent: "flex-end",
-              backgroundColor: hexToRgba(colors.backDrop ?? "#000000", 0.35),
-            }}
-          >
-            <Pressable
-              style={{ flex: 1 }}
-              onPress={() => setOpen(false)}
-              accessibilityLabel="Close bed selection"
-              accessibilityRole="button"
-              accessible
-            />
-            <View
-              style={{
-                backgroundColor: colors.cardBackground,
-                borderTopLeftRadius: 18,
-                borderTopRightRadius: 18,
-                paddingHorizontal: spacing.md,
-                paddingTop: spacing.md,
-                paddingBottom: spacing.lg + insets.bottom + 8,
-              }}
-            >
-              <View style={{ alignItems: "center", marginBottom: spacing.sm }}>
-                <View
-                  style={{
-                    width: 40,
-                    height: 4,
-                    borderRadius: 999,
-                    backgroundColor: hexToRgba(colors.textSecondary, 0.25),
-                  }}
-                />
-              </View>
-              <PaperText
-                style={{
-                  color: colors.textPrimary,
-                  fontSize: typography.fontSizeMd,
-                  fontWeight: "700",
-                  marginBottom: 8,
-                }}
-              >
-                Select bed
-              </PaperText>
-              <ScrollView
-                style={{ maxHeight: 280 }}
-                keyboardShouldPersistTaps="handled"
-                showsVerticalScrollIndicator={false}
-                contentContainerStyle={{ paddingBottom: spacing.md }}
-              >
-                {options.length === 0 ? (
-                  <PaperText style={{ color: colors.textMuted, paddingVertical: 8 }}>
-                    No beds defined for this room.
-                  </PaperText>
-                ) : (
-                  options.map((opt) => {
-                    const isSelected = opt.value === value;
-                    const isDisabled = !!opt.disabled;
-
-                    return (
-                      <Pressable
-                        key={opt.value}
-                        disabled={isDisabled}
-                        onPress={() => {
-                          Haptics.selectionAsync();
-                          onChange(opt.value);
-                          setOpen(false);
-                        }}
-                        style={{
-                          paddingVertical: 12,
-                          paddingHorizontal: 8,
-                          borderBottomWidth: StyleSheet.hairlineWidth,
-                          borderColor: hexToRgba(colors.textSecondary, 0.14),
-                          opacity: isDisabled ? 0.4 : 1,
-                          backgroundColor: isSelected
-                            ? hexToRgba(colors.accent, 0.14)
-                            : "transparent",
-                          borderRadius: isSelected ? 10 : 0,
-                          marginBottom: 4,
-                        }}
-                        accessibilityRole="button"
-                        accessibilityLabel={`Select bed ${opt.value} (${opt.status})`}
-                        accessible
-                      >
-                        <View
-                          style={{
-                            flexDirection: "row",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                          }}
-                        >
-                          <PaperText
-                            style={{
-                              color: colors.textPrimary,
-                              fontSize: typography.fontSizeSm,
-                              fontWeight: isSelected ? "700" : "500",
-                            }}
-                          >
-                            Bed {opt.value}
-                          </PaperText>
+                        {opt.status && (
                           <View
                             style={{
-                              backgroundColor:
-                                bedStatusColors[opt.status] ??
-                                hexToRgba(colors.textSecondary, 0.2),
+                              backgroundColor: opt.statusColor || colors.textMuted,
                               borderRadius: 999,
                               paddingHorizontal: 10,
                               paddingVertical: 4,
@@ -821,188 +400,227 @@ const BedSelect: React.FC<BedSelectProps> = ({ label, value, options, onChange, 
                           >
                             <Text
                               style={{
-                                color: colors.white,
-                                fontSize: 11,
+                                color: "#FFFFFF",
+                                fontSize: 10,
                                 fontWeight: "700",
                               }}
                             >
                               {opt.status}
                             </Text>
                           </View>
-                        </View>
-                      </Pressable>
-                    );
-                  })
-                )}
-              </ScrollView>
-              <Button onPress={() => setOpen(false)} textColor={colors.accent}>
-                Close
-              </Button>
-            </View>
-          </View>
-        </Portal>
-      )}
+                        )}
+                      </View>
+                    </Pressable>
+                  );
+                })
+              )}
+            </ScrollView>
+          </Dialog.ScrollArea>
+          <Dialog.Actions>
+            <Button onPress={() => setOpen(false)} textColor={colors.accent}>
+              Close
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
     </>
   );
-};
+});
 
-/* ---------------------------- main screen ---------------------------- */
-
-type DueType = "Monthly" | "FirstMonth" | "Custom";
-
-const dueTypeFromCode = (code: any): DueType => {
-  const c = num(code);
-  if (c === 0) return "FirstMonth";
-  if (c === 2) return "Custom";
-  return "Monthly";
-};
-
-const dueTypeCodeFromType = (t: DueType): number => {
-  if (t === "FirstMonth") return 0;
-  if (t === "Custom") return 2;
-  return 1;
-};
+/* ─────────────────────────────────────────────────────────────────────────────
+   MAIN SCREEN COMPONENT
+───────────────────────────────────────────────────────────────────────────── */
 
 export default function TenantAddEditScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const insets = useSafeAreaInsets();
   const { colors, spacing, radius, typography } = useTheme();
-  const { selectedId, properties } = useProperty();
-  const { profileData } = useSelector((state: any) => state.profileDetails);
 
-  const propertyId = selectedId as string | undefined;
+  // Params
+  const { id } = useLocalSearchParams<{ id: string }>();
   const isAddMode = String(id) === "add";
 
-  const ownerIdSafe = str(
-    profileData?.ownerId ?? profileData?.userId ?? profileData?._id ?? "",
+  // Property context
+  const { selectedId, properties } = useProperty();
+  const propertyId = selectedId as string | undefined;
+
+  // Profile data
+  const profileData = useSelector(
+    (state: { profileDetails?: { profileData?: Record<string, unknown> } }) =>
+      state?.profileDetails?.profileData
+  );
+  const ownerId = str(
+    (profileData as Record<string, unknown>)?.ownerId ??
+      (profileData as Record<string, unknown>)?.userId ??
+      (profileData as Record<string, unknown>)?._id ??
+      "",
     ""
   );
 
+  // Current property
   const currentProperty = useMemo(
     () => properties.find((p) => p._id === propertyId),
     [properties, propertyId]
   );
 
+  // Fetch rooms
   const {
     data: roomsResp,
     isLoading: roomsLoading,
-    error: roomsError,
   } = useGetAllRooms(propertyId as string);
 
+  // Fetch tenant details for edit mode
   const {
     data: tenantResp,
     isLoading: tenantLoading,
-    error: tenantError,
   } = useGetAllTenantDetails(!isAddMode ? (id as string) : "");
 
   const rooms = useMemo(() => extractRooms(roomsResp), [roomsResp]);
 
-  const unwrapTenant = (resp: any) => {
+  // Unwrap tenant data
+  const unwrapTenant = (resp: unknown) => {
     if (!resp) return null;
+    const r = resp as Record<string, unknown>;
     const base =
-      resp?.data && typeof resp.data === "object" && !Array.isArray(resp.data)
-        ? resp.data
-        : resp;
-    if (base?.tenant && typeof base.tenant === "object") return base.tenant;
+      r?.data && typeof r.data === "object" && !Array.isArray(r.data)
+        ? (r.data as Record<string, unknown>)
+        : r;
+    if (base?.tenant && typeof base.tenant === "object") return base.tenant as Record<string, unknown>;
     return base;
   };
 
-  const currentTenant = useMemo(() => (!isAddMode ? unwrapTenant(tenantResp) : null), [
-    isAddMode,
-    tenantResp,
-  ]);
+  const currentTenant = useMemo(
+    () => (!isAddMode ? unwrapTenant(tenantResp) : null),
+    [isAddMode, tenantResp]
+  );
 
-  /* ----------------------------- form state ----------------------------- */
+  // Get tenant ID for tracking
+  const currentTenantId = useMemo(() => {
+    if (!currentTenant) return null;
+    return String((currentTenant as Record<string, unknown>)?._id ?? (currentTenant as Record<string, unknown>)?.id ?? "");
+  }, [currentTenant]);
+
+  /* ----------------------------- Form State ----------------------------- */
 
   const [tenantName, setTenantName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
-
   const [gender, setGender] = useState<"Male" | "Female">("Male");
-
   const [joiningDate, setJoiningDate] = useState<Date | null>(null);
-
-  const [roomId, setRoomId] = useState<string>("");
-  const [bed, setBed] = useState<string>("");
-
+  const [roomId, setRoomId] = useState("");
+  const [bedId, setBedId] = useState("");
   const [dueType, setDueType] = useState<DueType>("Monthly");
   const [dueDate, setDueDate] = useState<Date | null>(null);
-
   const [rentAmount, setRentAmount] = useState("");
   const [depositAmount, setDepositAmount] = useState("");
-
-  // Only in ADD mode
   const [dueDepositAmount, setDueDepositAmount] = useState("");
   const [rentCollected, setRentCollected] = useState("");
   const [depositCollected, setDepositCollected] = useState("");
 
-  /* ---------------------- prefill Edit mode ----------------------- */
+  // Track which tenant ID was prefilled to avoid duplicate prefills
+  const prefilledTenantId = useRef<string | null>(null);
+  // Flag to skip reset effect right after prefill
+  const justPrefilled = useRef(false);
+
+  // Date picker state
+  const [showJoiningDatePicker, setShowJoiningDatePicker] = useState(false);
+  const [showDueDatePicker, setShowDueDatePicker] = useState(false);
+  const [tempJoiningDate, setTempJoiningDate] = useState<Date>(() => new Date());
+  const [tempDueDate, setTempDueDate] = useState<Date>(() => new Date());
+
+  // Mutations
+  const insertTenant = useInsertTenant(() => {});
+  const updateTenant = useUpdateTenant(() => {});
+
+  /* ----------------------------- Prefill Logic ----------------------------- */
 
   useEffect(() => {
-    if (isAddMode || !currentTenant) {
-      // reset for add mode
+    // Skip if add mode
+    if (isAddMode) {
+      // Reset form for add mode
       setTenantName("");
       setPhone("");
       setEmail("");
       setGender("Male");
       setJoiningDate(null);
       setRoomId("");
-      setBed("");
+      setBedId("");
       setDueType("Monthly");
       setDueDate(null);
       setRentAmount("");
       setDepositAmount("");
+      setDueDepositAmount("");
       setRentCollected("");
       setDepositCollected("");
-      setDueDepositAmount("");
+      prefilledTenantId.current = null;
       return;
     }
 
-    setTenantName(str(currentTenant.tenantName ?? currentTenant.name ?? "", ""));
-    setPhone(
-      str(currentTenant.phoneNumber ?? currentTenant.phone ?? "", "")
-        .replace(/[^\d]/g, "")
-        .slice(0, 10)
+    // Skip if no tenant data yet
+    if (!currentTenant || !currentTenantId) return;
+
+    // Skip if already prefilled this tenant
+    if (prefilledTenantId.current === currentTenantId) return;
+
+    const ct = currentTenant as Record<string, unknown>;
+
+    // Mark as prefilled for this tenant
+    prefilledTenantId.current = currentTenantId;
+
+    // Tenant details
+    setTenantName(str(ct.tenantName ?? ct.name, ""));
+    setPhone(str(ct.phoneNumber ?? ct.phone, "").replace(/[^\d]/g, "").slice(0, 10));
+    setEmail(str(ct.email ?? "", ""));
+    setGender(String(ct.gender).toLowerCase() === "female" ? "Female" : "Male");
+
+    // Joining date
+    const jDate =
+      parseISODate(ct.joiningDate) ??
+      parseISODate(ct.joinDate) ??
+      parseISODate(ct.joinedOn);
+    setJoiningDate(jDate);
+
+    // Room ID - handle nested object
+    const tenantRoomId = str(
+      (ct.roomId as Record<string, unknown>)?._id ??
+        ct.roomId ??
+        (ct.room as Record<string, unknown>)?._id ??
+        (ct.room as Record<string, unknown>)?.id ??
+        "",
+      ""
     );
-    setEmail(str(currentTenant.email ?? "", ""));
+    setRoomId(tenantRoomId);
 
-    setGender(
-      String(currentTenant.gender ?? "Male").toLowerCase() === "female" ? "Female" : "Male"
-    );
+    // Bed - Always bind from API response
+    const tenantBed = str(ct.bedNumber ?? ct.bed ?? "", "").toUpperCase();
 
-    const j =
-      parseISODate(currentTenant.joiningDate) ||
-      parseISODate(currentTenant.joinDate) ||
-      parseISODate(currentTenant.joinedOn);
-    setJoiningDate(j);
+    // CRITICAL: Set flag to prevent reset effect from clearing this bed
+    justPrefilled.current = true;
+    setBedId(tenantBed);
 
-    const tenantRoomIdRaw =
-      currentTenant?.roomId?._id ??
-      currentTenant?.roomId ??
-      currentTenant?.room?._id ??
-      currentTenant?.room?.id ??
-      "";
-    setRoomId(str(tenantRoomIdRaw, ""));
-    setBed(str(currentTenant.bedNumber ?? "", "").toUpperCase());
+    // Amounts - bind from tenant data
+    const rentVal = num(ct.rentAmount ?? ct.rent ?? 0);
+    const depositVal = num(ct.depositAmount ?? ct.deposit ?? 0);
 
-    if (currentTenant.rentAmount != null) {
-      setRentAmount(formatAmountInput(String(num(currentTenant.rentAmount))));
-    }
-    if (currentTenant.depositAmount != null) {
-      setDepositAmount(formatAmountInput(String(num(currentTenant.depositAmount))));
-    }
+    setRentAmount(rentVal > 0 ? formatIndianNumber(String(rentVal)) : "");
+    setDepositAmount(depositVal > 0 ? formatIndianNumber(String(depositVal)) : "");
 
-    const dt = currentTenant.dueType;
-    setDueType(dueTypeFromCode(dt));
+    // Due type from tenant
+    const dtCode = num(ct.dueType);
+    if (dtCode === 0) setDueType("FirstMonth");
+    else if (dtCode === 2) setDueType("Custom");
+    else setDueType("Monthly");
+
+    // Due date from tenant
     const dd =
-      parseISODate(currentTenant.dueDate) ||
-      parseISODate(currentTenant.nextDueDate) ||
-      parseISODate(currentTenant.nextDueOn);
+      parseISODate(ct.dueDate) ??
+      parseISODate(ct.nextDueDate) ??
+      parseISODate(ct.nextDueOn);
     setDueDate(dd);
-  }, [isAddMode, currentTenant]);
+  }, [isAddMode, currentTenant, currentTenantId]);
 
-  /* ---------------------- recompute Due Date logic --------------------- */
+  /* ----------------------------- Due Date Auto-compute ----------------------------- */
 
   const todayStart = useMemo(() => startOfDay(new Date()), []);
 
@@ -1033,380 +651,277 @@ export default function TenantAddEditScreen() {
     }
   }, [dueType, joiningDate, todayStart]);
 
-  /* ------------------------- rooms & beds options ---------------------- */
+  /* ----------------------------- Due Deposit Auto-calc (Add only) ----------------------------- */
 
-  const roomOptions: RoomOption[] = useMemo(
+  useEffect(() => {
+    if (!isAddMode) return;
+    const dep = Number(parseFormattedNumber(depositAmount) || 0);
+    if (!dep) {
+      setDueDepositAmount("");
+      return;
+    }
+    setDueDepositAmount(formatIndianNumber(String(dep)));
+  }, [depositAmount, isAddMode]);
+
+  /* ----------------------------- Room Options ----------------------------- */
+
+  const roomStatusColors = useMemo(
+    () => ({
+      Available: colors.availableBeds ?? "#22C55E",
+      Partial: colors.advBookedBeds ?? "#F59E0B",
+      Filled: colors.filledBeds ?? "#EF4444",
+    }),
+    [colors]
+  );
+
+  const roomOptions: SheetSelectOption[] = useMemo(
     () =>
-      (rooms ?? [])
-        .map((room: any) => {
+      rooms
+        .map((room) => {
           const rid = str(room?._id ?? room?.id ?? "", "");
           const roomNo = str(room?.roomNo ?? room?.roomNumber ?? "", "");
           if (!rid || !roomNo) return null;
+
+          const status = deriveRoomStatus(room);
+          const sharing = num(room?.beds, 0);
+          const vacant = num(room?.vacantBeds, 0);
+
           return {
             id: rid,
-            roomNo,
-            status: deriveRoomStatus(room),
-          } as RoomOption;
+            label: `Room ${roomNo}`,
+            sublabel: `${sharing} beds • ${vacant} vacant`,
+            status: status,
+            statusColor: roomStatusColors[status],
+          } as SheetSelectOption;
         })
-        .filter(Boolean) as RoomOption[],
-    [rooms]
+        .filter(Boolean) as SheetSelectOption[],
+    [rooms, roomStatusColors]
   );
 
+  /* ----------------------------- Selected Room ----------------------------- */
+
   const selectedRoom = useMemo(
-    () => rooms.find((r: any) => String(r?._id ?? r?.id ?? "") === roomId),
+    () => rooms.find((r) => String(r?._id ?? r?.id ?? "") === roomId),
     [rooms, roomId]
   );
 
-  // Auto-bind rent & deposit when a room is picked (user can still override)
+  // Track if user manually changed rent/deposit (to prevent auto-override)
+  const userChangedRent = useRef(false);
+  const userChangedDeposit = useRef(false);
+
+  // Auto-bind rent & deposit when room changes
   useEffect(() => {
     if (!selectedRoom) return;
+    
     const price = num(selectedRoom.bedPrice);
     const deposit = num(selectedRoom.securityDeposit);
 
-    if (!rentAmount && price > 0) {
-      setRentAmount(formatAmountInput(String(price)));
+    // In add mode: always auto-fill when room changes (unless user manually changed)
+    // In edit mode: only auto-fill if values are empty
+    if (isAddMode) {
+      if (!userChangedRent.current && price > 0) {
+        setRentAmount(formatIndianNumber(String(price)));
+      }
+      if (!userChangedDeposit.current && deposit > 0) {
+        setDepositAmount(formatIndianNumber(String(deposit)));
+      }
+    } else {
+      // Edit mode: only auto-fill if empty
+      if (!rentAmount && price > 0) {
+        setRentAmount(formatIndianNumber(String(price)));
+      }
+      if (!depositAmount && deposit > 0) {
+        setDepositAmount(formatIndianNumber(String(deposit)));
+      }
     }
-    if (!depositAmount && deposit > 0) {
-      setDepositAmount(formatAmountInput(String(deposit)));
+  }, [selectedRoom, isAddMode]);
+
+  /* ----------------------------- Bed Options ----------------------------- */
+
+  const bedStatusColors = useMemo(
+    () => ({
+      Filled: colors.filledBeds ?? "#EF4444",
+      AdvBooked: colors.advBookedBeds ?? "#F59E0B",
+      UnderNotice: colors.underNoticeBeds ?? colors.advBookedBeds ?? "#F59E0B",
+      Available: colors.availableBeds ?? "#22C55E",
+    }),
+    [colors]
+  );
+
+  // Get tenant's original room/bed for edit mode
+  const tenantOriginalRoomId = useMemo(() => {
+    if (isAddMode || !currentTenant) return "";
+    const ct = currentTenant as Record<string, unknown>;
+    return str(
+      (ct.roomId as Record<string, unknown>)?._id ??
+        ct.roomId ??
+        "",
+      ""
+    );
+  }, [isAddMode, currentTenant]);
+
+  const tenantOriginalBed = useMemo(() => {
+    if (isAddMode || !currentTenant) return "";
+    const ct = currentTenant as Record<string, unknown>;
+    return str(ct.bedNumber ?? "", "").toUpperCase();
+  }, [isAddMode, currentTenant]);
+
+  const bedOptions: SheetSelectOption[] = useMemo(() => {
+    // If no room selected, no bed options
+    if (!roomId) return [];
+
+    // Determine sharing count - prefer from selectedRoom, fallback to tenant's sharingType
+    let sharing = selectedRoom ? num(selectedRoom.beds, 0) : 0;
+
+    // In edit mode, if room data not loaded yet, use tenant's sharingType as fallback
+    if (!sharing && !isAddMode && currentTenant && roomId === tenantOriginalRoomId) {
+      sharing = num((currentTenant as Record<string, unknown>).sharingType ?? 0);
     }
-  }, [selectedRoom, rentAmount, depositAmount]);
 
-  const bedOptions: BedOption[] = useMemo(() => {
-    if (!selectedRoom) return [];
-
-    const sharing = num(selectedRoom.beds, 0);
     if (!sharing) return [];
 
     const letters = BED_LETTERS.slice(0, Math.min(sharing, BED_LETTERS.length)).split("");
+    const bpr: Record<string, unknown>[] = selectedRoom && Array.isArray(selectedRoom.bedsPerRoom)
+      ? (selectedRoom.bedsPerRoom as Record<string, unknown>[])
+      : [];
 
-    const bpr: any[] = Array.isArray(selectedRoom.bedsPerRoom) ? selectedRoom.bedsPerRoom : [];
-
-    const tenantBedUpper = str(bed, "").toUpperCase();
-
-    const tenantRoomIdForCheck = currentTenant
-      ? str(
-        currentTenant.roomId?._id ??
-        currentTenant.roomId ??
-        currentTenant.room?._id ??
-        currentTenant.room?.id ??
-        "",
-        ""
-      )
-      : "";
-
-    const isExistingAssignment =
-      !isAddMode && !!tenantRoomIdForCheck && tenantRoomIdForCheck === roomId && !!tenantBedUpper;
+    // Check if we're on the same room as the tenant's original room
+    const isSameRoom = !isAddMode && tenantOriginalRoomId === roomId;
 
     return letters.map((letter) => {
-      const match = bpr.find(
-        (b: any) => str(b?._id ?? b?.bedNumber, "").toUpperCase() === letter.toUpperCase()
-      );
-      const codes = (Array.isArray(match?.tenantsPerBed) ? match.tenantsPerBed : [])
-        .map((t: any) => num(t?.tenantStatus))
-        .filter((c: number) => c > 0);
-      const status = bedStatusFromTenantStatuses(codes);
-      const isCurrent = isExistingAssignment && tenantBedUpper === letter.toUpperCase();
+      const upperLetter = letter.toUpperCase();
 
-      // In add mode: only Available can be selected.
-      // In edit mode: Available + current tenant's own bed can be selected.
-      // If it's the current tenant's bed, it should NOT be disabled, even if status is Filled.
-      const disabled = status !== "Available" && !isCurrent;
+      // Find bed info from room's bedsPerRoom array (if available)
+      const match = bpr.find(
+        (b) => str(b?._id ?? b?.bedNumber, "").toUpperCase() === upperLetter
+      );
+
+      // Get tenant statuses for this bed
+      const codes = (
+        match && Array.isArray(match?.tenantsPerBed)
+          ? (match.tenantsPerBed as { tenantStatus?: number }[])
+          : []
+      )
+        .map((t) => num(t?.tenantStatus))
+        .filter((c) => c > 0);
+
+      const status = bedStatusFromTenantStatuses(codes);
+
+      // CRITICAL: In edit mode, the tenant's own bed should ALWAYS be selectable
+      const isCurrentTenantBed = isSameRoom && tenantOriginalBed === upperLetter;
+
+      // Disable logic:
+      // - In Add mode: only "Available" beds can be selected
+      // - In Edit mode: "Available" beds + the tenant's original bed can be selected
+      const disabled = isAddMode
+        ? status !== "Available"
+        : status !== "Available" && !isCurrentTenantBed;
 
       return {
-        value: letter,
-        status,
+        id: letter,
+        label: `Bed ${letter}`,
+        sublabel: isCurrentTenantBed ? "(Your current bed)" : undefined,
+        status: status,
+        statusColor: bedStatusColors[status],
         disabled,
-      };
+      } as SheetSelectOption;
     });
-  }, [selectedRoom, bed, isAddMode, currentTenant, roomId]);
+  }, [
+    selectedRoom,
+    roomId,
+    isAddMode,
+    bedStatusColors,
+    tenantOriginalRoomId,
+    tenantOriginalBed,
+    currentTenant,
+  ]);
 
-  // Reset bed when room changes to something incompatible
+  // Track previous roomId to detect room changes
+  const previousRoomId = useRef<string>("");
+
+  // Reset bed when room changes (clear bed if room changed to a different one)
   useEffect(() => {
-    if (!selectedRoom) {
-      setBed("");
+    // Skip this effect if we just prefilled (to prevent clearing the prefilled bed)
+    if (justPrefilled.current) {
+      justPrefilled.current = false;
+      previousRoomId.current = roomId;
       return;
     }
+
+    // Don't run reset logic while rooms are loading
+    if (roomsLoading) return;
+
+    // Detect if room actually changed (not just initial load)
+    const roomChanged = previousRoomId.current !== "" && previousRoomId.current !== roomId;
+
+    // If room changed, clear bed (unless it's the tenant's original room in edit mode)
+    if (roomChanged) {
+      // In edit mode, only clear if moving away from tenant's original room
+      if (!isAddMode && currentTenant && previousRoomId.current === tenantOriginalRoomId) {
+        // Moving away from original room - clear bed
+        setBedId("");
+        previousRoomId.current = roomId;
+        return;
+      }
+      // In add mode or moving to a different room - always clear bed
+      if (isAddMode || previousRoomId.current !== tenantOriginalRoomId) {
+        setBedId("");
+        previousRoomId.current = roomId;
+        return;
+      }
+    }
+
+    // Update previous roomId
+    previousRoomId.current = roomId;
+
+    // If no room selected, clear bed
+    if (!roomId) {
+      setBedId("");
+      return;
+    }
+
+    // If room is selected but not found in rooms list
+    if (!selectedRoom) {
+      // In edit mode, preserve the bed if on tenant's room
+      if (!isAddMode && roomId === tenantOriginalRoomId) {
+        return;
+      }
+      // Room not found and not matching tenant's room - clear bed
+      setBedId("");
+      return;
+    }
+
+    // Room is found - validate bed against room's capacity
     const sharing = num(selectedRoom.beds, 0);
     const allowedLetters = BED_LETTERS.slice(0, Math.min(sharing, BED_LETTERS.length))
       .split("")
       .map((c) => c.toUpperCase());
 
-    const upperBed = str(bed, "").toUpperCase();
+    const upperBed = bedId.toUpperCase();
 
-    const tenantRoomIdForCheck = currentTenant
-      ? str(
-        currentTenant.roomId?._id ??
-        currentTenant.roomId ??
-        currentTenant.room?._id ??
-        currentTenant.room?.id ??
-        "",
-        ""
-      )
-      : "";
+    // Check if current bed is the tenant's original bed (in edit mode)
+    const isOriginalBed =
+      !isAddMode && tenantOriginalRoomId === roomId && upperBed === tenantOriginalBed;
 
-    const isExistingAssignment =
-      !isAddMode &&
-      !!currentTenant &&
-      tenantRoomIdForCheck === roomId &&
-      upperBed === str(currentTenant.bedNumber ?? "", "").toUpperCase();
-
-    if (!bed) return;
-
-    if (!allowedLetters.includes(upperBed) && !isExistingAssignment) {
-      setBed("");
+    // Reset bed only if:
+    // - There's a bed selected
+    // - It's not in the allowed letters for this room's capacity
+    // - AND it's not the tenant's original bed
+    if (upperBed && !allowedLetters.includes(upperBed) && !isOriginalBed) {
+      setBedId("");
     }
-  }, [selectedRoom, bed, isAddMode, currentTenant, roomId]);
+  }, [
+    selectedRoom,
+    bedId,
+    isAddMode,
+    roomId,
+    roomsLoading,
+    tenantOriginalRoomId,
+    tenantOriginalBed,
+    currentTenant,
+  ]);
 
-  /* -------------------------- Due deposit auto-calc (Add only) --------------------- */
-
-  useEffect(() => {
-    if (!isAddMode) return;
-    const dep = parseAmount(depositAmount);
-    if (!dep) {
-      setDueDepositAmount("");
-      return;
-    }
-    // Match web: dueDepositAmount = depositAmount
-    setDueDepositAmount(formatAmountInput(String(dep)));
-  }, [depositAmount, isAddMode]);
-
-  /* ---------------------------- validation ----------------------------- */
-
-  const validate = (): string | null => {
-    if (!propertyId) return "Please select a property first.";
-
-    if (!tenantName.trim()) return "Tenant name is required.";
-
-    if (!phone.trim()) return "Phone number is required.";
-    if (phone.trim().length !== 10) return "Phone number must be 10 digits.";
-
-    if (!joiningDate) return "Date of joining is required.";
-
-    if (!roomId) return "Please select a room.";
-    if (!bed) return "Please select a bed.";
-
-    if (!dueType) return "Please select due type.";
-    if (!dueDate) return "Due date is required.";
-
-    if (startOfDay(dueDate).getTime() < todayStart.getTime()) {
-      return "Due date cannot be in the past.";
-    }
-
-    if (!rentAmount.trim()) return "Rent amount is required.";
-    if (!depositAmount.trim()) return "Deposit amount is required.";
-
-    const rentNum = parseAmount(rentAmount);
-    const depositNum = parseAmount(depositAmount);
-    const collectedRentNum = parseAmount(rentCollected);
-    const collectedDepositNum = parseAmount(depositCollected);
-
-    if (rentNum <= 0) return "Rent amount must be greater than 0.";
-    if (depositNum <= 0) return "Deposit amount must be greater than 0.";
-
-    if (isAddMode) {
-      if (!rentCollected.trim())
-        return "Collected rent amount is required in add mode.";
-      if (!depositCollected.trim())
-        return "Collected deposit amount is required in add mode.";
-
-      if (collectedRentNum <= 0)
-        return "Collected rent amount must be greater than 0.";
-      if (collectedDepositNum < 0)
-        return "Collected deposit amount cannot be negative.";
-
-      if (collectedRentNum > rentNum) {
-        return "Collected rent amount cannot be greater than rent amount.";
-      }
-      if (collectedDepositNum > depositNum) {
-        return "Collected deposit amount cannot be greater than deposit amount.";
-      }
-    }
-
-    if (email.trim()) {
-      const re = /^\S+@\S+\.\S+$/;
-      if (!re.test(email.trim())) return "Please enter a valid email address.";
-    }
-
-    if (!isAddMode && !currentTenant) {
-      return "Unable to load tenant details.";
-    }
-
-    return null;
-  };
-
-  /* ----------------------------- navigation ---------------------------- */
-
-  const goToTenantsTab = () => {
-    if (propertyId) {
-      router.replace({
-        pathname: `/protected/property/${propertyId}`,
-        params: { tab: "Tenants" },
-      });
-    } else {
-      router.replace("/protected/(tabs)/Properties");
-    }
-  };
-
-  const handleBack = () => {
-    goToTenantsTab();
-  };
-
-  useEffect(() => {
-    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
-      handleBack();
-      return true;
-    });
-    return () => sub.remove();
-  }, []);
-
-  /* ----------------------------- error toast --------------------------- */
-
-  useEffect(() => {
-    const err: any = roomsError || tenantError;
-    if (!err) return;
-    const msg = getErrorMessageFromError(err, "Something went wrong. Please try again.");
-    Toast.show({ type: "error", text1: msg, position: "bottom" });
-  }, [roomsError, tenantError]);
-
-  /* ------------------------------ mutations ---------------------------- */
-
-  const insertTenantMutation = useInsertTenant((resp: any) => {
-    const payload = unwrapPayload(resp);
-
-    if (isErrorPayload(payload)) {
-      const errMsg = getPayloadMessage(payload, "Something went wrong. Please try again.");
-      Toast.show({ type: "error", text1: errMsg, position: "bottom" });
-      return;
-    }
-
-    const msg = getPayloadMessage(payload, "Tenant added successfully.");
-    Toast.show({ type: "success", text1: msg, position: "bottom" });
-    goToTenantsTab();
-  });
-
-  const updateTenantMutation = useUpdateTenant((resp: any) => {
-    const payload = unwrapPayload(resp);
-
-    if (isErrorPayload(payload)) {
-      const errMsg = getPayloadMessage(payload, "Something went wrong. Please try again.");
-      Toast.show({ type: "error", text1: errMsg, position: "bottom" });
-      return;
-    }
-
-    const msg = getPayloadMessage(payload, "Tenant updated successfully.");
-    Toast.show({ type: "success", text1: msg, position: "bottom" });
-    goToTenantsTab();
-  });
-
-  useEffect(() => {
-    const err: any = insertTenantMutation.error || updateTenantMutation.error;
-    if (!err) return;
-    const msg = getErrorMessageFromError(err, "Something went wrong. Please try again.");
-    Toast.show({ type: "error", text1: msg, position: "bottom" });
-  }, [insertTenantMutation.error, updateTenantMutation.error]);
-
-  const isSubmitting = insertTenantMutation.isPending || updateTenantMutation.isPending;
-
-  /* ------------------------------ submit ------------------------------- */
-
-  const onSubmit = () => {
-    const error = validate();
-    if (error) {
-      Toast.show({ type: "error", text1: error, position: "bottom" });
-      return;
-    }
-
-    if (!propertyId) return;
-
-    const rentNum = parseAmount(rentAmount);
-    const depositNum = parseAmount(depositAmount);
-    const collectedRentNum = parseAmount(rentCollected);
-    const collectedDepositNum = parseAmount(depositCollected);
-
-    const formData = new FormData();
-
-    formData.append("tenantName", tenantName.trim());
-    formData.append("phoneNumber", phone.trim());
-    if (email.trim()) formData.append("email", email.trim());
-    formData.append("gender", gender);
-
-    if (joiningDate) {
-      formData.append("joiningDate", formatDateYMD(joiningDate));
-    }
-
-    if (roomId) {
-      formData.append("roomId", roomId);
-      formData.append("roomld", roomId);
-    }
-    if (bed) {
-      formData.append("bedNumber", bed);
-    }
-
-    formData.append("rentAmount", String(rentNum));
-    formData.append("depositAmount", String(depositNum));
-
-    formData.append("dueType", String(dueTypeCodeFromType(dueType)));
-    if (dueDate) {
-      formData.append("dueDate", dueDate.toUTCString());
-    }
-
-    if (ownerIdSafe) {
-      formData.append("ownerId", ownerIdSafe);
-      formData.append("ownerld", ownerIdSafe);
-      formData.append("createdBy", ownerIdSafe);
-    }
-
-    formData.append("lockingPeriod", "");
-    formData.append(
-      "noticePeriod",
-      str((currentProperty as any)?.noticePeriod ?? 15, "15")
-    );
-
-    if (isAddMode) {
-      formData.append("status", "1");
-      formData.append("rentAmountPaid", String(collectedRentNum));
-      formData.append("depositAmountPaid", String(collectedDepositNum));
-      formData.append("advanceRentAmountPaid", "0");
-      formData.append("advanceDepositAmountPaid", "0");
-      formData.append("dueRentAmount", String(rentNum));
-      formData.append("dueDepositAmount", String(depositNum));
-
-      insertTenantMutation.mutate(formData);
-    } else {
-      const tenantKey = str(currentTenant?._id ?? id, "");
-      if (!tenantKey) {
-        Toast.show({
-          type: "error",
-          text1: "Unable to identify tenant record.",
-          position: "bottom",
-        });
-        return;
-      }
-
-      formData.append("status", "1");
-      formData.append("advanceRentAmountPaid", "0");
-      formData.append("advanceDepositAmountPaid", "0");
-      formData.append("dueRentAmount", String(rentNum));
-      formData.append("dueDepositAmount", String(depositNum));
-
-      updateTenantMutation.mutate({ formData, tenantId: tenantKey });
-    }
-  };
-
-  /* -------------------------- help text for Custom due date ----------------------- */
-
-  const dueDaysHelpText = useMemo(() => {
-    if (dueType !== "Custom" || !joiningDate || !dueDate) return "";
-    const join = startOfDay(joiningDate);
-    const due = startOfDay(dueDate);
-    const diffMs = due.getTime() - join.getTime();
-    const diffDays = Math.round(diffMs / (24 * 60 * 60 * 1000));
-    if (diffDays === 0) return "";
-    return `Due rent amount is calculated for ${diffDays} day${Math.abs(diffDays) === 1 ? "" : "s"
-      }`;
-  }, [dueType, joiningDate, dueDate]);
-
-  /* --------------------------- joining date range ---------------------- */
+  /* ----------------------------- Joining Date Limits ----------------------------- */
 
   const minJoiningDate = useMemo(() => {
     const d = new Date();
@@ -1420,12 +935,400 @@ export default function TenantAddEditScreen() {
     return d;
   }, []);
 
-  /* ------------------------------ styles ------------------------------- */
+  /* ----------------------------- Due Days Help Text ----------------------------- */
+
+  const dueDaysHelpText = useMemo(() => {
+    if (!joiningDate || !dueDate) return "";
+    
+    const join = startOfDay(joiningDate);
+    const due = startOfDay(dueDate);
+    const diffMs = due.getTime() - join.getTime();
+    const diffDays = Math.round(diffMs / (24 * 60 * 60 * 1000));
+    
+    if (diffDays === 0) return "";
+    
+    // Calculate days for all due types
+    if (dueType === "Monthly") {
+      // Monthly: typically 30 days, but show actual calculated days
+      return `Due rent amount is calculated for Monthly (${diffDays} day${Math.abs(diffDays) === 1 ? "" : "s"})`;
+    } else if (dueType === "FirstMonth") {
+      // FirstMonth: from joining date to first of next month
+      return `Due rent amount is calculated for ${diffDays} day${Math.abs(diffDays) === 1 ? "" : "s"}`;
+    } else if (dueType === "Custom") {
+      // Custom: show the custom range
+      return `Due rent amount is calculated for ${diffDays} day${Math.abs(diffDays) === 1 ? "" : "s"}`;
+    }
+    
+    return "";
+  }, [dueType, joiningDate, dueDate]);
+
+  /* ----------------------------- Navigation ----------------------------- */
+
+  const navigateBackToTab = useCallback(() => {
+    try {
+      queryClient.invalidateQueries({ queryKey: ["tenantList"] });
+    } catch {
+      // Ignore
+    }
+    if (propertyId) {
+      router.replace({
+        pathname: `/protected/property/${propertyId}`,
+        params: { tab: "Tenants", refresh: String(Date.now()) },
+      });
+    } else {
+      router.replace("/protected/(tabs)/Properties");
+    }
+  }, [queryClient, router, propertyId]);
+
+  const handleBack = useCallback(() => {
+    navigateBackToTab();
+  }, [navigateBackToTab]);
+
+  // Android hardware back button
+  useEffect(() => {
+    const backHandler = BackHandler.addEventListener("hardwareBackPress", () => {
+      handleBack();
+      return true;
+    });
+    return () => backHandler.remove();
+  }, [handleBack]);
+
+  /* ----------------------------- Validation ----------------------------- */
+
+  const validate = useCallback((): string[] => {
+    const errs: string[] = [];
+
+    if (!propertyId) {
+      errs.push("• Please select a property first.");
+    }
+
+    if (!tenantName.trim()) {
+      errs.push("• Tenant name is required.");
+    } else if (tenantName.trim().length < 2) {
+      errs.push("• Tenant name must be at least 2 characters.");
+    }
+
+    if (!phone.trim()) {
+      errs.push("• Phone number is required.");
+    } else if (phone.trim().length !== 10) {
+      errs.push("• Phone number must be exactly 10 digits.");
+    }
+
+    if (email.trim()) {
+      const emailRegex = /^\S+@\S+\.\S+$/;
+      if (!emailRegex.test(email.trim())) {
+        errs.push("• Please enter a valid email address.");
+      }
+    }
+
+    if (!joiningDate) {
+      errs.push("• Date of joining is required.");
+    }
+
+    if (!roomId) {
+      errs.push("• Please select a room.");
+    }
+    if (!bedId) {
+      errs.push("• Please select a bed.");
+    }
+
+    if (!dueType) {
+      errs.push("• Please select due type.");
+    }
+    if (!dueDate) {
+      errs.push("• Due date is required.");
+    } else {
+      if (startOfDay(dueDate).getTime() < todayStart.getTime()) {
+        errs.push("• Due date cannot be in the past.");
+      }
+    }
+
+    const rentNum = Number(parseFormattedNumber(rentAmount) || 0);
+    const depositNum = Number(parseFormattedNumber(depositAmount) || 0);
+
+    if (!rentAmount.trim()) {
+      errs.push("• Rent amount is required.");
+    } else if (rentNum <= 0) {
+      errs.push("• Rent amount must be greater than 0.");
+    }
+
+    if (!depositAmount.trim()) {
+      errs.push("• Deposit amount is required.");
+    } else if (depositNum <= 0) {
+      errs.push("• Deposit amount must be greater than 0.");
+    }
+
+    if (isAddMode) {
+      const collectedRentNum = Number(parseFormattedNumber(rentCollected) || 0);
+      const collectedDepositNum = Number(parseFormattedNumber(depositCollected) || 0);
+
+      if (!rentCollected.trim()) {
+        errs.push("• Collected rent amount is required.");
+      } else if (collectedRentNum <= 0) {
+        errs.push("• Collected rent amount must be greater than 0.");
+      }
+
+      if (!depositCollected.trim()) {
+        errs.push("• Collected deposit amount is required.");
+      } else if (collectedDepositNum < 0) {
+        errs.push("• Collected deposit amount cannot be negative.");
+      }
+
+      if (collectedRentNum > rentNum) {
+        errs.push("• Collected rent cannot exceed rent amount.");
+      }
+      if (collectedDepositNum > depositNum) {
+        errs.push("• Collected deposit cannot exceed deposit amount.");
+      }
+    }
+
+    return errs;
+  }, [
+    propertyId,
+    tenantName,
+    phone,
+    email,
+    joiningDate,
+    roomId,
+    bedId,
+    dueType,
+    dueDate,
+    rentAmount,
+    depositAmount,
+    rentCollected,
+    depositCollected,
+    isAddMode,
+    todayStart,
+  ]);
+
+  /* ----------------------------- Submit ----------------------------- */
+
+  const onSubmit = useCallback(() => {
+    const errs = validate();
+    if (errs.length) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Alert.alert("Validation Errors", errs.join("\n"), [{ text: "OK" }], { cancelable: true });
+      return;
+    }
+
+    if (!propertyId) return;
+
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+    const rentNum = Number(parseFormattedNumber(rentAmount) || 0);
+    const depositNum = Number(parseFormattedNumber(depositAmount) || 0);
+    const collectedRentNum = Number(parseFormattedNumber(rentCollected) || 0);
+    const collectedDepositNum = Number(parseFormattedNumber(depositCollected) || 0);
+
+    const dueTypeCode = dueType === "FirstMonth" ? 0 : dueType === "Custom" ? 2 : 1;
+
+    const formData = new FormData();
+
+    formData.append("tenantName", tenantName.trim());
+    formData.append("phoneNumber", phone.trim());
+    if (email.trim()) formData.append("email", email.trim());
+    formData.append("gender", gender);
+
+    if (joiningDate) {
+      formData.append("joiningDate", formatDateYMD(joiningDate));
+    }
+
+    formData.append("roomId", roomId);
+    formData.append("roomld", roomId); // Backend typo fallback
+    formData.append("bedNumber", bedId.toUpperCase());
+
+    formData.append("rentAmount", String(rentNum));
+    formData.append("depositAmount", String(depositNum));
+
+    formData.append("dueType", String(dueTypeCode));
+    if (dueDate) {
+      formData.append("dueDate", dueDate.toUTCString());
+    }
+
+    if (ownerId) {
+      formData.append("ownerId", ownerId);
+      formData.append("ownerld", ownerId);
+      formData.append("createdBy", ownerId);
+    }
+
+    formData.append("lockingPeriod", "");
+    formData.append(
+      "noticePeriod",
+      str((currentProperty as Record<string, unknown>)?.noticePeriod ?? 15, "15")
+    );
+
+    if (isAddMode) {
+      formData.append("status", "1");
+      formData.append("rentAmountPaid", String(collectedRentNum));
+      formData.append("depositAmountPaid", String(collectedDepositNum));
+      formData.append("advanceRentAmountPaid", "0");
+      formData.append("advanceDepositAmountPaid", "0");
+      formData.append("dueRentAmount", String(rentNum));
+      formData.append("dueDepositAmount", String(depositNum));
+
+      insertTenant.mutate(formData, {
+        onSuccess: () => {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          navigateBackToTab();
+        },
+        onError: (error) => {
+          const errMsg =
+            (error as { message?: string })?.message ||
+            "Could not add tenant. Please try again.";
+          Alert.alert("Error", errMsg, [{ text: "OK" }]);
+        },
+      });
+    } else {
+      const tenantId = str((currentTenant as Record<string, unknown>)?._id ?? id, "");
+      if (!tenantId) {
+        Alert.alert("Error", "Unable to identify tenant record.", [{ text: "OK" }]);
+        return;
+      }
+
+      formData.append("status", "1");
+      formData.append("advanceRentAmountPaid", "0");
+      formData.append("advanceDepositAmountPaid", "0");
+      formData.append("dueRentAmount", String(rentNum));
+      formData.append("dueDepositAmount", String(depositNum));
+
+      updateTenant.mutate(
+        { formData, tenantId },
+        {
+          onSuccess: () => {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            navigateBackToTab();
+          },
+          onError: (error) => {
+            const errMsg =
+              (error as { message?: string })?.message ||
+              "Could not update tenant. Please try again.";
+            Alert.alert("Error", errMsg, [{ text: "OK" }]);
+          },
+        }
+      );
+    }
+  }, [
+    validate,
+    propertyId,
+    tenantName,
+    phone,
+    email,
+    gender,
+    joiningDate,
+    roomId,
+    bedId,
+    dueType,
+    dueDate,
+    rentAmount,
+    depositAmount,
+    rentCollected,
+    depositCollected,
+    ownerId,
+    currentProperty,
+    isAddMode,
+    currentTenant,
+    id,
+    insertTenant,
+    updateTenant,
+    navigateBackToTab,
+  ]);
+
+  /* ----------------------------- Input Handlers ----------------------------- */
+
+  const onPhoneChange = useCallback((text: string) => {
+    const digitsOnly = text.replace(/[^\d]/g, "").slice(0, 10);
+    setPhone(digitsOnly);
+  }, []);
+
+  const onNameChange = useCallback((text: string) => {
+    setTenantName(text);
+  }, []);
+
+  const onAmountChange = useCallback(
+    (setter: React.Dispatch<React.SetStateAction<string>>, isRent: boolean) => (text: string) => {
+      const digitsOnly = parseFormattedNumber(text).slice(0, MAX_AMOUNT_DIGITS);
+      setter(digitsOnly ? formatIndianNumber(digitsOnly) : "");
+      // Mark as user-changed to prevent auto-override
+      if (isRent) {
+        userChangedRent.current = true;
+      } else {
+        userChangedDeposit.current = true;
+      }
+    },
+    []
+  );
+
+  /* ----------------------------- Date Picker Handlers ----------------------------- */
+
+  const openJoiningDatePicker = useCallback(() => {
+    const validDate =
+      joiningDate instanceof Date && !isNaN(joiningDate.getTime()) ? joiningDate : new Date();
+    setTempJoiningDate(new Date(validDate.getTime()));
+    setShowJoiningDatePicker(true);
+  }, [joiningDate]);
+
+  const openDueDatePicker = useCallback(() => {
+    const validDate =
+      dueDate instanceof Date && !isNaN(dueDate.getTime()) ? dueDate : new Date();
+    setTempDueDate(new Date(validDate.getTime()));
+    setShowDueDatePicker(true);
+  }, [dueDate]);
+
+  const handleJoiningDateChange = useCallback(
+    (event: DateTimePickerEvent, selectedDate?: Date) => {
+      if (Platform.OS === "android") {
+        setShowJoiningDatePicker(false);
+        if (event.type === "set" && selectedDate && !isNaN(selectedDate.getTime())) {
+          setJoiningDate(startOfDay(selectedDate));
+        }
+      } else {
+        if (selectedDate && !isNaN(selectedDate.getTime())) {
+          setTempJoiningDate(new Date(selectedDate.getTime()));
+        }
+      }
+    },
+    []
+  );
+
+  const handleDueDateChange = useCallback(
+    (event: DateTimePickerEvent, selectedDate?: Date) => {
+      if (Platform.OS === "android") {
+        setShowDueDatePicker(false);
+        if (event.type === "set" && selectedDate && !isNaN(selectedDate.getTime())) {
+          setDueDate(startOfDay(selectedDate));
+        }
+      } else {
+        if (selectedDate && !isNaN(selectedDate.getTime())) {
+          setTempDueDate(new Date(selectedDate.getTime()));
+        }
+      }
+    },
+    []
+  );
+
+  const confirmIosJoiningDate = useCallback(() => {
+    if (tempJoiningDate instanceof Date && !isNaN(tempJoiningDate.getTime())) {
+      setJoiningDate(startOfDay(tempJoiningDate));
+    }
+    setShowJoiningDatePicker(false);
+  }, [tempJoiningDate]);
+
+  const confirmIosDueDate = useCallback(() => {
+    if (tempDueDate instanceof Date && !isNaN(tempDueDate.getTime())) {
+      setDueDate(startOfDay(tempDueDate));
+    }
+    setShowDueDatePicker(false);
+  }, [tempDueDate]);
+
+  /* ----------------------------- Styles ----------------------------- */
 
   const styles = useMemo(
     () =>
       StyleSheet.create({
-        safeArea: { flex: 1, backgroundColor: colors.background },
+        safeArea: {
+          flex: 1,
+          backgroundColor: colors.background,
+        },
         header: {
           paddingHorizontal: spacing.md,
           paddingTop: spacing.sm,
@@ -1467,6 +1370,11 @@ export default function TenantAddEditScreen() {
           backgroundColor: colors.cardBackground,
           padding: spacing.md,
           marginBottom: spacing.md,
+          shadowColor: "#000000",
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: Platform.OS === "ios" ? 0.1 : 0.05,
+          shadowRadius: Platform.OS === "ios" ? 10 : 6,
+          elevation: 4,
         },
         sectionTitle: {
           color: colors.textPrimary,
@@ -1474,22 +1382,33 @@ export default function TenantAddEditScreen() {
           marginBottom: 8,
           fontSize: typography.fontSizeMd,
         },
-        fieldBlock: {
-          marginBottom: spacing.md,
+        input: {
+          backgroundColor: colors.cardSurface,
         },
-        label: {
-          color: colors.textSecondary,
-          fontWeight: "600",
-          marginBottom: 6,
-          fontSize: typography.fontSizeSm,
-        },
-        disabledInput: {
-          backgroundColor: colors.surface,
-          color: colors.textPrimary,
-          padding: 14,
-          borderRadius: radius.lg,
+        dateBtn: {
           borderWidth: 1,
           borderColor: colors.borderColor,
+          borderRadius: radius.lg,
+          backgroundColor: colors.cardSurface,
+          paddingVertical: 14,
+          paddingHorizontal: 12,
+          minHeight: 55,
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 10,
+        },
+        disabledDateBtn: {
+          opacity: 0.6,
+          backgroundColor: colors.surface,
+        },
+        genderRow: {
+          flexDirection: "row",
+          flexWrap: "wrap",
+          gap: spacing.lg,
+        },
+        genderChip: {
+          flexDirection: "row",
+          alignItems: "center",
         },
         row: {
           flexDirection: "row",
@@ -1501,6 +1420,8 @@ export default function TenantAddEditScreen() {
         footerRow: {
           flexDirection: "row",
           gap: spacing.md,
+          marginTop: spacing.lg,
+          paddingBottom: Platform.OS === "android" ? 72 : 36,
         },
         secondaryBtn: {
           flex: 1,
@@ -1508,45 +1429,80 @@ export default function TenantAddEditScreen() {
           backgroundColor: colors.surface,
           borderWidth: 1,
           borderColor: colors.borderColor,
-          minHeight: 44,
+          minHeight: 48,
           justifyContent: "center",
         },
         primaryBtn: {
           flex: 1,
           borderRadius: radius.lg,
-          minHeight: 44,
+          minHeight: 48,
           justifyContent: "center",
         },
-        genderChipRow: {
-          flexDirection: "row",
-          flexWrap: "wrap",
-          gap: spacing.lg,
+        helpText: {
+          color: colors.textSecondary,
+          fontSize: 12,
+          marginTop: 4,
+          fontStyle: "italic",
         },
-        genderChip: {
+        // iOS Date Picker Modal
+        datePickerModal: {
+          flex: 1,
+          justifyContent: "flex-end",
+          backgroundColor: "rgba(0,0,0,0.4)",
+        },
+        datePickerContainer: {
+          backgroundColor: colors.cardBackground,
+          borderTopLeftRadius: 20,
+          borderTopRightRadius: 20,
+          paddingBottom: insets.bottom + 10,
+        },
+        datePickerHeader: {
           flexDirection: "row",
+          justifyContent: "space-between",
           alignItems: "center",
+          paddingHorizontal: spacing.md,
+          paddingVertical: spacing.sm + 4,
+          borderBottomWidth: 1,
+          borderColor: hexToRgba(colors.textSecondary, 0.12),
+        },
+        datePickerTitle: {
+          fontSize: 17,
+          fontWeight: "600",
+          color: colors.textPrimary,
+        },
+        datePickerBtn: {
+          paddingHorizontal: spacing.sm,
+          paddingVertical: spacing.xs,
+        },
+        datePickerBtnText: {
+          fontSize: 16,
+          fontWeight: "600",
         },
       }),
-    [colors, radius, spacing, typography]
+    [colors, spacing, radius, typography, insets.bottom]
   );
 
   const headerTitle = isAddMode ? "Add Tenant" : "Edit Tenant";
-  const headerSubtitle = str(currentProperty?.propertyName ?? "", "");
-  const inputContentStyle = { minHeight: 44, paddingVertical: 8 };
+  const isSubmitting = insertTenant.isPending || updateTenant.isPending;
+  const isLoading = roomsLoading || (tenantLoading && !isAddMode);
 
-  // Only show full-screen loader while editing & tenant not yet loaded
+  // Show payment fields only in add mode when room and amounts are set
+  const showPaymentFields =
+    isAddMode && !!roomId && !!rentAmount.trim() && !!depositAmount.trim();
+
+  // Loading state for edit when tenant not yet loaded
   if (!isAddMode && tenantLoading && !currentTenant) {
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
           <ActivityIndicator size="large" color={colors.accent} />
+          <PaperText style={{ color: colors.textSecondary, marginTop: 12 }}>
+            Loading tenant details...
+          </PaperText>
         </View>
       </SafeAreaView>
     );
   }
-
-  const showPaymentFields =
-    isAddMode && !!roomId && !!rentAmount.trim() && !!depositAmount.trim();
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["top", "left", "right", "bottom"]}>
@@ -1565,352 +1521,442 @@ export default function TenantAddEditScreen() {
               borderless: true,
             }}
           >
-            <Text style={{ color: colors.textPrimary, fontSize: 18 }}>{"←"}</Text>
+            <MaterialIcons
+              name={I18nManager.isRTL ? "arrow-forward" : "arrow-back"}
+              size={24}
+              color={colors.textPrimary}
+            />
           </Pressable>
           <View style={{ flex: 1 }}>
-            <PaperText style={styles.headerTitle} numberOfLines={1}>
+            <PaperText
+              style={styles.headerTitle}
+              numberOfLines={1}
+              accessible
+              accessibilityRole="header"
+            >
               {headerTitle}
             </PaperText>
-            {!!headerSubtitle && (
+            {currentProperty?.propertyName && (
               <PaperText style={styles.headerSubtitle} numberOfLines={1}>
-                {headerSubtitle}
+                {currentProperty.propertyName}
               </PaperText>
             )}
           </View>
         </View>
 
         <KeyboardAvoidingView
-          style={{ flex: 1 }}
           behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={{ flex: 1 }}
           keyboardVerticalOffset={Platform.OS === "ios" ? insets.top + 56 : 0}
         >
-          <ScrollView
-            style={styles.body}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={{
-              paddingBottom: spacing.lg * 2 + insets.bottom,
-            }}
-          >
-            {/* Property (read only) */}
-            <View style={styles.fieldBlock}>
-              <Text style={styles.label}>Property</Text>
-              <RNTextInput
-                editable={false}
-                value={str(currentProperty?.propertyName ?? "", "Select property")}
-                style={styles.disabledInput}
-              />
-            </View>
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+            <ScrollView
+              style={styles.body}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+              contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}
+              showsVerticalScrollIndicator={false}
+            >
+              {/* Tenant Details Section */}
+              <View style={styles.sectionCard}>
+                <Text style={styles.sectionTitle} accessible accessibilityRole="header">
+                  Tenant Details
+                </Text>
 
-            {/* Tenant details */}
-            <View style={styles.sectionCard}>
-              <Text style={styles.sectionTitle}>Tenant details</Text>
+                <Labeled label="Tenant Name" required>
+                  <TextInput
+                    value={tenantName}
+                    onChangeText={onNameChange}
+                    placeholder="Enter tenant name"
+                    mode="outlined"
+                    theme={{ roundness: radius.lg }}
+                    outlineColor={hexToRgba(colors.textSecondary, 0.22)}
+                    activeOutlineColor={colors.accent}
+                    style={styles.input}
+                    textColor={colors.textPrimary}
+                    placeholderTextColor={colors.textMuted}
+                    contentStyle={{ minHeight: 48, padding: spacing.sm }}
+                    accessibilityLabel="Tenant name"
+                    accessibilityHint="Enter the tenant's full name"
+                  />
+                </Labeled>
 
-              <View style={styles.fieldBlock}>
-                <Text style={styles.label}>Tenant name *</Text>
-                <TextInput
-                  value={tenantName}
-                  onChangeText={setTenantName}
-                  mode="outlined"
-                  placeholder="Enter tenant name"
-                  outlineColor={hexToRgba(colors.textSecondary, 0.22)}
-                  activeOutlineColor={colors.accent}
-                  style={{ backgroundColor: colors.cardSurface }}
-                  textColor={colors.textPrimary}
-                  placeholderTextColor={colors.textMuted}
-                  contentStyle={inputContentStyle}
-                />
+                <Labeled label="Phone Number" required>
+                  <TextInput
+                    value={phone}
+                    onChangeText={onPhoneChange}
+                    placeholder="10 digit number"
+                    mode="outlined"
+                    theme={{ roundness: radius.lg }}
+                    outlineColor={hexToRgba(colors.textSecondary, 0.22)}
+                    activeOutlineColor={colors.accent}
+                    style={styles.input}
+                    textColor={colors.textPrimary}
+                    placeholderTextColor={colors.textMuted}
+                    keyboardType={Platform.OS === "ios" ? "number-pad" : "numeric"}
+                    maxLength={10}
+                    left={
+                      <TextInput.Affix
+                        text="+91"
+                        textStyle={{ color: colors.textSecondary, fontWeight: "600" }}
+                      />
+                    }
+                    contentStyle={{ minHeight: 48, padding: spacing.sm }}
+                    accessibilityLabel="Phone number"
+                    accessibilityHint="Enter 10 digit mobile number"
+                  />
+                </Labeled>
+
+                <Labeled label="Email (optional)">
+                  <TextInput
+                    value={email}
+                    onChangeText={setEmail}
+                    placeholder="Enter email address"
+                    mode="outlined"
+                    theme={{ roundness: radius.lg }}
+                    outlineColor={hexToRgba(colors.textSecondary, 0.22)}
+                    activeOutlineColor={colors.accent}
+                    style={styles.input}
+                    textColor={colors.textPrimary}
+                    placeholderTextColor={colors.textMuted}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    contentStyle={{ minHeight: 48, padding: spacing.sm }}
+                    accessibilityLabel="Email address"
+                    accessibilityHint="Enter tenant's email address"
+                  />
+                </Labeled>
+
+                <Labeled label="Gender" required>
+                  <RadioButton.Group
+                    onValueChange={(v) => setGender(v === "Female" ? "Female" : "Male")}
+                    value={gender}
+                  >
+                    <View style={styles.genderRow}>
+                      <Pressable
+                        style={styles.genderChip}
+                        onPress={() => setGender("Male")}
+                        accessibilityRole="radio"
+                        accessibilityLabel="Male"
+                        accessibilityState={{ checked: gender === "Male" }}
+                      >
+                        <RadioButton value="Male" />
+                        <Text style={{ color: colors.textPrimary }}>Male</Text>
+                      </Pressable>
+                      <Pressable
+                        style={styles.genderChip}
+                        onPress={() => setGender("Female")}
+                        accessibilityRole="radio"
+                        accessibilityLabel="Female"
+                        accessibilityState={{ checked: gender === "Female" }}
+                      >
+                        <RadioButton value="Female" />
+                        <Text style={{ color: colors.textPrimary }}>Female</Text>
+                      </Pressable>
+                    </View>
+                  </RadioButton.Group>
+                </Labeled>
               </View>
 
-              <View style={styles.fieldBlock}>
-                <Text style={styles.label}>Phone number *</Text>
-                <TextInput
-                  value={phone}
-                  onChangeText={(t) => setPhone(onlyDigitsMax(t, 10))}
-                  mode="outlined"
-                  placeholder="10 digit number"
-                  outlineColor={hexToRgba(colors.textSecondary, 0.22)}
-                  activeOutlineColor={colors.accent}
-                  style={{ backgroundColor: colors.cardSurface }}
-                  textColor={colors.textPrimary}
-                  placeholderTextColor={colors.textMuted}
-                  keyboardType={Platform.OS === "ios" ? "number-pad" : "numeric"}
-                  maxLength={10}
-                  left={
-                    <TextInput.Affix
-                      text="+91"
-                      textStyle={{ color: colors.textSecondary, fontWeight: "600" }}
+              {/* Booking Details Section */}
+              <View style={styles.sectionCard}>
+                <Text style={styles.sectionTitle} accessible accessibilityRole="header">
+                  Booking Details
+                </Text>
+
+                <Labeled label="Date of Joining" required>
+                  <Pressable
+                    style={styles.dateBtn}
+                    onPress={openJoiningDatePicker}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Select joining date, current: ${formatDisplayDate(joiningDate)}`}
+                    accessible
+                  >
+                    <MaterialIcons name="event" size={20} color={colors.textSecondary} />
+                    <PaperText
+                      style={{
+                        color: joiningDate ? colors.textPrimary : colors.textMuted,
+                        fontSize: typography.fontSizeMd,
+                        flex: 1,
+                      }}
+                    >
+                      {formatDisplayDate(joiningDate)}
+                    </PaperText>
+                    <MaterialIcons
+                      name="keyboard-arrow-down"
+                      size={20}
+                      color={colors.textSecondary}
                     />
-                  }
-                  contentStyle={inputContentStyle}
-                />
-              </View>
+                  </Pressable>
+                </Labeled>
 
-              <View style={styles.fieldBlock}>
-                <Text style={styles.label}>Email (optional)</Text>
-                <TextInput
-                  value={email}
-                  onChangeText={setEmail}
-                  mode="outlined"
-                  placeholder="Enter tenant email"
-                  outlineColor={hexToRgba(colors.textSecondary, 0.22)}
-                  activeOutlineColor={colors.accent}
-                  style={{ backgroundColor: colors.cardSurface }}
-                  textColor={colors.textPrimary}
-                  placeholderTextColor={colors.textMuted}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  contentStyle={inputContentStyle}
-                />
-              </View>
-
-              <View style={styles.fieldBlock}>
-                <Text style={styles.label}>Gender *</Text>
-                <RadioButton.Group
-                  onValueChange={(v) => setGender(v === "Female" ? "Female" : "Male")}
-                  value={gender}
-                >
-                  <View style={styles.genderChipRow}>
-                    <Pressable
-                      style={styles.genderChip}
-                      onPress={() => setGender("Male")}
-                      accessibilityRole="button"
-                      accessibilityLabel="Male"
-                      accessible
-                    >
-                      <RadioButton.Android
-                        value="Male"
-                        color={colors.accent}
-                        uncheckedColor={colors.textSecondary}
+                <View style={styles.row}>
+                  <View style={styles.col}>
+                    <Labeled label="Room" required>
+                      <SheetSelect
+                        value={roomId}
+                        placeholder="Select Room"
+                        options={roomOptions}
+                        onChange={setRoomId}
+                        disabled={roomsLoading}
                       />
-                      <Text style={{ color: colors.textPrimary }}>Male</Text>
-                    </Pressable>
-                    <Pressable
-                      style={styles.genderChip}
-                      onPress={() => setGender("Female")}
-                      accessibilityRole="button"
-                      accessibilityLabel="Female"
-                      accessible
-                    >
-                      <RadioButton.Android
-                        value="Female"
-                        color={colors.accent}
-                        uncheckedColor={colors.textSecondary}
-                      />
-                      <Text style={{ color: colors.textPrimary }}>Female</Text>
-                    </Pressable>
+                    </Labeled>
                   </View>
-                </RadioButton.Group>
-              </View>
-            </View>
-
-            {/* Booking details */}
-            <View style={styles.sectionCard}>
-              <Text style={styles.sectionTitle}>Booking details</Text>
-
-              <DateField
-                label="Date of joining *"
-                value={joiningDate}
-                onChange={(d) => setJoiningDate(startOfDay(d))}
-                placeholder="Select date of joining"
-                minimumDate={minJoiningDate}
-                maximumDate={maxJoiningDate}
-              />
-
-              <View style={styles.row}>
-                <View style={styles.col}>
-                  <RoomSelect
-                    label="Room *"
-                    value={roomId}
-                    onChange={setRoomId}
-                    rooms={roomOptions}
-                  />
+                  <View style={styles.col}>
+                    <Labeled label="Bed" required>
+                      <SheetSelect
+                        value={bedId}
+                        placeholder="Select Bed"
+                        options={bedOptions}
+                        onChange={setBedId}
+                        disabled={!roomId}
+                      />
+                    </Labeled>
+                  </View>
                 </View>
-                <View style={styles.col}>
-                  <BedSelect
-                    label="Bed *"
-                    value={bed}
-                    options={bedOptions}
-                    onChange={setBed}
-                    disabled={!roomId}
-                  />
-                </View>
-              </View>
 
-              <View style={styles.fieldBlock}>
-                <Text style={styles.label}>Due type *</Text>
-                <RadioButton.Group
-                  value={dueType}
-                  onValueChange={(v) => {
-                    const mapped =
-                      v === "FirstMonth" ? "FirstMonth" : v === "Custom" ? "Custom" : "Monthly";
-                    setDueType(mapped);
-                  }}
-                >
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      flexWrap: "wrap",
-                      gap: spacing.md,
+                <Labeled label="Due Type" required>
+                  <RadioButton.Group
+                    value={dueType}
+                    onValueChange={(v) => {
+                      const mapped =
+                        v === "FirstMonth"
+                          ? "FirstMonth"
+                          : v === "Custom"
+                          ? "Custom"
+                          : "Monthly";
+                      setDueType(mapped);
                     }}
                   >
-                    <View style={{ flexDirection: "row", alignItems: "center" }}>
-                      <RadioButton.Android
-                        value="Monthly"
-                        color={colors.accent}
-                        uncheckedColor={colors.textSecondary}
-                      />
-                      <Text style={{ color: colors.textPrimary }}>Monthly</Text>
+                    <View style={styles.genderRow}>
+                      <Pressable
+                        style={styles.genderChip}
+                        onPress={() => setDueType("Monthly")}
+                        accessibilityRole="radio"
+                      >
+                        <RadioButton value="Monthly" />
+                        <Text style={{ color: colors.textPrimary }}>Monthly</Text>
+                      </Pressable>
+                      <Pressable
+                        style={styles.genderChip}
+                        onPress={() => setDueType("FirstMonth")}
+                        accessibilityRole="radio"
+                      >
+                        <RadioButton value="FirstMonth" />
+                        <Text style={{ color: colors.textPrimary }}>1st Month</Text>
+                      </Pressable>
+                      <Pressable
+                        style={styles.genderChip}
+                        onPress={() => setDueType("Custom")}
+                        accessibilityRole="radio"
+                      >
+                        <RadioButton value="Custom" />
+                        <Text style={{ color: colors.textPrimary }}>Custom</Text>
+                      </Pressable>
                     </View>
-                    <View style={{ flexDirection: "row", alignItems: "center" }}>
-                      <RadioButton.Android
-                        value="FirstMonth"
-                        color={colors.accent}
-                        uncheckedColor={colors.textSecondary}
+                  </RadioButton.Group>
+                </Labeled>
+
+                <Labeled label="Due Date" required>
+                  <Pressable
+                    style={[styles.dateBtn, dueType !== "Custom" && styles.disabledDateBtn]}
+                    onPress={dueType === "Custom" ? openDueDatePicker : undefined}
+                    accessibilityRole="button"
+                    accessibilityState={{ disabled: dueType !== "Custom" }}
+                    accessible
+                  >
+                    <MaterialIcons name="event" size={20} color={colors.textSecondary} />
+                    <PaperText
+                      style={{
+                        color: dueDate ? colors.textPrimary : colors.textMuted,
+                        fontSize: typography.fontSizeMd,
+                        flex: 1,
+                      }}
+                    >
+                      {formatDisplayDate(dueDate)}
+                    </PaperText>
+                    {dueType === "Custom" && (
+                      <MaterialIcons
+                        name="keyboard-arrow-down"
+                        size={20}
+                        color={colors.textSecondary}
                       />
-                      <Text style={{ color: colors.textPrimary }}>1st Month</Text>
+                    )}
+                  </Pressable>
+                </Labeled>
+                {!!dueDaysHelpText && (
+                  <Text style={styles.helpText} accessible accessibilityRole="text">
+                    {dueDaysHelpText}
+                  </Text>
+                )}
+              </View>
+
+              {/* Financials Section */}
+              <View style={styles.sectionCard}>
+                <Text style={styles.sectionTitle} accessible accessibilityRole="header">
+                  Financials
+                </Text>
+
+                <View style={styles.row}>
+                  <View style={styles.col}>
+                    <Labeled label="Rent Amount" required>
+                      <TextInput
+                        value={rentAmount}
+                        onChangeText={onAmountChange(setRentAmount, true)}
+                        placeholder="e.g., 5,000"
+                        mode="outlined"
+                        theme={{ roundness: radius.lg }}
+                        outlineColor={hexToRgba(colors.textSecondary, 0.22)}
+                        activeOutlineColor={colors.accent}
+                        style={styles.input}
+                        textColor={colors.textPrimary}
+                        placeholderTextColor={colors.textMuted}
+                        keyboardType={Platform.OS === "ios" ? "number-pad" : "numeric"}
+                        left={
+                          <TextInput.Affix
+                            text="₹"
+                            textStyle={{ color: colors.textSecondary, fontWeight: "600" }}
+                          />
+                        }
+                        contentStyle={{ minHeight: 48, padding: spacing.sm }}
+                        accessibilityLabel="Rent amount"
+                      />
+                    </Labeled>
+                  </View>
+                  <View style={styles.col}>
+                    <Labeled label="Deposit Amount" required>
+                      <TextInput
+                        value={depositAmount}
+                        onChangeText={onAmountChange(setDepositAmount, false)}
+                        placeholder="e.g., 10,000"
+                        mode="outlined"
+                        theme={{ roundness: radius.lg }}
+                        outlineColor={hexToRgba(colors.textSecondary, 0.22)}
+                        activeOutlineColor={colors.accent}
+                        style={styles.input}
+                        textColor={colors.textPrimary}
+                        placeholderTextColor={colors.textMuted}
+                        keyboardType={Platform.OS === "ios" ? "number-pad" : "numeric"}
+                        left={
+                          <TextInput.Affix
+                            text="₹"
+                            textStyle={{ color: colors.textSecondary, fontWeight: "600" }}
+                          />
+                        }
+                        contentStyle={{ minHeight: 48, padding: spacing.sm }}
+                        accessibilityLabel="Deposit amount"
+                      />
+                    </Labeled>
+                  </View>
+                </View>
+              </View>
+
+              {/* Payment Collection Section (Add Mode Only) */}
+              {showPaymentFields && (
+                <View style={styles.sectionCard}>
+                  <Text style={styles.sectionTitle} accessible accessibilityRole="header">
+                    Payment Collection
+                  </Text>
+
+                  <View style={styles.row}>
+                    <View style={styles.col}>
+                      <Labeled label="Collected Rent" required>
+                        <TextInput
+                          value={rentCollected}
+                          onChangeText={onAmountChange(setRentCollected, false)}
+                          placeholder="e.g., 5,000"
+                          mode="outlined"
+                          theme={{ roundness: radius.lg }}
+                          outlineColor={hexToRgba(colors.textSecondary, 0.22)}
+                          activeOutlineColor={colors.accent}
+                          style={styles.input}
+                          textColor={colors.textPrimary}
+                          placeholderTextColor={colors.textMuted}
+                          keyboardType={Platform.OS === "ios" ? "number-pad" : "numeric"}
+                          left={
+                            <TextInput.Affix
+                              text="₹"
+                              textStyle={{ color: colors.textSecondary, fontWeight: "600" }}
+                            />
+                          }
+                          contentStyle={{ minHeight: 48, padding: spacing.sm }}
+                          accessibilityLabel="Collected rent"
+                        />
+                      </Labeled>
                     </View>
-                    <View style={{ flexDirection: "row", alignItems: "center" }}>
-                      <RadioButton.Android
-                        value="Custom"
-                        color={colors.accent}
-                        uncheckedColor={colors.textSecondary}
-                      />
-                      <Text style={{ color: colors.textPrimary }}>Custom</Text>
+                    <View style={styles.col}>
+                      <Labeled label="Collected Deposit" required>
+                        <TextInput
+                          value={depositCollected}
+                          onChangeText={onAmountChange(setDepositCollected, false)}
+                          placeholder="e.g., 5,000"
+                          mode="outlined"
+                          theme={{ roundness: radius.lg }}
+                          outlineColor={hexToRgba(colors.textSecondary, 0.22)}
+                          activeOutlineColor={colors.accent}
+                          style={styles.input}
+                          textColor={colors.textPrimary}
+                          placeholderTextColor={colors.textMuted}
+                          keyboardType={Platform.OS === "ios" ? "number-pad" : "numeric"}
+                          left={
+                            <TextInput.Affix
+                              text="₹"
+                              textStyle={{ color: colors.textSecondary, fontWeight: "600" }}
+                            />
+                          }
+                          contentStyle={{ minHeight: 48, padding: spacing.sm }}
+                          accessibilityLabel="Collected deposit"
+                        />
+                      </Labeled>
                     </View>
                   </View>
-                </RadioButton.Group>
-              </View>
 
-              <DateField
-                label="Due date *"
-                value={dueDate}
-                onChange={setDueDate}
-                placeholder="Select due date"
-                disabled={dueType !== "Custom"}
-                minimumDate={todayStart}
-              />
-              {!!dueDaysHelpText && (
-                <Text
-                  style={{
-                    color: colors.textSecondary,
-                    fontSize: 12,
-                    marginTop: 4,
-                  }}
-                  accessible
-                  accessibilityRole="text"
-                >
-                  {dueDaysHelpText}
-                </Text>
+                  <Labeled label="Due Deposit Amount">
+                    <TextInput
+                      value={dueDepositAmount}
+                      editable={false}
+                      mode="outlined"
+                      theme={{ roundness: radius.lg }}
+                      outlineColor={hexToRgba(colors.textSecondary, 0.22)}
+                      style={[styles.input, { backgroundColor: colors.surface }]}
+                      textColor={colors.textPrimary}
+                      left={
+                        <TextInput.Affix
+                          text="₹"
+                          textStyle={{ color: colors.textSecondary, fontWeight: "600" }}
+                        />
+                      }
+                      contentStyle={{ minHeight: 48, padding: spacing.sm }}
+                      accessibilityLabel="Due deposit amount"
+                    />
+                  </Labeled>
+                </View>
               )}
-            </View>
 
-            {/* Financials */}
-            <View style={styles.sectionCard}>
-              <Text style={styles.sectionTitle}>Financials</Text>
-
-              <View style={styles.row}>
-                <View style={styles.col}>
-                  <Text style={styles.label}>Rent Amount</Text>
-                  <RNTextInput
-                    value={rentAmount}
-                    onChangeText={(t) => setRentAmount(formatAmountInput(t))}
-                    placeholder="0"
-                    keyboardType="numeric"
-                    style={styles.disabledInput}
-                  />
+              {/* Loading hint for rooms */}
+              {roomsLoading && (
+                <View style={{ marginTop: spacing.sm, alignItems: "center" }}>
+                  <ActivityIndicator size="small" color={colors.accent} />
+                  <PaperText style={{ color: colors.textSecondary, marginTop: 4, fontSize: 12 }}>
+                    Loading rooms...
+                  </PaperText>
                 </View>
-                <View style={styles.col}>
-                  <Text style={styles.label}>Deposit Amount</Text>
-                  <RNTextInput
-                    value={depositAmount}
-                    onChangeText={(t) => setDepositAmount(formatAmountInput(t))}
-                    placeholder="0"
-                    keyboardType="numeric"
-                    style={styles.disabledInput}
-                  />
-                </View>
-              </View>
-            </View>
+              )}
 
-            {/* Payment Collection (Add Mode Only) */}
-            {showPaymentFields && (
-              <View style={styles.sectionCard}>
-                <Text style={styles.sectionTitle}>Payment Collection</Text>
+              <Divider
+                style={{ marginVertical: spacing.sm, backgroundColor: colors.borderColor }}
+              />
 
-                <View style={styles.fieldBlock}>
-                  <Text style={styles.label}>Collected Rent</Text>
-                  <RNTextInput
-                    value={rentCollected}
-                    onChangeText={(t) => setRentCollected(formatAmountInput(t))}
-                    placeholder="Enter collected rent"
-                    keyboardType="numeric"
-                    style={[
-                      styles.disabledInput,
-                      parseAmount(rentCollected) > parseAmount(rentAmount) && {
-                        borderColor: colors.error,
-                        borderWidth: 1,
-                      },
-                    ]}
-                  />
-                  {parseAmount(rentCollected) > parseAmount(rentAmount) && (
-                    <Text style={{ color: colors.error, fontSize: 12, marginTop: 4 }}>
-                      Collected rent amount cannot be greater than rent amount.
-                    </Text>
-                  )}
-                </View>
-
-                <View style={styles.fieldBlock}>
-                  <Text style={styles.label}>Collected Deposit</Text>
-                  <RNTextInput
-                    value={depositCollected}
-                    onChangeText={(t) => setDepositCollected(formatAmountInput(t))}
-                    placeholder="Enter collected deposit"
-                    keyboardType="numeric"
-                    style={[
-                      styles.disabledInput,
-                      parseAmount(depositCollected) > parseAmount(depositAmount) && {
-                        borderColor: colors.error,
-                        borderWidth: 1,
-                      },
-                    ]}
-                  />
-                  {parseAmount(depositCollected) > parseAmount(depositAmount) && (
-                    <Text style={{ color: colors.error, fontSize: 12, marginTop: 4 }}>
-                      Collected deposit amount cannot be greater than deposit amount.
-                    </Text>
-                  )}
-                </View>
-
-                <View style={styles.fieldBlock}>
-                  <Text style={styles.label}>Due Deposit Amount</Text>
-                  <RNTextInput
-                    value={dueDepositAmount}
-                    editable={false}
-                    style={[styles.disabledInput, { backgroundColor: colors.surface }]}
-                  />
-                </View>
-              </View>
-            )}
-
-            {/* Loading hint for rooms */}
-            {roomsLoading && (
-              <View style={{ marginTop: spacing.sm, alignItems: "center" }}>
-                <ActivityIndicator size="small" color={colors.accent} />
-                <Text style={{ color: colors.textSecondary, marginTop: 4, fontSize: 12 }}>
-                  Loading rooms…
-                </Text>
-              </View>
-            )}
-
-            {/* Footer buttons (NON-sticky, scrolls with content) */}
-            <View style={{ marginTop: spacing.lg }}>
+              {/* Footer Buttons */}
               <View style={styles.footerRow}>
                 <Button
                   mode="outlined"
                   style={styles.secondaryBtn}
                   textColor={colors.textPrimary}
                   onPress={handleBack}
+                  disabled={isSubmitting}
+                  accessibilityLabel="Cancel and go back"
+                  accessibilityHint="Discards changes and returns to tenants list"
                 >
                   Cancel
                 </Button>
@@ -1918,15 +1964,126 @@ export default function TenantAddEditScreen() {
                   mode="contained"
                   style={styles.primaryBtn}
                   onPress={onSubmit}
-                  disabled={roomsLoading || (!isAddMode && tenantLoading) || isSubmitting}
+                  loading={isSubmitting}
+                  disabled={isLoading || isSubmitting}
+                  accessibilityLabel={isAddMode ? "Save tenant" : "Save changes"}
                 >
                   {isAddMode ? "Save Tenant" : "Save Changes"}
                 </Button>
               </View>
-            </View>
-          </ScrollView>
+            </ScrollView>
+          </TouchableWithoutFeedback>
         </KeyboardAvoidingView>
       </View>
+
+      {/* Joining Date Picker - Platform specific */}
+      {Platform.OS === "android" && showJoiningDatePicker && (
+        <DateTimePicker
+          value={joiningDate || new Date()}
+          mode="date"
+          display="default"
+          onChange={handleJoiningDateChange}
+          minimumDate={minJoiningDate}
+          maximumDate={maxJoiningDate}
+        />
+      )}
+
+      {/* Due Date Picker - Platform specific */}
+      {Platform.OS === "android" && showDueDatePicker && (
+        <DateTimePicker
+          value={dueDate || new Date()}
+          mode="date"
+          display="default"
+          onChange={handleDueDateChange}
+          minimumDate={startOfDay(new Date())}
+        />
+      )}
+
+      {/* iOS Joining Date Picker Modal */}
+      {Platform.OS === "ios" && showJoiningDatePicker && (
+        <Modal
+          visible={showJoiningDatePicker}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowJoiningDatePicker(false)}
+        >
+          <Pressable
+            style={styles.datePickerModal}
+            onPress={() => setShowJoiningDatePicker(false)}
+          >
+            <Pressable style={styles.datePickerContainer} onPress={() => {}}>
+              <View style={styles.datePickerHeader}>
+                <Pressable
+                  onPress={() => setShowJoiningDatePicker(false)}
+                  style={styles.datePickerBtn}
+                >
+                  <Text style={[styles.datePickerBtnText, { color: colors.error }]}>Cancel</Text>
+                </Pressable>
+                <Text style={styles.datePickerTitle}>Select Joining Date</Text>
+                <Pressable onPress={confirmIosJoiningDate} style={styles.datePickerBtn}>
+                  <Text style={[styles.datePickerBtnText, { color: colors.accent }]}>Done</Text>
+                </Pressable>
+              </View>
+              <DateTimePicker
+                value={
+                  tempJoiningDate instanceof Date && !isNaN(tempJoiningDate.getTime())
+                    ? tempJoiningDate
+                    : new Date()
+                }
+                mode="date"
+                display="spinner"
+                onChange={handleJoiningDateChange}
+                style={{ height: 200 }}
+                textColor={colors.textPrimary}
+                themeVariant="light"
+                minimumDate={minJoiningDate}
+                maximumDate={maxJoiningDate}
+              />
+            </Pressable>
+          </Pressable>
+        </Modal>
+      )}
+
+      {/* iOS Due Date Picker Modal */}
+      {Platform.OS === "ios" && showDueDatePicker && (
+        <Modal
+          visible={showDueDatePicker}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowDueDatePicker(false)}
+        >
+          <Pressable style={styles.datePickerModal} onPress={() => setShowDueDatePicker(false)}>
+            <Pressable style={styles.datePickerContainer} onPress={() => {}}>
+              <View style={styles.datePickerHeader}>
+                <Pressable
+                  onPress={() => setShowDueDatePicker(false)}
+                  style={styles.datePickerBtn}
+                >
+                  <Text style={[styles.datePickerBtnText, { color: colors.error }]}>Cancel</Text>
+                </Pressable>
+                <Text style={styles.datePickerTitle}>Select Due Date</Text>
+                <Pressable onPress={confirmIosDueDate} style={styles.datePickerBtn}>
+                  <Text style={[styles.datePickerBtnText, { color: colors.accent }]}>Done</Text>
+                </Pressable>
+              </View>
+              <DateTimePicker
+                value={
+                  tempDueDate instanceof Date && !isNaN(tempDueDate.getTime())
+                    ? tempDueDate
+                    : new Date()
+                }
+                mode="date"
+                display="spinner"
+                onChange={handleDueDateChange}
+                style={{ height: 200 }}
+                textColor={colors.textPrimary}
+                themeVariant="light"
+                minimumDate={startOfDay(new Date())}
+              />
+            </Pressable>
+          </Pressable>
+        </Modal>
+      )}
     </SafeAreaView>
   );
 }

@@ -1,5 +1,5 @@
 // src/components/property/RoomsTab.tsx
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, RefObject } from "react";
 import {
   FlatList,
   useWindowDimensions,
@@ -8,6 +8,8 @@ import {
   ListRenderItemInfo,
   View,
   RefreshControl,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
@@ -119,9 +121,11 @@ type Props = {
   };
   refreshing: boolean;
   onRefresh: () => void;
+  scrollRef?: RefObject<FlatList>;
+  onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
 };
 
-export default function RoomsTab({ data, meta, refreshing, onRefresh }: Props) {
+export default function RoomsTab({ data, meta, refreshing, onRefresh, scrollRef, onScroll }: Props) {
   const router = useRouter();
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -235,6 +239,7 @@ export default function RoomsTab({ data, meta, refreshing, onRefresh }: Props) {
   return (
     <SafeAreaView style={s.safeArea} edges={["left", "right"]}>
       <FlatList
+        ref={scrollRef}
         data={filteredData}
         keyExtractor={(r: any, index) =>
           String(r?._id ?? r?.id ?? r?.roomNo ?? r?.roomNumber ?? index)
@@ -242,6 +247,8 @@ export default function RoomsTab({ data, meta, refreshing, onRefresh }: Props) {
         renderItem={renderRoom}
         numColumns={cols}
         columnWrapperStyle={cols > 1 ? s.columnGap : undefined}
+        onScroll={onScroll}
+        scrollEventThrottle={16}
         ListHeaderComponent={
           <View>
             <StatsGrid metrics={metrics} />
