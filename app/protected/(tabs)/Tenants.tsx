@@ -1,29 +1,38 @@
 // app/protected/(tabs)/Tenants.tsx
-import { useRouter } from "expo-router";
-import { useEffect, useRef } from "react";
+// Redirects to property detail screen with Tenants tab selected
+import { useRouter, useFocusEffect } from "expo-router";
+import { useCallback, useRef } from "react";
 import { useProperty } from "@/src/context/PropertyContext";
 
 export default function RedirectTenants() {
   const router = useRouter();
   const { selectedId, loading, properties } = useProperty();
-  const navigated = useRef(false);
+  const isNavigating = useRef(false);
 
-  useEffect(() => {
-    if (navigated.current) return; // prevent duplicate replace()
-    if (loading) return; // wait for context data
+  useFocusEffect(
+    useCallback(() => {
+      // Reset navigation flag when screen gains focus
+      isNavigating.current = false;
 
-    if (selectedId) {
-      navigated.current = true;
-      router.replace({
-        pathname: `/protected/property/${selectedId}`,
-        params: { tab: "Tenants" },
-      });
-    } else {
-      // No properties available -> send user to list
-      navigated.current = true;
-      router.replace("/protected/(tabs)/Properties");
-    }
-  }, [selectedId, loading, router, properties?.length]);
+      // Wait for property context to load
+      if (loading) return;
+
+      // Prevent duplicate navigation
+      if (isNavigating.current) return;
+
+      if (selectedId) {
+        isNavigating.current = true;
+        router.replace({
+          pathname: `/protected/property/${selectedId}`,
+          params: { tab: "Tenants" },
+        });
+      } else if (properties?.length === 0) {
+        // No properties available -> send user to list
+        isNavigating.current = true;
+        router.replace("/protected/(tabs)/Properties");
+      }
+    }, [selectedId, loading, router, properties?.length])
+  );
 
   return null;
 }

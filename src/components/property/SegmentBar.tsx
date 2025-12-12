@@ -1,145 +1,287 @@
-import React, { useRef, useEffect, useMemo } from "react";
+// src/components/property/SegmentBar.tsx
+// Modern animated tab bar with Reanimated - Production Ready
+import React, { useRef, useEffect, useMemo, useCallback } from "react";
 import {
   View,
   ScrollView,
-  TouchableOpacity,
+  Pressable,
   Text,
-  Animated,
-  Easing,
   StyleSheet,
   Platform,
+  I18nManager,
+  LayoutChangeEvent,
 } from "react-native";
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  interpolate,
+  Extrapolation,
+} from "react-native-reanimated";
 import * as Haptics from "expo-haptics";
 
 import { useTheme } from "@/src/theme/ThemeContext";
 import { hexToRgba } from "@/src/theme";
 
-interface Props {
-  /** list of tab labels */
-  tabs: readonly string[];
-  /** currently selected label */
-  value: string;
-  /** callback when user taps a tab */
-  onChange: (t: string) => void;
+/* ─────────────────────────────────────────────────────────────────────────────
+   TAB CONFIG TYPE (Future-proof)
+───────────────────────────────────────────────────────────────────────────── */
+
+export interface TabConfig {
+  key: string;
+  title: string;
 }
 
-/* ------------------------------------------------------------------ */
-/*                              COMPONENT                              */
-/* ------------------------------------------------------------------ */
+/* ─────────────────────────────────────────────────────────────────────────────
+   PROPS INTERFACE
+───────────────────────────────────────────────────────────────────────────── */
+
+interface Props {
+  /** Array of tab configurations */
+  tabs: readonly string[] | readonly TabConfig[];
+  /** Currently selected tab key/title */
+  value: string;
+  /** Callback when user taps a tab */
+  onChange: (tab: string) => void;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   SPRING CONFIG
+───────────────────────────────────────────────────────────────────────────── */
+
+const SPRING_CONFIG = {
+  damping: 20,
+  stiffness: 300,
+  mass: 0.8,
+};
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   ANIMATED TAB ITEM
+───────────────────────────────────────────────────────────────────────────── */
+
+interface TabItemProps {
+  label: string;
+  isSelected: boolean;
+  onPress: () => void;
+  onLayout: (e: LayoutChangeEvent) => void;
+  colors: ReturnType<typeof useTheme>["colors"];
+  spacing: ReturnType<typeof useTheme>["spacing"];
+}
+
+const TabItem = React.memo<TabItemProps>(
+  ({ label, isSelected, onPress, onLayout, colors, spacing }) => {
+    const scale = useSharedValue(1);
+
+    const animatedStyle = useAnimatedStyle(() => ({
+      transform: [{ scale: scale.value }],
+    }));
+
+    const handlePressIn = useCallback(() => {
+      scale.value = withSpring(0.95, { damping: 15, stiffness: 400 });
+    }, [scale]);
+
+    const handlePressOut = useCallback(() => {
+      scale.value = withSpring(1, { damping: 15, stiffness: 400 });
+    }, [scale]);
+
+    const handlePress = useCallback(() => {
+      Haptics.selectionAsync();
+      onPress();
+    }, [onPress]);
+
+    return (
+      <Pressable
+        onPress={handlePress}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        onLayout={onLayout}
+        style={[styles.tabItem, { marginRight: spacing.lg - 4 }]}
+        accessibilityRole="tab"
+        accessibilityState={{ selected: isSelected }}
+        accessibilityLabel={`${label} tab`}
+        accessibilityHint={`Switch to ${label}`}
+        accessible
+      >
+        <Animated.View style={animatedStyle}>
+          <Text
+            style={[
+              styles.tabLabel,
+              { color: isSelected ? colors.accent : colors.textMuted },
+              isSelected && styles.tabLabelSelected,
+            ]}
+            numberOfLines={1}
+          >
+            {label}
+          </Text>
+        </Animated.View>
+      </Pressable>
+    );
+  }
+);
+
+TabItem.displayName = "TabItem";
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   MAIN COMPONENT
+───────────────────────────────────────────────────────────────────────────── */
+
 export default function SegmentBar({ tabs, value, onChange }: Props) {
   const { colors, spacing } = useTheme();
+  const scrollRef = useRef<ScrollView>(null);
 
-  /* ---------- animated underline state ---------- */
-  const underlineX = useRef(new Animated.Value(0)).current;
-  const underlineW = useRef(new Animated.Value(0)).current;
-  const tabMeta = useRef<{ x: number; w: number }[]>([]).current;
-  const init = useRef(false);
+  // Normalize tabs to string array
+  const normalizedTabs = useMemo(() => {
+    return tabs.map((t) => (typeof t === "string" ? t : t.title));
+  }, [tabs]);
 
-  /* ---------- run animation whenever value changes ---------- */
+  // Tab measurements
+  const tabMeasurements = useRef<{ x: number; width: number }[]>([]);
+  const hasInitialized = useRef(false);
+
+  // Animated values for underline
+  const underlineX = useSharedValue(0);
+  const underlineWidth = useSharedValue(0);
+
+  // Get current index
+  const currentIndex = useMemo(() => {
+    return normalizedTabs.findIndex((t) => t === value);
+  }, [normalizedTabs, value]);
+
+  // Update underline position when value changes
   useEffect(() => {
-    const idx = tabs.findIndex((t) => t === value);
-    if (idx === -1) return;
-    const { x, w } = tabMeta[idx] ?? { x: 0, w: 0 };
-    Animated.parallel([
-      Animated.timing(underlineX, {
-        toValue: x,
-        duration: 260,
-        easing: Easing.out(Easing.exp),
-        useNativeDriver: false,
-      }),
-      Animated.timing(underlineW, {
-        toValue: w,
-        duration: 260,
-        easing: Easing.out(Easing.exp),
-        useNativeDriver: false,
-      }),
-    ]).start();
-  }, [value, tabs, underlineX, underlineW]);
+    if (currentIndex === -1) return;
 
-  /* ---------- theme-aware styles ---------- */
-  const s = useMemo(
-    () =>
-      StyleSheet.create({
-        container: {
-          backgroundColor: colors.background,
-          borderBottomWidth: StyleSheet.hairlineWidth,
-          borderColor: hexToRgba(colors.textMuted),
-        },
-        scroller: {
-          paddingHorizontal: spacing.md - 2,
-          position: "relative",
-        },
-        item: {
-          paddingVertical: spacing.md - 2,
-          marginRight: spacing.lg,
-        },
-        label: {
-          fontSize: 15,
-          color: colors.textMuted,
-        },
-        labelSel: {
-          color: colors.accent,
-          fontWeight: Platform.OS === "ios" ? "600" : "700",
-        },
-        underline: {
-          position: "absolute",
-          bottom: 0,
-          height: 3,
-          borderRadius: 1.5,
-          backgroundColor: colors.primary,
-        },
-      }),
-    [colors, spacing]
+    const measurement = tabMeasurements.current[currentIndex];
+    if (measurement) {
+      underlineX.value = withSpring(measurement.x, SPRING_CONFIG);
+      underlineWidth.value = withSpring(measurement.width, SPRING_CONFIG);
+
+      // Auto-scroll to keep selected tab visible
+      scrollRef.current?.scrollTo({
+        x: Math.max(0, measurement.x - 50),
+        animated: true,
+      });
+    }
+  }, [currentIndex, underlineX, underlineWidth]);
+
+  // Animated underline style
+  const underlineStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ translateX: underlineX.value }],
+      width: underlineWidth.value,
+    };
+  });
+
+  // Handle tab layout
+  const handleTabLayout = useCallback(
+    (index: number) => (e: LayoutChangeEvent) => {
+      const { x, width } = e.nativeEvent.layout;
+      tabMeasurements.current[index] = { x, width };
+
+      // Initialize underline position on first layout of selected tab
+      if (!hasInitialized.current && index === currentIndex) {
+        underlineX.value = x;
+        underlineWidth.value = width;
+        hasInitialized.current = true;
+      }
+    },
+    [currentIndex, underlineX, underlineWidth]
   );
 
-  /* ---------- render ---------- */
+  // Handle tab press
+  const handleTabPress = useCallback(
+    (tab: string) => {
+      if (tab !== value) {
+        onChange(tab);
+      }
+    },
+    [value, onChange]
+  );
+
+  // Dynamic styles
+  const containerStyle = useMemo(
+    () => [
+      styles.container,
+      {
+        backgroundColor: colors.background,
+        borderBottomColor: hexToRgba(colors.borderColor, 0.5),
+      },
+    ],
+    [colors]
+  );
+
+  const underlineBaseStyle = useMemo(
+    () => [
+      styles.underline,
+      { backgroundColor: colors.accent },
+      underlineStyle,
+    ],
+    [colors.accent, underlineStyle]
+  );
+
   return (
-    <View style={s.container}>
+    <View style={containerStyle}>
       <ScrollView
+        ref={scrollRef}
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={s.scroller}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingHorizontal: spacing.md },
+        ]}
+        scrollEventThrottle={16}
       >
-        {/* animated underline */}
-        <Animated.View
-          style={[s.underline, { transform: [{ translateX: underlineX }], width: underlineW }]}
-        />
+        {/* Tab Items */}
+        {normalizedTabs.map((tab, index) => (
+          <TabItem
+            key={tab}
+            label={tab}
+            isSelected={value === tab}
+            onPress={() => handleTabPress(tab)}
+            onLayout={handleTabLayout(index)}
+            colors={colors}
+            spacing={spacing}
+          />
+        ))}
 
-        {/* tab buttons */}
-        {tabs.map((t, idx) => {
-          const selected = value === t;
-          return (
-            <TouchableOpacity
-              key={t}
-              activeOpacity={0.7}
-              style={s.item}
-              onLayout={(e) => {
-                tabMeta[idx] = {
-                  x: e.nativeEvent.layout.x,
-                  w: e.nativeEvent.layout.width,
-                };
-
-                // set initial position instantly on first mount
-                if (!init.current && selected) {
-                  underlineX.setValue(tabMeta[idx].x);
-                  underlineW.setValue(tabMeta[idx].w);
-                  init.current = true;
-                }
-              }}
-              onPress={() => {
-                if (t !== value) Haptics.selectionAsync();
-                onChange(t);
-              }}
-              accessibilityRole="button"
-              accessibilityState={selected ? { selected: true } : undefined}
-            >
-              <Text style={[s.label, selected && s.labelSel]} numberOfLines={1}>
-                {t}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
+        {/* Animated Underline */}
+        <Animated.View style={underlineBaseStyle} />
       </ScrollView>
     </View>
   );
 }
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   STYLES
+───────────────────────────────────────────────────────────────────────────── */
+
+const styles = StyleSheet.create({
+  container: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  scrollContent: {
+    flexDirection: I18nManager.isRTL ? "row-reverse" : "row",
+    alignItems: "center",
+    position: "relative",
+  },
+  tabItem: {
+    paddingVertical: 14,
+    minHeight: 48,
+    justifyContent: "center",
+  },
+  tabLabel: {
+    fontSize: 15,
+    fontWeight: "500",
+    letterSpacing: 0.2,
+  },
+  tabLabelSelected: {
+    fontWeight: Platform.OS === "ios" ? "600" : "700",
+    fontSize: 15.5,
+  },
+  underline: {
+    position: "absolute",
+    bottom: 0,
+    height: 3,
+    borderRadius: 1.5,
+  },
+});

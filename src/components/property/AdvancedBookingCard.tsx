@@ -505,7 +505,7 @@ const AdvancedBookingCard: React.FC<Props> = ({
     <>
       <View style={styles.cardOuter}>
         {/* Main card content */}
-        <Pressable
+          <Pressable
           onPress={handleToggleExpand}
           android_ripple={{ color: hexToRgba(colors.primary, 0.05) }}
           accessible
@@ -541,7 +541,7 @@ const AdvancedBookingCard: React.FC<Props> = ({
             <View style={styles.amountBadge}>
               <Text style={styles.amountLabel}>Advance</Text>
               <Text style={styles.amountValue}>{formatCurrency(totalAdvancePaid)}</Text>
-            </View>
+          </View>
           </View>
 
           {/* Info chips */}
@@ -556,8 +556,8 @@ const AdvancedBookingCard: React.FC<Props> = ({
                 <MaterialCommunityIcons name="bed" size={12} color={colors.textMuted} />
                 <Text style={styles.chipText}>Bed</Text>
                 <Text style={styles.chipValue}>{bed}</Text>
-              </View>
-            )}
+            </View>
+          )}
             <View style={styles.chip}>
               <MaterialCommunityIcons name="calendar-plus" size={12} color={colors.textMuted} />
               <Text style={styles.chipText}>Booked</Text>
@@ -623,8 +623,8 @@ const AdvancedBookingCard: React.FC<Props> = ({
                 color="#EF4444"
                 bgColor={hexToRgba("#EF4444", 0.1)}
               />
-            )}
-          </View>
+          )}
+        </View>
         )}
       </View>
 
@@ -658,24 +658,24 @@ const AdvancedBookingCard: React.FC<Props> = ({
                 <Text style={styles.cancelInfoLabel}>Total Paid</Text>
                 <Text style={[styles.cancelInfoValue, { color: colors.accent }]}>
                   {formatCurrency(totalAdvancePaid)}
-                </Text>
+            </Text>
               </View>
 
-              <PaperTextInput
+            <PaperTextInput
                 label="Refund Amount (optional)"
-                mode="outlined"
-                value={refundAmountText}
-                onChangeText={setRefundAmountText}
-                keyboardType={Platform.OS === "ios" ? "number-pad" : "numeric"}
-                outlineColor={hexToRgba(colors.textSecondary, 0.22)}
-                activeOutlineColor={colors.accent}
+              mode="outlined"
+              value={refundAmountText}
+              onChangeText={setRefundAmountText}
+              keyboardType={Platform.OS === "ios" ? "number-pad" : "numeric"}
+              outlineColor={hexToRgba(colors.textSecondary, 0.22)}
+              activeOutlineColor={colors.accent}
                 style={{ backgroundColor: colors.cardSurface, marginTop: spacing.xs }}
                 textColor={colors.textPrimary}
                 left={<PaperTextInput.Affix text="₹" />}
-              />
+            />
               <Text style={{ color: colors.textMuted, fontSize: 11, marginTop: 2 }}>
                 Leave blank if no refund is required.
-              </Text>
+            </Text>
             </View>
           </Dialog.Content>
           <Dialog.Actions>

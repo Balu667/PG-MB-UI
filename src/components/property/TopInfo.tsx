@@ -1,10 +1,24 @@
-import React, { useMemo } from "react";
-import { View, Text, StyleSheet, useWindowDimensions, Platform } from "react-native";
+// src/components/property/TopInfo.tsx
+// Premium compact property header with animated accent
+import React, { useMemo, useEffect, useRef } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  useWindowDimensions,
+  Platform,
+  Animated,
+  I18nManager,
+} from "react-native";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
-import { LinearGradient } from "expo-linear-gradient";
+import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 
 import { useTheme } from "@/src/theme/ThemeContext";
 import { hexToRgba } from "@/src/theme";
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   PROPS INTERFACE
+───────────────────────────────────────────────────────────────────────────── */
 
 interface Props {
   name: string;
@@ -12,88 +26,155 @@ interface Props {
   city: string;
 }
 
+/* ─────────────────────────────────────────────────────────────────────────────
+   MAIN COMPONENT
+───────────────────────────────────────────────────────────────────────────── */
+
 export default function TopInfo({ name, area, city }: Props) {
   const { width } = useWindowDimensions();
   const { colors, spacing, typography } = useTheme();
 
-  /* ---------------- theme-aware styles ---------------- */
+  // Subtle pulse animation for the accent dot
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1.3,
+          duration: 1200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 1200,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    pulse.start();
+    return () => pulse.stop();
+  }, [pulseAnim]);
+
   const s = useMemo(
     () =>
       StyleSheet.create({
-        hero: {
-          overflow: "hidden",
-          width: "100%",
+        container: {
+          backgroundColor: colors.cardBackground,
+          borderBottomWidth: 1,
+          borderBottomColor: hexToRgba(colors.borderColor, 0.4),
+          ...Platform.select({
+            ios: {
+              shadowColor: colors.shadow,
+              shadowOffset: { width: 0, height: 1 },
+              shadowOpacity: 0.05,
+              shadowRadius: 2,
+            },
+            android: {
+              elevation: 1,
+            },
+          }),
         },
-
-        /* decorative bubbles */
-        bubble: (bg: string, size: number, x: number, y: number) => ({
-          position: "absolute",
-          width: size,
-          height: size,
-          borderRadius: size / 2,
-          backgroundColor: bg,
-          opacity: 0.18,
-          top: y,
-          left: x,
-        }),
-
         content: {
-          paddingVertical: spacing.lg + 6,
-          paddingHorizontal: spacing.lg,
-        },
-        pgName: {
-          fontSize: typography.fontSizeLg + 6,
-          fontWeight: typography.weightBold as any,
-          color: colors.textPrimary,
-          letterSpacing: Platform.OS === "ios" ? 0.3 : 0.5,
-        },
-        row: {
-          flexDirection: "row",
+          paddingVertical: spacing.sm,
+          paddingHorizontal: spacing.md,
+          flexDirection: I18nManager.isRTL ? "row-reverse" : "row",
           alignItems: "center",
-          marginTop: spacing.xs + 2,
         },
-        loc: {
-          fontSize: typography.fontSizeSm,
+        propertyIcon: {
+          width: 40,
+          height: 40,
+          borderRadius: 12,
+          backgroundColor: hexToRgba(colors.accent, 0.1),
+          alignItems: "center",
+          justifyContent: "center",
+          marginRight: I18nManager.isRTL ? 0 : spacing.sm,
+          marginLeft: I18nManager.isRTL ? spacing.sm : 0,
+        },
+        textContainer: {
+          flex: 1,
+        },
+        nameRow: {
+          flexDirection: I18nManager.isRTL ? "row-reverse" : "row",
+          alignItems: "center",
+        },
+        liveDot: {
+          width: 6,
+          height: 6,
+          borderRadius: 3,
+          backgroundColor: "#22C55E",
+          marginRight: I18nManager.isRTL ? 0 : 6,
+          marginLeft: I18nManager.isRTL ? 6 : 0,
+        },
+        propertyName: {
+          fontSize: typography.fontSizeMd + 1,
+          fontWeight: "700",
+          color: colors.textPrimary,
+          letterSpacing: Platform.OS === "ios" ? 0.2 : 0.3,
+          flex: 1,
+        },
+        locationRow: {
+          flexDirection: I18nManager.isRTL ? "row-reverse" : "row",
+          alignItems: "center",
+          marginTop: 2,
+        },
+        locationIcon: {
+          marginRight: I18nManager.isRTL ? 0 : 3,
+          marginLeft: I18nManager.isRTL ? 3 : 0,
+        },
+        locationText: {
+          fontSize: typography.fontSizeSm - 1,
           color: colors.textSecondary,
-          marginLeft: 4,
-          maxWidth: width - spacing.lg * 2 - 30,
+          maxWidth: width - spacing.md * 2 - 80,
         },
       }),
     [colors, spacing, typography, width]
   );
 
-  /* ---------------- render ---------------- */
   return (
-    <View style={s.hero}>
-      {/* a soft top-to-transparent gradient */}
-      <LinearGradient
-        colors={[
-          hexToRgba(colors.surface, 0.85),
-          hexToRgba(colors.surface, 0.6),
-          hexToRgba(colors.background, 0.0),
-        ]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 0, y: 1 }}
-        style={{ width: "100%" }}
-      >
-        {/* decorative, theme-tinted bubbles */}
-        <View style={s.bubble(colors.circle1, width * 0.55, -width * 0.25, -width * 0.18)} />
-        <View style={s.bubble(colors.circle2, width * 0.32, width * 0.55, -width * 0.07)} />
+    <View style={s.container}>
+      <View style={s.content}>
+        {/* Property Icon */}
+        <View style={s.propertyIcon}>
+          <MaterialCommunityIcons
+            name="office-building"
+            size={22}
+            color={colors.accent}
+          />
+        </View>
 
-        {/* main content */}
-        <View style={s.content}>
-          <Text style={s.pgName} numberOfLines={1}>
-            {name}
-          </Text>
-
-          <View style={s.row}>
-            <MaterialIcons name="location-on" size={18} color={colors.textSecondary} />
-            <Text style={s.loc} numberOfLines={1}>
+        {/* Text Content */}
+        <View style={s.textContainer}>
+          <View style={s.nameRow}>
+            {/* Live indicator dot with pulse */}
+            <Animated.View
+              style={[
+                s.liveDot,
+                { transform: [{ scale: pulseAnim }] },
+              ]}
+            />
+            <Text
+              style={s.propertyName}
+              numberOfLines={1}
+              accessibilityRole="header"
+              accessible
+            >
+              {name}
+            </Text>
+          </View>
+          <View style={s.locationRow}>
+            <MaterialIcons
+              name="location-on"
+              size={13}
+              color={colors.textMuted}
+              style={s.locationIcon}
+            />
+            <Text style={s.locationText} numberOfLines={1}>
               {area}, {city}
             </Text>
           </View>
         </View>
-      </LinearGradient>
+      </View>
     </View>
   );
 }

@@ -256,10 +256,10 @@ export default function AdvanceBookingTab({ data, refreshing, onRefresh, scrollR
   // Check if filter is active
   const filterIsActive = useMemo(
     () =>
-      (filter.status?.length ?? 0) > 0 ||
-      !!filter.bookingDate.from ||
-      !!filter.bookingDate.to ||
-      !!filter.joiningDate.from ||
+    (filter.status?.length ?? 0) > 0 ||
+    !!filter.bookingDate.from ||
+    !!filter.bookingDate.to ||
+    !!filter.joiningDate.from ||
       !!filter.joiningDate.to,
     [filter]
   );
@@ -294,14 +294,14 @@ export default function AdvanceBookingTab({ data, refreshing, onRefresh, scrollR
       const bFromLocal = bFrom ? startOfDayLocal(bFrom) : undefined;
       const bToLocal = bTo ? endOfDayLocal(bTo) : undefined;
 
-      out = out.filter((t) => {
-        const d = parseDate(t?.bookingDate);
-        if (!d) return false;
+        out = out.filter((t) => {
+          const d = parseDate(t?.bookingDate);
+          if (!d) return false;
         if (bFromLocal && d < bFromLocal) return false;
         if (bToLocal && d > bToLocal) return false;
-        return true;
-      });
-    }
+          return true;
+        });
+      }
 
     // Joining date range
     const { from: jFrom, to: jTo } = normalizeRange(
@@ -312,15 +312,15 @@ export default function AdvanceBookingTab({ data, refreshing, onRefresh, scrollR
       const jFromLocal = jFrom ? startOfDayLocal(jFrom) : undefined;
       const jToLocal = jTo ? endOfDayLocal(jTo) : undefined;
 
-      out = out.filter((t) => {
+        out = out.filter((t) => {
         const d =
           parseDate(t?.joiningDate) ?? parseDate(t?.joinedOn) ?? parseDate(t?.joinDate);
-        if (!d) return false;
+          if (!d) return false;
         if (jFromLocal && d < jFromLocal) return false;
         if (jToLocal && d > jToLocal) return false;
-        return true;
-      });
-    }
+          return true;
+        });
+      }
 
     // Sort: Active first, then by booking date (most recent first)
     out.sort((a, b) => {
@@ -438,12 +438,12 @@ export default function AdvanceBookingTab({ data, refreshing, onRefresh, scrollR
         )}
 
         {/* Search bar */}
-        <SearchBar
+          <SearchBar
           placeholder="Search by name, phone, room..."
-          onSearch={setQuery}
-          onFilter={() => setSheetOpen(true)}
-          filterActive={filterIsActive}
-        />
+            onSearch={setQuery}
+            onFilter={() => setSheetOpen(true)}
+            filterActive={filterIsActive}
+          />
 
         {/* Section header */}
         <View style={styles.sectionHeader}>
@@ -459,7 +459,7 @@ export default function AdvanceBookingTab({ data, refreshing, onRefresh, scrollR
             <Text style={styles.countText}>{filtered.length}</Text>
           </View>
         </View>
-      </View>
+          </View>
     ),
     [styles, metrics, width, filterIsActive, filtered.length, colors.accent]
   );

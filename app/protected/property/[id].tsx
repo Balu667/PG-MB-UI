@@ -1,13 +1,27 @@
 // app/protected/property/[id].tsx
+// Production-ready property details screen with optimized tab system
 import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
-import { ScrollView, StyleSheet, Text, View, ActivityIndicator, FlatList, NativeScrollEvent, NativeSyntheticEvent } from "react-native";
+import {
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  ActivityIndicator,
+  FlatList,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useProperty } from "@/src/context/PropertyContext";
-import ScrollToTopButton from "@/src/components/ScrollToTopButton";
+import { useSelector } from "react-redux";
 
+import { useProperty } from "@/src/context/PropertyContext";
+import { useTheme } from "@/src/theme/ThemeContext";
+
+// Components
+import ScrollToTopButton from "@/src/components/ScrollToTopButton";
 import TopInfo from "@/src/components/property/TopInfo";
-import SegmentBar from "@/src/components/property/SegmentBar";
+import AnimatedTabBar, { TabConfig } from "@/src/components/property/AnimatedTabBar";
 import InfoCard from "@/src/components/property/InfoCard";
 import PGLayout from "@/src/components/property/PGLayout";
 import RoomsTab from "@/src/components/property/RoomsTab";
@@ -16,45 +30,51 @@ import ExpensesTab from "@/src/components/property/ExpensesTab";
 import AdvanceBookingTab from "@/src/components/property/AdvanceBookingTab";
 import DuesTab from "@/src/components/property/DuesTab";
 import CollectionsTab from "@/src/components/property/CollectionsTab";
-// ⬇️ NEW
 import StaffTab from "@/src/components/property/StaffTab";
 
-import { useTheme } from "@/src/theme/ThemeContext";
+// Hooks
 import { useGetAllRooms } from "@/src/hooks/room";
 import { useGetAllTenants } from "@/src/hooks/tenants";
 import { useGetDailyExpensesList } from "@/src/hooks/dailyExpenses";
 import { useGetPropertyDetails } from "@/src/hooks/bookingHook";
-import { useGetAllEmployees } from "@/src/hooks/employee"; // ⬅️ your employees hook
+import { useGetAllEmployees } from "@/src/hooks/employee";
 import { useGetAllPropertyPayments } from "@/src/hooks/payments";
 import type { Metric } from "@/src/components/StatsGrid";
-// ⬇️ NEW
-import { useSelector } from "react-redux";
 
-/* ---------------------------------- tabs ---------------------------------- */
-const TABS = [
-  "Property Details",
-  "PG Layout",
-  "Advance Booking",
-  "Rooms",
-  "Tenants",
-  "Expenses",
-  "Dues",
-  "Collections",
-  "Staff",
+/* ═══════════════════════════════════════════════════════════════════════════
+   TAB CONFIGURATION - Future-proof array-based architecture
+   To add a new tab: just add an object to this array
+   NOTE: Keys MUST match the tab names used in navigation params across the app
+═══════════════════════════════════════════════════════════════════════════ */
+
+const TAB_CONFIG: readonly TabConfig[] = [
+  { key: "Property Details", title: "Property Details" },
+  { key: "PG Layout", title: "PG Layout" },
+  { key: "Advance Booking", title: "Advance Booking" },
+  { key: "Rooms", title: "Rooms" },
+  { key: "Tenants", title: "Tenants" },
+  { key: "Expenses", title: "Expenses" },
+  { key: "Dues", title: "Dues" },
+  { key: "Collections", title: "Collections" },
+  { key: "Staff", title: "Staff" },
 ] as const;
-type TabKey = (typeof TABS)[number];
 
-/* ----------------------------- local helpers ------------------------------ */
-type RoomsMeta = {
+type TabKey = (typeof TAB_CONFIG)[number]["key"];
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   TYPE DEFINITIONS
+═══════════════════════════════════════════════════════════════════════════ */
+
+interface RoomsMeta {
   totalBeds: number;
   vacantBeds: number;
   occupiedBeds: number;
   advanceBookingBeds: number;
   underNoticeBeds: number;
   roomsTotal: number;
-};
+}
 
-type TenantsMeta = {
+interface TenantsMeta {
   totalTenants: number;
   underNoticeTenants: number;
   advancedBookings: number;
@@ -62,38 +82,87 @@ type TenantsMeta = {
   cancelledBookings: number;
   totalDues: number;
   appNotDownloaded: number;
-};
+}
 
-const num = (v: any, fallback = 0) => (typeof v === "number" ? v : Number(v ?? fallback)) || 0;
-const str = (v: any, fallback = "") => (v == null ? fallback : String(v));
-const inr = (n: any) => {
+type BedStatus = "vacant" | "filled" | "notice" | "advance";
+
+interface UILayout {
+  floors: Array<{
+    name: string;
+    groups: Array<{
+      sharing: number;
+      rooms: Array<{
+        roomNo: string;
+        beds: Array<{ id: string; status: BedStatus }>;
+      }>;
+    }>;
+  }>;
+  metrics: Metric[];
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   UTILITY FUNCTIONS
+═══════════════════════════════════════════════════════════════════════════ */
+
+const num = (v: unknown, fallback = 0): number =>
+  typeof v === "number" ? v : Number(v ?? fallback) || fallback;
+
+const str = (v: unknown, fallback = ""): string =>
+  v == null ? fallback : String(v);
+
+const inr = (n: unknown): string => {
   const x = typeof n === "number" ? n : Number(n ?? 0) || 0;
   return `₹ ${x.toLocaleString("en-IN")}`;
 };
 
-/* ---------- Rooms parsing ---------- */
-const computeRoomsMetaFromList = (rooms: any[]): RoomsMeta => {
+/* ═══════════════════════════════════════════════════════════════════════════
+   DATA PARSERS - Robust response normalization
+═══════════════════════════════════════════════════════════════════════════ */
+
+const EMPTY_ROOMS_META: RoomsMeta = {
+  totalBeds: 0,
+  vacantBeds: 0,
+  occupiedBeds: 0,
+  advanceBookingBeds: 0,
+  underNoticeBeds: 0,
+  roomsTotal: 0,
+};
+
+const EMPTY_TENANTS_META: TenantsMeta = {
+  totalTenants: 0,
+  underNoticeTenants: 0,
+  advancedBookings: 0,
+  expiredBookings: 0,
+  cancelledBookings: 0,
+  totalDues: 0,
+  appNotDownloaded: 0,
+};
+
+const computeRoomsMetaFromList = (rooms: unknown[]): RoomsMeta => {
   let totalBeds = 0,
     vacantBeds = 0,
     occupiedBeds = 0,
     underNoticeBeds = 0,
     advanceBookingBeds = 0;
 
-  rooms?.forEach?.((r) => {
+  rooms?.forEach?.((r: unknown) => {
+    const room = r as Record<string, unknown>;
     const rTotal =
-      num(r?.totalBeds) ||
-      num(r?.bedsTotal) ||
-      num(r?.bedCount) ||
-      num(r?.capacity) ||
-      num(r?.beds) ||
+      num(room?.totalBeds) ||
+      num(room?.bedsTotal) ||
+      num(room?.bedCount) ||
+      num(room?.capacity) ||
+      num(room?.beds) ||
       0;
 
-    const occ = num(r?.occupiedBeds);
-    const und = num(r?.underNotice);
-    const adv = num(r?.advancedBookings) || num(r?.advanceBookingBeds);
+    const occ = num(room?.occupiedBeds);
+    const und = num(room?.underNotice);
+    const adv = num(room?.advancedBookings) || num(room?.advanceBookingBeds);
 
-    const hasVacantField = r?.vacantBeds !== undefined && r?.vacantBeds !== null;
-    const rVacant = hasVacantField ? num(r?.vacantBeds) : Math.max(rTotal - (occ + und + adv), 0);
+    const hasVacantField = room?.vacantBeds !== undefined && room?.vacantBeds !== null;
+    const rVacant = hasVacantField
+      ? num(room?.vacantBeds)
+      : Math.max(rTotal - (occ + und + adv), 0);
     const rOccupied = occ || Math.max(rTotal - rVacant, 0);
 
     totalBeds += rTotal;
@@ -113,74 +182,66 @@ const computeRoomsMetaFromList = (rooms: any[]): RoomsMeta => {
   };
 };
 
-const parseRoomsResponse = (raw: any): { rooms: any[]; meta: RoomsMeta } => {
-  if (!raw) return { rooms: [], meta: computeRoomsMetaFromList([]) };
+const parseRoomsResponse = (raw: unknown): { rooms: unknown[]; meta: RoomsMeta } => {
+  if (!raw) return { rooms: [], meta: EMPTY_ROOMS_META };
 
   if (Array.isArray(raw)) {
-    const first = raw[0];
+    const first = raw[0] as Record<string, unknown> | undefined;
     if (first && (Array.isArray(first?.rooms) || first?.metadata)) {
       const rooms = Array.isArray(first?.rooms) ? first?.rooms : [];
       const computed = computeRoomsMetaFromList(rooms);
+      const md = first?.metadata as Record<string, unknown> | undefined;
       const meta: RoomsMeta = {
-        totalBeds:
-          num(first?.metadata?.totalBeds || first?.metadata?.bedsTotal) || computed.totalBeds,
-        vacantBeds: num(first?.metadata?.vacantBeds) || computed.vacantBeds,
-        occupiedBeds: num(first?.metadata?.occupiedBeds) || computed.occupiedBeds,
-        underNoticeBeds:
-          num(first?.metadata?.underNoticeBeds || first?.metadata?.underNotice) ||
-          computed.underNoticeBeds,
+        totalBeds: num(md?.totalBeds || md?.bedsTotal) || computed.totalBeds,
+        vacantBeds: num(md?.vacantBeds) || computed.vacantBeds,
+        occupiedBeds: num(md?.occupiedBeds) || computed.occupiedBeds,
+        underNoticeBeds: num(md?.underNoticeBeds || md?.underNotice) || computed.underNoticeBeds,
         advanceBookingBeds:
-          num(first?.metadata?.advanceBookingBeds || first?.metadata?.advancedBookings) ||
-          computed.advanceBookingBeds,
-        roomsTotal: num(first?.metadata?.roomsTotal) || rooms.length,
+          num(md?.advanceBookingBeds || md?.advancedBookings) || computed.advanceBookingBeds,
+        roomsTotal: num(md?.roomsTotal) || rooms.length,
       };
       return { rooms, meta };
     }
-    const rooms = raw;
-    return { rooms, meta: computeRoomsMetaFromList(rooms) };
+    return { rooms: raw, meta: computeRoomsMetaFromList(raw) };
   }
 
   if (raw && typeof raw === "object") {
-    const rooms = Array.isArray(raw?.rooms)
-      ? raw?.rooms
-      : Array.isArray(raw?.data)
-      ? raw?.data
+    const obj = raw as Record<string, unknown>;
+    const rooms = Array.isArray(obj?.rooms)
+      ? obj?.rooms
+      : Array.isArray(obj?.data)
+      ? obj?.data
       : [];
     const computed = computeRoomsMetaFromList(rooms);
+    const md = obj?.metadata as Record<string, unknown> | undefined;
     const meta: RoomsMeta = {
-      totalBeds: num(raw?.metadata?.totalBeds || raw?.metadata?.bedsTotal) || computed.totalBeds,
-      vacantBeds: num(raw?.metadata?.vacantBeds) || computed.vacantBeds,
-      occupiedBeds: num(raw?.metadata?.occupiedBeds) || computed.occupiedBeds,
-      underNoticeBeds:
-        num(raw?.metadata?.underNoticeBeds || raw?.metadata?.underNotice) ||
-        computed.underNoticeBeds,
+      totalBeds: num(md?.totalBeds || md?.bedsTotal) || computed.totalBeds,
+      vacantBeds: num(md?.vacantBeds) || computed.vacantBeds,
+      occupiedBeds: num(md?.occupiedBeds) || computed.occupiedBeds,
+      underNoticeBeds: num(md?.underNoticeBeds || md?.underNotice) || computed.underNoticeBeds,
       advanceBookingBeds:
-        num(raw?.metadata?.advanceBookingBeds || raw?.metadata?.advancedBookings) ||
-        computed.advanceBookingBeds,
-      roomsTotal: num(raw?.metadata?.roomsTotal) || rooms.length,
+        num(md?.advanceBookingBeds || md?.advancedBookings) || computed.advanceBookingBeds,
+      roomsTotal: num(md?.roomsTotal) || rooms.length,
     };
     return { rooms, meta };
   }
 
-  return { rooms: [], meta: computeRoomsMetaFromList([]) };
+  return { rooms: [], meta: EMPTY_ROOMS_META };
 };
 
-/** Robust tenants parser (shared) */
-
-const parseCollectionsResponse = (
-  raw: any
-): {
-  payments: any[];
-  metrics: Metric[];
-} => {
+const parseCollectionsResponse = (raw: unknown): { payments: unknown[]; metrics: Metric[] } => {
   try {
-    const collections = raw?.data?.collections ?? raw?.collections ?? {};
-    const payments: any[] = Array.isArray(collections?.payments) ? collections.payments : [];
+    const obj = raw as Record<string, unknown> | undefined;
+    const collections = (obj?.data as Record<string, unknown>)?.collections ??
+      (obj as Record<string, unknown>)?.collections ??
+      {};
+    const col = collections as Record<string, unknown>;
+    const payments: unknown[] = Array.isArray(col?.payments) ? col.payments : [];
 
-    const totalCollection = Number(collections?.totalCollection ?? 0) || 0;
-    const rentCollection = Number(collections?.rentCollection ?? 0) || 0;
-    const currentMonthCollection = Number(collections?.currentMonthCollection ?? 0) || 0;
-    const otherCollection = Number(collections?.otherCollection ?? 0) || 0;
+    const totalCollection = Number(col?.totalCollection ?? 0) || 0;
+    const rentCollection = Number(col?.rentCollection ?? 0) || 0;
+    const currentMonthCollection = Number(col?.currentMonthCollection ?? 0) || 0;
+    const otherCollection = Number(col?.otherCollection ?? 0) || 0;
 
     const metrics: Metric[] = [
       {
@@ -222,29 +283,22 @@ const parseCollectionsResponse = (
   }
 };
 
-/** Dues parser */
-const parseDuesResponse = (
-  raw: any
-): {
-  payments: any[];
-  metrics: Metric[];
-} => {
+const parseDuesResponse = (raw: unknown): { payments: unknown[]; metrics: Metric[] } => {
   try {
-    const dues = raw?.dues ?? {};
-    const payments: any[] = Array.isArray(dues?.payments) ? dues.payments : [];
+    const obj = raw as Record<string, unknown> | undefined;
+    const dues = (obj?.dues as Record<string, unknown>) ?? {};
+    const payments: unknown[] = Array.isArray(dues?.payments) ? dues.payments : [];
     const totalDues = Number(dues?.totalDues ?? 0) || 0;
     const rentDues = Number(dues?.rentDues ?? 0) || 0;
     const currentMonthDues = Number(dues?.currentMonthDues ?? 0) || 0;
     const lateDues = Number(dues?.lateDues ?? 0) || 0;
     const futureDues = Number(dues?.futureDues ?? 0) || 0;
 
-    const inrFmt = (x: number) => `₹ ${x.toLocaleString("en-IN")}`;
-
     const metrics: Metric[] = [
       {
         key: "totalDues",
         label: "Total Dues",
-        value: inrFmt(totalDues),
+        value: inr(totalDues),
         icon: "cash-remove",
         iconBg: "#FEE2E2",
         iconColor: "#B91C1C",
@@ -252,14 +306,14 @@ const parseDuesResponse = (
       {
         key: "rentDues",
         label: "Rent Dues",
-        value: inrFmt(rentDues),
+        value: inr(rentDues),
         icon: "home-city",
         iconBg: "#DBEAFE",
       },
       {
         key: "currentMonthDues",
         label: "Current Month",
-        value: inrFmt(currentMonthDues),
+        value: inr(currentMonthDues),
         icon: "calendar-month",
         iconBg: "#EDE9FE",
         iconColor: "#6D28D9",
@@ -267,7 +321,7 @@ const parseDuesResponse = (
       {
         key: "lateDues",
         label: "Late Dues",
-        value: inrFmt(lateDues),
+        value: inr(lateDues),
         icon: "cash-clock",
         iconBg: "#FEF3C7",
         iconColor: "#B45309",
@@ -275,7 +329,7 @@ const parseDuesResponse = (
       {
         key: "futureDues",
         label: "Future Dues",
-        value: inrFmt(futureDues),
+        value: inr(futureDues),
         icon: "calendar-arrow-right",
         iconBg: "#DCFCE7",
         iconColor: "#15803D",
@@ -288,103 +342,73 @@ const parseDuesResponse = (
   }
 };
 
-const parseTenantsResponse = (raw: any): { tenants: any[]; meta: TenantsMeta } => {
-  const emptyMeta: TenantsMeta = {
-    totalTenants: 0,
-    underNoticeTenants: 0,
-    advancedBookings: 0,
-    expiredBookings: 0,
-    cancelledBookings: 0,
-    totalDues: 0,
-    appNotDownloaded: 0,
+const parseTenantsResponse = (raw: unknown): { tenants: unknown[]; meta: TenantsMeta } => {
+  if (!raw) return { tenants: [], meta: EMPTY_TENANTS_META };
+
+  const extractMeta = (md: Record<string, unknown> | undefined): TenantsMeta => ({
+    totalTenants: num(md?.totalTenants),
+    underNoticeTenants: num(md?.underNoticeTenants),
+    advancedBookings: num(md?.advancedBookings),
+    expiredBookings: num(md?.expiredBookings),
+    cancelledBookings: num(md?.cancelledBookings),
+    totalDues: num(md?.totalDues),
+    appNotDownloaded: num(md?.appNotDownloaded),
+  });
+
+  const deduplicateTenants = (tenants: unknown[]): unknown[] => {
+    const seen = new Set<string>();
+    return tenants.filter((t: unknown) => {
+      const tenant = t as Record<string, unknown>;
+      const id = String(tenant?._id ?? tenant?.id ?? "");
+      if (!id || seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
   };
 
-  if (!raw) return { tenants: [], meta: emptyMeta };
-
-  if (raw && typeof raw === "object" && Array.isArray(raw?.data)) {
-    const bucket = raw?.data?.[0];
+  if (raw && typeof raw === "object" && Array.isArray((raw as Record<string, unknown>)?.data)) {
+    const bucket = ((raw as Record<string, unknown>)?.data as unknown[])?.[0] as
+      | Record<string, unknown>
+      | undefined;
     if (bucket && Array.isArray(bucket?.tenants)) {
-      const meta = {
-        totalTenants: num(bucket?.metadata?.totalTenants),
-        underNoticeTenants: num(bucket?.metadata?.underNoticeTenants),
-        advancedBookings: num(bucket?.metadata?.advancedBookings),
-        expiredBookings: num(bucket?.metadata?.expiredBookings),
-        cancelledBookings: num(bucket?.metadata?.cancelledBookings),
-        totalDues: num(bucket?.metadata?.totalDues),
-        appNotDownloaded: num(bucket?.metadata?.appNotDownloaded),
-      };
-      const seen = new Set<string>();
-      const tenants = bucket.tenants.filter((t: any) => {
-        const id = String(t?._id ?? t?.id ?? "");
-        if (!id || seen.has(id)) return false;
-        seen.add(id);
-        return true;
-      });
-      return { tenants, meta: { ...emptyMeta, ...meta } };
+      const meta = extractMeta(bucket?.metadata as Record<string, unknown>);
+      const tenants = deduplicateTenants(bucket.tenants as unknown[]);
+      return { tenants, meta: { ...EMPTY_TENANTS_META, ...meta } };
     }
   }
 
   if (Array.isArray(raw)) {
-    const first = raw?.[0];
+    const first = raw?.[0] as Record<string, unknown> | undefined;
     if (first && (Array.isArray(first?.tenants) || first?.metadata)) {
       const tenants = Array.isArray(first?.tenants) ? first?.tenants : [];
-      const meta: TenantsMeta = {
-        totalTenants: num(first?.metadata?.totalTenants),
-        underNoticeTenants: num(first?.metadata?.underNoticeTenants),
-        advancedBookings: num(first?.metadata?.advancedBookings),
-        expiredBookings: num(first?.metadata?.expiredBookings),
-        cancelledBookings: num(first?.metadata?.cancelledBookings),
-        totalDues: num(first?.metadata?.totalDues),
-        appNotDownloaded: num(first?.metadata?.appNotDownloaded),
-      };
-      return { tenants, meta: { ...emptyMeta, ...meta } };
+      const meta = extractMeta(first?.metadata as Record<string, unknown>);
+      return { tenants, meta: { ...EMPTY_TENANTS_META, ...meta } };
     }
-    return { tenants: raw, meta: emptyMeta };
+    return { tenants: raw, meta: EMPTY_TENANTS_META };
   }
 
   if (raw && typeof raw === "object") {
-    const tenants = Array.isArray(raw?.tenants)
-      ? raw?.tenants
-      : Array.isArray(raw?.data)
-      ? raw?.data
+    const obj = raw as Record<string, unknown>;
+    const tenants = Array.isArray(obj?.tenants)
+      ? obj?.tenants
+      : Array.isArray(obj?.data)
+      ? obj?.data
       : [];
-    const meta: TenantsMeta = {
-      totalTenants: num(raw?.metadata?.totalTenants),
-      underNoticeTenants: num(raw?.metadata?.underNoticeTenants),
-      advancedBookings: num(raw?.metadata?.advancedBookings),
-      expiredBookings: num(raw?.metadata?.expiredBookings),
-      cancelledBookings: num(raw?.metadata?.cancelledBookings),
-      totalDues: num(raw?.metadata?.totalDues),
-      appNotDownloaded: num(raw?.metadata?.appNotDownloaded),
-    };
-    return { tenants, meta: { ...emptyMeta, ...meta } };
+    const meta = extractMeta(obj?.metadata as Record<string, unknown>);
+    return { tenants, meta: { ...EMPTY_TENANTS_META, ...meta } };
   }
 
-  return { tenants: [], meta: emptyMeta };
-};
-
-/* ------------------------ PGLayout normalization ------------------------- */
-type BedStatus = "vacant" | "filled" | "notice" | "advance";
-type UILayout = {
-  floors: Array<{
-    name: string;
-    groups: Array<{
-      sharing: number;
-      rooms: Array<{
-        roomNo: string;
-        beds: Array<{ id: string; status: BedStatus }>;
-      }>;
-    }>;
-  }>;
-  metrics: Metric[];
+  return { tenants: [], meta: EMPTY_TENANTS_META };
 };
 
 const BED_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-const bedIndexFromLetter = (letter?: string) => {
+
+const bedIndexFromLetter = (letter?: string): number => {
   const idx = BED_LETTERS.indexOf(String(letter ?? "").toUpperCase());
   return idx >= 0 ? idx : -1;
 };
-const toOrdinal = (n?: number) => {
+
+const toOrdinal = (n?: number): string => {
   const x = Number(n ?? 0);
   if (!x) return "Floor";
   const mod10 = x % 10,
@@ -407,11 +431,16 @@ const statusFromTenantCodes = (codes: number[]): BedStatus => {
   return "vacant";
 };
 
-const parsePropertyLayout = (raw: any): UILayout => {
+const parsePropertyLayout = (raw: unknown): UILayout => {
   try {
-    const root = Array.isArray(raw?.data) ? raw?.data?.[0] : raw?.data;
-    const roomsByFloor: any[] = Array.isArray(root?.roomsByFloor) ? root.roomsByFloor : [];
-    const md = root?.metaData ?? {};
+    const obj = raw as Record<string, unknown> | undefined;
+    const data = obj?.data as unknown;
+    const root = Array.isArray(data) ? (data as unknown[])?.[0] : data;
+    const rootObj = (root as Record<string, unknown>) ?? {};
+    const roomsByFloor: unknown[] = Array.isArray(rootObj?.roomsByFloor)
+      ? rootObj.roomsByFloor
+      : [];
+    const md = (rootObj?.metaData as Record<string, unknown>) ?? {};
 
     const metrics: Metric[] = [
       {
@@ -446,29 +475,32 @@ const parsePropertyLayout = (raw: any): UILayout => {
       },
     ];
 
-    const floors = roomsByFloor.map((floor) => {
-      const floorName = toOrdinal(num(floor?._id));
-      const rooms: any[] = Array.isArray(floor?.rooms) ? floor.rooms : [];
-      const bySharing = new Map<number, { sharing: number; rooms: any[] }>();
+    const floors = roomsByFloor.map((floor: unknown) => {
+      const floorObj = floor as Record<string, unknown>;
+      const floorName = toOrdinal(num(floorObj?._id));
+      const rooms: unknown[] = Array.isArray(floorObj?.rooms) ? floorObj.rooms : [];
+      const bySharing = new Map<number, { sharing: number; rooms: unknown[] }>();
 
-      rooms.forEach((r) => {
-        const sharing = num(r?.beds);
+      rooms.forEach((r: unknown) => {
+        const room = r as Record<string, unknown>;
+        const sharing = num(room?.beds);
         if (!sharing) return;
 
         const statuses: BedStatus[] = Array.from({ length: sharing }, () => "vacant");
-        const bpr: any[] = Array.isArray(r?.bedsPerRoom) ? r.bedsPerRoom : [];
-        bpr.forEach((b) => {
-          const idx = bedIndexFromLetter(b?.bedNumber);
+        const bpr: unknown[] = Array.isArray(room?.bedsPerRoom) ? room.bedsPerRoom : [];
+        bpr.forEach((b: unknown) => {
+          const bed = b as Record<string, unknown>;
+          const idx = bedIndexFromLetter(bed?.bedNumber as string);
           if (idx < 0 || idx >= sharing) return;
-          const codes = (Array.isArray(b?.tenantsPerBed) ? b.tenantsPerBed : [])
-            .map((t: { tenantStatus?: number }) => num(t?.tenantStatus))
+          const codes = (Array.isArray(bed?.tenantsPerBed) ? bed.tenantsPerBed : [])
+            .map((t: unknown) => num((t as Record<string, unknown>)?.tenantStatus))
             .filter((c: number) => c > 0);
           const st = statusFromTenantCodes(codes);
           statuses[idx] = st;
         });
 
         const uiRoom = {
-          roomNo: String(r?.roomNo ?? ""),
+          roomNo: String(room?.roomNo ?? ""),
           beds: statuses.map((s, i) => ({ id: BED_LETTERS[i] ?? String(i + 1), status: s })),
         };
 
@@ -481,7 +513,7 @@ const parsePropertyLayout = (raw: any): UILayout => {
         .sort((a, b) => a.sharing - b.sharing)
         .map((g) => ({
           sharing: g.sharing,
-          rooms: g.rooms.sort((a, b) =>
+          rooms: (g.rooms as Array<{ roomNo: string; beds: Array<{ id: string; status: BedStatus }> }>).sort((a, b) =>
             String(a?.roomNo).localeCompare(String(b?.roomNo), undefined, { numeric: true })
           ),
         }));
@@ -489,68 +521,94 @@ const parsePropertyLayout = (raw: any): UILayout => {
       return { name: floorName, groups };
     });
 
-    return { floors, metrics };
+    return { floors: floors as UILayout["floors"], metrics };
   } catch {
     return { floors: [], metrics: [] };
   }
 };
 
-/* -------------------------------- component ------------------------------- */
+/* ═══════════════════════════════════════════════════════════════════════════
+   MAIN COMPONENT
+═══════════════════════════════════════════════════════════════════════════ */
+
 export default function PropertyDetails() {
-  const { id, tab = TABS[0] } = useLocalSearchParams<{ id: string; tab?: TabKey }>();
+  const { id, tab = TAB_CONFIG[0].key } = useLocalSearchParams<{ id: string; tab?: TabKey }>();
   const router = useRouter();
   const { colors, spacing, typography } = useTheme();
   const { selectedId, properties, loading: propsLoading } = useProperty();
-  // ⬇️ NEW: read owner info to fetch employees
-  const { profileData } = useSelector((state: any) => state.profileDetails);
+  const { profileData } = useSelector((state: { profileDetails: { profileData: unknown } }) => state.profileDetails) as {
+    profileData: Record<string, unknown> | null;
+  };
+
+  /* ─────────────────────────────────────────────────────────────────────────
+     STYLES
+  ───────────────────────────────────────────────────────────────────────── */
 
   const styles = useMemo(
     () =>
       StyleSheet.create({
         safeArea: { flex: 1, backgroundColor: colors.background },
         bodyContent: { padding: spacing.md, gap: spacing.md, paddingBottom: spacing.lg * 2 },
-        placeholder: {
-          textAlign: "center",
-          marginTop: 60,
-          color: colors.textMuted,
-          fontSize: typography.fontSizeMd,
+        topLoading: {
+          padding: spacing.md,
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 10,
         },
-        topLoading: { padding: spacing.md, flexDirection: "row", alignItems: "center", gap: 10 },
+        loadingText: {
+          color: colors.textPrimary,
+          fontWeight: "600",
+        },
       }),
-    [colors, spacing, typography]
+    [colors, spacing]
   );
+
+  /* ─────────────────────────────────────────────────────────────────────────
+     STATE
+  ───────────────────────────────────────────────────────────────────────── */
 
   const [activeTab, setActiveTab] = useState<TabKey>(tab as TabKey);
   const [showScrollToTop, setShowScrollToTop] = useState(false);
 
+  // Sync activeTab state with URL tab param when navigating back
+  useEffect(() => {
+    if (tab && tab !== activeTab) {
+      // Validate that the tab is a valid tab key
+      const isValidTab = TAB_CONFIG.some((t) => t.key === tab);
+      if (isValidTab) {
+        setActiveTab(tab as TabKey);
+      }
+    }
+  }, [tab]);
+
   // Scroll refs for each tab
-  const scrollRefs = useRef<Record<TabKey, React.RefObject<FlatList<any> | ScrollView | null>>>({
+  const scrollRefs = useRef<Record<string, React.RefObject<FlatList | ScrollView | null>>>({
     "Property Details": React.createRef<ScrollView>(),
     "PG Layout": React.createRef<ScrollView>(),
-    "Advance Booking": React.createRef<FlatList<any>>(),
-    "Rooms": React.createRef<FlatList<any>>(),
-    "Tenants": React.createRef<FlatList<any>>(),
-    "Expenses": React.createRef<FlatList<any>>(),
-    "Dues": React.createRef<FlatList<any>>(),
-    "Collections": React.createRef<FlatList<any>>(),
-    "Staff": React.createRef<FlatList<any>>(),
+    "Advance Booking": React.createRef<FlatList>(),
+    "Rooms": React.createRef<FlatList>(),
+    "Tenants": React.createRef<FlatList>(),
+    "Expenses": React.createRef<FlatList>(),
+    "Dues": React.createRef<FlatList>(),
+    "Collections": React.createRef<FlatList>(),
+    "Staff": React.createRef<FlatList>(),
   });
 
-  // Scroll handler for all tabs
+  /* ─────────────────────────────────────────────────────────────────────────
+     SCROLL HANDLERS
+  ───────────────────────────────────────────────────────────────────────── */
+
   const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const offsetY = event.nativeEvent.contentOffset.y;
-    setShowScrollToTop(offsetY > 200); // Show button after 200px scroll
+    setShowScrollToTop(offsetY > 200);
   }, []);
 
-  // Scroll to top handler
   const scrollToTop = useCallback(() => {
     const currentRef = scrollRefs.current[activeTab];
     if (currentRef?.current) {
       if ("scrollToOffset" in currentRef.current) {
-        // FlatList
         (currentRef.current as FlatList).scrollToOffset({ offset: 0, animated: true });
       } else {
-        // ScrollView
         (currentRef.current as ScrollView).scrollTo({ y: 0, animated: true });
       }
     }
@@ -561,6 +619,7 @@ export default function PropertyDetails() {
     setShowScrollToTop(false);
   }, [activeTab]);
 
+  // Sync with global property selection
   useEffect(() => {
     if (!selectedId) return;
     if (selectedId !== id) {
@@ -569,30 +628,41 @@ export default function PropertyDetails() {
         params: { tab: activeTab },
       });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedId]);
+  }, [selectedId, id, router, activeTab]);
 
-  /* ------------------------ data hooks ------------------------ */
+  /* ─────────────────────────────────────────────────────────────────────────
+     DATA HOOKS - All APIs loaded in parallel at mount
+  ───────────────────────────────────────────────────────────────────────── */
+
   const roomsQuery = useGetAllRooms(id as string);
+  const paymentsQuery = useGetAllPropertyPayments(`${id}?status=1`);
+  const duesQuery = useGetAllPropertyPayments(`${id}?status=2&tenantStatus=1,2,3`);
+  const tenantsActiveQuery = useGetAllTenants(id as string, "?status=1,2");
+  const tenantsAdvanceQuery = useGetAllTenants(id as string, "?status=3,5,6");
+  const expensesQuery = useGetDailyExpensesList(id as string);
+  const layoutQuery = useGetPropertyDetails(id as string);
+
+  const ownerId = String(profileData?.ownerId || profileData?.userId || profileData?._id || "");
+  const employeesQuery = useGetAllEmployees(ownerId);
+
+  /* ─────────────────────────────────────────────────────────────────────────
+     PARSED DATA - Uses cached responses, no re-fetching
+  ───────────────────────────────────────────────────────────────────────── */
+
   const { rooms, meta: roomsMeta } = useMemo(
     () => parseRoomsResponse(roomsQuery?.data),
     [roomsQuery?.data]
   );
-  const paymentsQuery = useGetAllPropertyPayments(`${id}?status=1`);
+
   const { payments: collectionsData, metrics: collectionsMetrics } = useMemo(
     () => parseCollectionsResponse(paymentsQuery?.data),
     [paymentsQuery?.data]
   );
 
-  // dues via payments API
-  const duesQuery = useGetAllPropertyPayments(`${id}?status=2&tenantStatus=1,2,3`);
   const { payments: duesData, metrics: duesMetrics } = useMemo(
     () => parseDuesResponse(duesQuery?.data),
     [duesQuery?.data]
   );
-
-  const tenantsActiveQuery = useGetAllTenants(id as string, "?status=1,2");
-  const tenantsAdvanceQuery = useGetAllTenants(id as string, "?status=3,5,6");
 
   const { tenants: tenantsActive, meta: tenantsMeta } = useMemo(
     () => parseTenantsResponse(tenantsActiveQuery?.data),
@@ -604,53 +674,92 @@ export default function PropertyDetails() {
     [tenantsAdvanceQuery?.data]
   );
 
-  const expensesQuery = useGetDailyExpensesList(id as string);
   const expenses = useMemo(
     () => (Array.isArray(expensesQuery?.data) ? expensesQuery?.data : []),
     [expensesQuery?.data]
   );
 
-  const layoutQuery = useGetPropertyDetails(id as string);
   const layout = useMemo(() => parsePropertyLayout(layoutQuery?.data), [layoutQuery?.data]);
 
-  // ⬇️ Employees list (owner-scoped) - show ALL employees, no property filtering
-  const ownerId = String(
-    profileData?.ownerId || profileData?.userId || profileData?._id || ""
-  );
-  const employeesQuery = useGetAllEmployees(ownerId);
-
-  /**
-   * Extract employees array from API response.
-   * API returns: { success, data: [...employees] }
-   * Hook returns response.data, so employeesQuery.data = [...employees]
-   */
   const staffList = useMemo(() => {
     const raw = employeesQuery?.data;
-    // Handle all possible response shapes
     if (Array.isArray(raw)) return raw;
-    if (raw && typeof raw === "object" && Array.isArray(raw.data)) return raw.data;
+    if (raw && typeof raw === "object" && Array.isArray((raw as Record<string, unknown>).data)) {
+      return (raw as Record<string, unknown>).data;
+    }
     return [];
   }, [employeesQuery?.data]);
 
-  // Dues should consider both active & advance lists (dedupe by _id/id)
-  const dueTenants = useMemo(() => {
-    const all = [...(tenantsActive ?? []), ...(tenantsAdvance ?? [])];
-    const seen = new Set<string>();
-    return all.filter((t: any) => {
-      const key = String(t?._id ?? t?.id ?? "");
-      if (!key || seen.has(key)) return false;
-      seen.add(key);
-      return num(t?.due) > 0;
-    });
-  }, [tenantsActive, tenantsAdvance]);
+  /* ─────────────────────────────────────────────────────────────────────────
+     REFRESH HANDLERS - Per-tab refresh for pull-to-refresh
+  ───────────────────────────────────────────────────────────────────────── */
 
-  /* --------------------------- header info ----------------------------- */
-  const currentProperty = useMemo(() => properties?.find?.((p) => p?._id === id), [properties, id]);
+  const refreshHandlers = useMemo(
+    (): Record<TabKey, (() => void) | undefined> => ({
+      "Property Details": undefined,
+      "PG Layout": layoutQuery?.refetch ? () => layoutQuery.refetch() : undefined,
+      "Advance Booking": tenantsAdvanceQuery?.refetch ? () => tenantsAdvanceQuery.refetch() : undefined,
+      "Rooms": roomsQuery?.refetch ? () => roomsQuery.refetch() : undefined,
+      "Tenants": tenantsActiveQuery?.refetch ? () => tenantsActiveQuery.refetch() : undefined,
+      "Expenses": expensesQuery?.refetch ? () => expensesQuery.refetch() : undefined,
+      "Dues": duesQuery?.refetch ? () => duesQuery.refetch() : undefined,
+      "Collections": paymentsQuery?.refetch ? () => paymentsQuery.refetch() : undefined,
+      "Staff": employeesQuery?.refetch ? () => employeesQuery.refetch() : undefined,
+    }),
+    [
+      layoutQuery,
+      tenantsAdvanceQuery,
+      roomsQuery,
+      tenantsActiveQuery,
+      expensesQuery,
+      duesQuery,
+      paymentsQuery,
+      employeesQuery,
+    ]
+  );
+
+  const currentRefreshHandler = useCallback(() => {
+    const handler = refreshHandlers[activeTab];
+    if (handler) handler();
+  }, [activeTab, refreshHandlers]);
+
+  const isCurrentTabRefreshing = useMemo(() => {
+    const refreshingStates: Record<TabKey, boolean> = {
+      "Property Details": false,
+      "PG Layout": !!layoutQuery?.isFetching,
+      "Advance Booking": !!tenantsAdvanceQuery?.isFetching,
+      "Rooms": !!roomsQuery?.isFetching,
+      "Tenants": !!tenantsActiveQuery?.isFetching,
+      "Expenses": !!expensesQuery?.isFetching,
+      "Dues": !!duesQuery?.isFetching,
+      "Collections": !!paymentsQuery?.isFetching,
+      "Staff": !!employeesQuery?.isFetching,
+    };
+    return refreshingStates[activeTab];
+  }, [
+    activeTab,
+    layoutQuery?.isFetching,
+    tenantsAdvanceQuery?.isFetching,
+    roomsQuery?.isFetching,
+    tenantsActiveQuery?.isFetching,
+    expensesQuery?.isFetching,
+    duesQuery?.isFetching,
+    paymentsQuery?.isFetching,
+    employeesQuery?.isFetching,
+  ]);
+
+  /* ─────────────────────────────────────────────────────────────────────────
+     PROPERTY INFO
+  ───────────────────────────────────────────────────────────────────────── */
+
+  const currentProperty = useMemo(
+    () => properties?.find?.((p) => p?._id === id),
+    [properties, id]
+  );
   const propName = str(currentProperty?.propertyName, "—");
   const propArea = str(currentProperty?.area, "—");
   const propCity = str(currentProperty?.city, "—");
-  
-  // Property address for receipts
+
   const propAddress = useMemo(() => {
     const parts = [
       str(currentProperty?.address),
@@ -661,101 +770,118 @@ export default function PropertyDetails() {
     return parts.join(", ");
   }, [currentProperty, propArea, propCity]);
 
-  return (
-    <SafeAreaView style={styles.safeArea} edges={["left", "right"]}>
-      {propsLoading && !currentProperty ? (
-        <View style={styles.topLoading}>
-          <ActivityIndicator size="small" color={colors.accent} />
-          <Text style={{ color: colors.textPrimary, fontWeight: "600" }}>Loading property…</Text>
-        </View>
-      ) : (
-        <TopInfo name={propName} area={propArea} city={propCity} />
-      )}
+  /* ─────────────────────────────────────────────────────────────────────────
+     TAB CONTENT RENDERER - Instant switching using cached data
+  ───────────────────────────────────────────────────────────────────────── */
 
-      <SegmentBar tabs={TABS} value={activeTab} onChange={(t) => setActiveTab(t as TabKey)} />
+  const renderTabContent = useMemo(() => {
+    switch (activeTab) {
+      case "PG Layout":
+        return (
+          <PGLayout
+            floors={layout.floors}
+            metrics={layout.metrics}
+            refreshing={!!layoutQuery?.isFetching}
+            onRefresh={layoutQuery?.refetch}
+          />
+        );
 
-      {activeTab === "PG Layout" ? (
-        <PGLayout
-          floors={layout.floors}
-          metrics={layout.metrics}
-          refreshing={!!layoutQuery?.isFetching}
-          onRefresh={layoutQuery?.refetch}
-        />
-      ) : activeTab === "Advance Booking" ? (
-        <AdvanceBookingTab
-          data={tenantsAdvance ?? []}
-          refreshing={!!tenantsAdvanceQuery?.isFetching}
-          onRefresh={tenantsAdvanceQuery?.refetch}
-          scrollRef={scrollRefs.current["Advance Booking"] as React.RefObject<FlatList<any>>}
-          onScroll={handleScroll}
-        />
-      ) : activeTab === "Rooms" ? (
-        <RoomsTab
-          data={rooms}
-          meta={roomsMeta}
-          refreshing={!!roomsQuery?.isFetching}
-          onRefresh={roomsQuery?.refetch}
-          scrollRef={scrollRefs.current["Rooms"] as React.RefObject<FlatList<any>>}
-          onScroll={handleScroll}
-        />
-      ) : activeTab === "Tenants" ? (
-        <TenantsTab
-          data={tenantsActive ?? []}
-          meta={tenantsMeta}
-          refreshing={!!tenantsActiveQuery?.isFetching}
-          onRefresh={tenantsActiveQuery?.refetch}
-          scrollRef={scrollRefs.current["Tenants"] as React.RefObject<FlatList<any>>}
-          onScroll={handleScroll}
-        />
-      ) : activeTab === "Expenses" ? (
-        <ExpensesTab
-          data={expenses}
-          refreshing={!!expensesQuery?.isFetching}
-          onRefresh={expensesQuery?.refetch}
-          propertyId={id as string}
-          scrollRef={scrollRefs.current["Expenses"] as React.RefObject<FlatList<any>>}
-          onScroll={handleScroll}
-        />
-      ) : activeTab === "Dues" ? (
-        <DuesTab
-          data={duesData}
-          metrics={duesMetrics}
-          refreshing={!!duesQuery?.isFetching}
-          onRefresh={duesQuery?.refetch}
-          propertyId={id as string}
-          scrollRef={scrollRefs.current["Dues"] as React.RefObject<FlatList<any>>}
-          onScroll={handleScroll}
-        />
-      ) : activeTab === "Collections" ? (
-        <CollectionsTab
-          data={collectionsData}
-          metrics={collectionsMetrics}
-          refreshing={!!paymentsQuery?.isFetching}
-          onRefresh={paymentsQuery?.refetch}
-          propertyName={propName}
-          propertyAddress={propAddress}
-          scrollRef={scrollRefs.current["Collections"] as React.RefObject<FlatList<any>>}
-          onScroll={handleScroll}
-        />
-      ) : activeTab === "Staff" ? (
-        <StaffTab
-          data={staffList}
-          refreshing={!!employeesQuery?.isFetching}
-          onRefresh={employeesQuery?.refetch}
-          propertyId={id as string}
-          scrollRef={scrollRefs.current["Staff"] as React.RefObject<FlatList<any>>}
-          onScroll={handleScroll}
-        />
-      ) : (
-        <ScrollView
-          ref={scrollRefs.current["Property Details"] as React.RefObject<ScrollView>}
-          style={{ flex: 1 }}
-          contentContainerStyle={styles.bodyContent}
-          showsVerticalScrollIndicator={false}
-          onScroll={handleScroll}
-          scrollEventThrottle={16}
-        >
-          {activeTab === "Property Details" && (
+      case "Advance Booking":
+        return (
+          <AdvanceBookingTab
+            data={(tenantsAdvance ?? []) as never}
+            refreshing={!!tenantsAdvanceQuery?.isFetching}
+            onRefresh={tenantsAdvanceQuery?.refetch}
+            scrollRef={scrollRefs.current["Advance Booking"] as React.RefObject<FlatList>}
+            onScroll={handleScroll}
+          />
+        );
+
+      case "Rooms":
+        return (
+          <RoomsTab
+            data={rooms as never}
+            meta={roomsMeta}
+            refreshing={!!roomsQuery?.isFetching}
+            onRefresh={roomsQuery?.refetch}
+            scrollRef={scrollRefs.current["Rooms"] as React.RefObject<FlatList>}
+            onScroll={handleScroll}
+          />
+        );
+
+      case "Tenants":
+        return (
+          <TenantsTab
+            data={(tenantsActive ?? []) as never}
+            meta={tenantsMeta}
+            refreshing={!!tenantsActiveQuery?.isFetching}
+            onRefresh={tenantsActiveQuery?.refetch}
+            scrollRef={scrollRefs.current["Tenants"] as React.RefObject<FlatList>}
+            onScroll={handleScroll}
+          />
+        );
+
+      case "Expenses":
+        return (
+          <ExpensesTab
+            data={expenses as never}
+            refreshing={!!expensesQuery?.isFetching}
+            onRefresh={expensesQuery?.refetch}
+            propertyId={id as string}
+            scrollRef={scrollRefs.current["Expenses"] as React.RefObject<FlatList>}
+            onScroll={handleScroll}
+          />
+        );
+
+      case "Dues":
+        return (
+          <DuesTab
+            data={duesData as never}
+            metrics={duesMetrics}
+            refreshing={!!duesQuery?.isFetching}
+            onRefresh={duesQuery?.refetch}
+            propertyId={id as string}
+            scrollRef={scrollRefs.current["Dues"] as React.RefObject<FlatList>}
+            onScroll={handleScroll}
+          />
+        );
+
+      case "Collections":
+        return (
+          <CollectionsTab
+            data={collectionsData as never}
+            metrics={collectionsMetrics}
+            refreshing={!!paymentsQuery?.isFetching}
+            onRefresh={paymentsQuery?.refetch}
+            propertyName={propName}
+            propertyAddress={propAddress}
+            scrollRef={scrollRefs.current["Collections"] as React.RefObject<FlatList>}
+            onScroll={handleScroll}
+          />
+        );
+
+      case "Staff":
+        return (
+          <StaffTab
+            data={staffList as never}
+            refreshing={!!employeesQuery?.isFetching}
+            onRefresh={employeesQuery?.refetch}
+            propertyId={id as string}
+            scrollRef={scrollRefs.current["Staff"] as React.RefObject<FlatList>}
+            onScroll={handleScroll}
+          />
+        );
+
+      default:
+        return (
+          <ScrollView
+            ref={scrollRefs.current["Property Details"] as React.RefObject<ScrollView>}
+            style={{ flex: 1 }}
+            contentContainerStyle={styles.bodyContent}
+            showsVerticalScrollIndicator={false}
+            onScroll={handleScroll}
+            scrollEventThrottle={16}
+          >
             <InfoCard
               title="Total Beds"
               value={roomsMeta.totalBeds}
@@ -766,13 +892,68 @@ export default function PropertyDetails() {
                 Notice: roomsMeta.underNoticeBeds,
               }}
             />
-          )}
-        </ScrollView>
+          </ScrollView>
+        );
+    }
+  }, [
+    activeTab,
+    layout,
+    layoutQuery,
+    tenantsAdvance,
+    tenantsAdvanceQuery,
+    rooms,
+    roomsMeta,
+    roomsQuery,
+    tenantsActive,
+    tenantsMeta,
+    tenantsActiveQuery,
+    expenses,
+    expensesQuery,
+    duesData,
+    duesMetrics,
+    duesQuery,
+    collectionsData,
+    collectionsMetrics,
+    paymentsQuery,
+    staffList,
+    employeesQuery,
+    propName,
+    propAddress,
+    id,
+    handleScroll,
+    styles.bodyContent,
+  ]);
+
+  /* ─────────────────────────────────────────────────────────────────────────
+     RENDER
+  ───────────────────────────────────────────────────────────────────────── */
+
+  return (
+    <SafeAreaView style={styles.safeArea} edges={["left", "right"]}>
+      {/* Header */}
+      {propsLoading && !currentProperty ? (
+        <View style={styles.topLoading}>
+          <ActivityIndicator size="small" color={colors.accent} />
+          <Text style={styles.loadingText}>Loading property…</Text>
+        </View>
+      ) : (
+        <TopInfo name={propName} area={propArea} city={propCity} />
       )}
 
-      {/* Scroll to Top Button - Only show for tabs that support scrolling */}
+      {/* Animated Tab Bar */}
+      <AnimatedTabBar tabs={TAB_CONFIG} activeTab={activeTab} onTabChange={setActiveTab} />
+
+      {/* Tab Content */}
+      {renderTabContent}
+
+      {/* Scroll to Top Button with Refresh */}
       {activeTab !== "Property Details" && activeTab !== "PG Layout" && (
-        <ScrollToTopButton visible={showScrollToTop} onPress={scrollToTop} />
+        <ScrollToTopButton
+          visible={showScrollToTop}
+          onPress={scrollToTop}
+          onRefresh={currentRefreshHandler}
+          isRefreshing={isCurrentTabRefreshing}
+        />
       )}
     </SafeAreaView>
   );
