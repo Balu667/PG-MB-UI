@@ -157,7 +157,7 @@ const TenantCard: React.FC<Props> = ({ tenant, onDelete }) => {
     setMenuVisible(false);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     router.push({
-      pathname: "/protected/tenant/TenantProfileDetails",
+      pathname: "/protected/tenant/view/[id]",
       params: { id },
     });
   };

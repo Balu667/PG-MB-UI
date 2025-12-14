@@ -34,8 +34,9 @@ import { useSelector } from "react-redux";
 
 import { useTheme } from "@/src/theme/ThemeContext";
 import { hexToRgba } from "@/src/theme";
-import { useGetAllPropertyPayments, useUpdatePayment } from "@/src/hooks/payments";
+import { useGetAllPropertyPayments, useUpdatePayment, useInsertPayment } from "@/src/hooks/payments";
 import { useProperty } from "@/src/context/PropertyContext";
+import { Snackbar } from "react-native-paper";
 
 /* ─────────────────────────────────────────────────────────────────────────────
    TYPES & CONSTANTS
@@ -287,12 +288,23 @@ export default function PayOrEditDue() {
     id: string;
     dueId?: string;
     mode?: string;
+    tenantId?: string;
   }>();
   const propertyId = String(params?.id ?? "");
   const dueId = String(params?.dueId ?? "");
   const mode = String(params?.mode ?? "pay");
+  const paramTenantId = String(params?.tenantId ?? "");
   const isPayMode = mode === "pay";
   const isEditMode = mode === "edit";
+  const isAddMode = mode === "add";
+
+  // Snackbar state for add mode
+  const [snackbarVisible, setSnackbarVisible] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState("");
+  const showSnackbar = useCallback((msg: string) => {
+    setSnackbarMessage(msg);
+    setSnackbarVisible(true);
+  }, []);
 
   // Profile data
   const profileData = useSelector(
@@ -339,8 +351,9 @@ export default function PayOrEditDue() {
   const [tempDueDate, setTempDueDate] = useState<Date>(() => new Date());
   const [tempPaymentDate, setTempPaymentDate] = useState<Date>(() => new Date());
 
-  // Mutation - use empty callback to prevent default alert, handle in component
+  // Mutations - use empty callback to prevent default alert, handle in component
   const updatePayment = useUpdatePayment(() => {});
+  const insertPayment = useInsertPayment(() => {});
 
   // Map API category value to dropdown id
   const mapCategoryToId = useCallback((category: string): string => {
@@ -402,9 +415,22 @@ export default function PayOrEditDue() {
     prefilled.current = true;
   }, [existing, mapCategoryToId]);
 
-  // Set initial values for new form
+  // Set initial values for new/add form
   useEffect(() => {
-    if (!initialValues.current && !existing) {
+    if (isAddMode && !initialValues.current) {
+      // For add mode: set default values
+      setPaymentMode("cash"); // Default payment mode
+      setPaymentDate(new Date()); // Default payment date to today
+      initialValues.current = {
+        paymentCategory: "",
+        amount: "",
+        dueDate: null,
+        collectedAmount: "",
+        paymentMode: "cash",
+        paymentDate: new Date(),
+        description: "",
+      };
+    } else if (!initialValues.current && !existing) {
       initialValues.current = {
         paymentCategory: "",
         amount: "",
@@ -415,7 +441,7 @@ export default function PayOrEditDue() {
         description: "",
       };
     }
-  }, [existing]);
+  }, [existing, isAddMode]);
 
   // Check if form has unsaved changes
   const hasUnsavedChanges = useCallback((): boolean => {
@@ -540,7 +566,7 @@ export default function PayOrEditDue() {
   const validate = useCallback((): string[] => {
     const errs: string[] = [];
 
-    // Common validations for both modes
+    // Common validations for all modes
     // Payment category validation
     if (!paymentCategory || !paymentCategory.trim()) {
       errs.push("• Payment category is required.");
@@ -549,6 +575,39 @@ export default function PayOrEditDue() {
     // Due date validation
     if (!dueDate || !(dueDate instanceof Date) || isNaN(dueDate.getTime())) {
       errs.push("• Due date is required.");
+    }
+
+    // Add mode specific validations
+    if (isAddMode) {
+      // Due amount is mandatory in add mode
+      const amtNum = Number(amount || 0);
+      if (!amount && amount !== "0") {
+        errs.push("• Due amount is required.");
+      } else if (isNaN(amtNum) || amtNum <= 0) {
+        errs.push("• Due amount must be greater than 0.");
+      } else if (amtNum > 99999999) {
+        errs.push("• Amount cannot exceed ₹9,99,99,999.");
+      }
+
+      // If collected amount is entered, validate related fields
+      if (collectedAmount) {
+        const collectedNum = Number(collectedAmount || 0);
+        if (isNaN(collectedNum) || collectedNum <= 0) {
+          errs.push("• Collected amount must be greater than 0.");
+        } else if (collectedNum > amtNum) {
+          errs.push("• Collected amount cannot be greater than due amount.");
+        } else if (collectedNum > 99999999) {
+          errs.push("• Collected amount cannot exceed ₹9,99,99,999.");
+        }
+
+        if (!paymentMode) {
+          errs.push("• Payment mode is required when collected amount is entered.");
+        }
+
+        if (!paymentDate || !(paymentDate instanceof Date) || isNaN(paymentDate.getTime())) {
+          errs.push("• Payment date is required when collected amount is entered.");
+        }
+      }
     }
 
     // Edit mode specific validations
@@ -569,8 +628,11 @@ export default function PayOrEditDue() {
       // In pay mode, if collected amount is entered, validate related fields
       if (collectedAmount) {
         const collectedNum = Number(collectedAmount || 0);
+        const dueAmtNum = Number(existing?.amount || amount || 0);
         if (isNaN(collectedNum) || collectedNum <= 0) {
           errs.push("• Collected amount must be greater than 0.");
+        } else if (collectedNum > dueAmtNum) {
+          errs.push("• Collected amount cannot be greater than due amount.");
         } else if (collectedNum > 99999999) {
           errs.push("• Collected amount cannot exceed ₹9,99,99,999.");
         }
@@ -595,6 +657,8 @@ export default function PayOrEditDue() {
     paymentDate,
     isPayMode,
     isEditMode,
+    isAddMode,
+    existing,
   ]);
 
   // Submit handler
@@ -614,6 +678,65 @@ export default function PayOrEditDue() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
     try {
+      // Handle ADD mode
+      if (isAddMode) {
+        // Get the category value (not the id)
+        const categoryOption = PAYMENT_CATEGORIES.find((c) => c.id === paymentCategory);
+        const categoryValue = categoryOption?.value || paymentCategory.trim();
+
+        // Build payload for add mode
+        const addPayload: Record<string, unknown> = {
+          paymentCategory: categoryValue,
+          paymentMode: paymentMode
+            ? paymentMode.trim().charAt(0).toUpperCase() + paymentMode.trim().slice(1).toLowerCase()
+            : "Cash",
+          amount: String(Number(amount || 0)),
+          dueDate: dueDate?.toISOString(),
+          description: description.trim(),
+          createdBy: createdBy,
+          tenantId: paramTenantId,
+          status: 2,
+        };
+
+        // Add collected amount fields if provided
+        if (collectedAmount) {
+          addPayload.collectedAmount = Number(collectedAmount);
+          addPayload.paymentDate = paymentDate
+            ? paymentDate.toISOString().split("T")[0]
+            : new Date().toISOString().split("T")[0];
+        }
+
+        insertPayment.mutate(addPayload, {
+          onSuccess: (data) => {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            showSnackbar(data?.message || "Due created successfully");
+            // Stay on page and refresh dues data
+            queryClient.invalidateQueries({ queryKey: ["tenantPaymentList"] });
+            queryClient.invalidateQueries({ queryKey: ["propertyPaymentList"] });
+            // Reset form for new entry
+            setPaymentCategory("");
+            setAmount("");
+            setDueDate(null);
+            setCollectedAmount("");
+            setPaymentMode("cash");
+            setPaymentDate(new Date());
+            setDescription("");
+          },
+          onError: (error: unknown) => {
+            let errorMessage = "Could not add due. Please check your connection and try again.";
+            if (error instanceof Error) {
+              errorMessage = error.message || errorMessage;
+            } else if (error && typeof error === "object") {
+              const errObj = error as Record<string, unknown>;
+              errorMessage = String(errObj.errorMessage || errObj.message || errObj.error || errorMessage);
+            }
+            Alert.alert("Add Failed", errorMessage, [{ text: "OK" }]);
+          },
+        });
+        return;
+      }
+
+      // Handle PAY and EDIT modes
       // Get createdBy and tenantId from existing due item
       const dueCreatedBy = String(existing?.createdBy ?? createdBy ?? "");
       const dueTenantId = String(existing?.tenantId ?? "");
@@ -697,12 +820,17 @@ export default function PayOrEditDue() {
     existing,
     isPayMode,
     isEditMode,
+    isAddMode,
     collectedAmount,
     paymentMode,
     paymentDate,
     updatePayment,
+    insertPayment,
     navigateBackToDues,
     dueId,
+    paramTenantId,
+    queryClient,
+    showSnackbar,
   ]);
 
   // Date picker handlers
@@ -934,11 +1062,25 @@ export default function PayOrEditDue() {
     [colors, spacing, radius, typography, insets.bottom]
   );
 
-  const headerTitle = isPayMode ? "Pay Due" : "Edit Due";
-  const isSubmitting = updatePayment.isPending;
+  const headerTitle = isAddMode ? "Add Due" : isPayMode ? "Pay Due" : "Edit Due";
+  const isSubmitting = updatePayment.isPending || insertPayment.isPending;
 
-  // Show payment fields only in pay mode and when collected amount has value
-  const showPaymentFields = isPayMode && !!collectedAmount;
+  // Show payment fields in pay mode/add mode when collected amount has value
+  const showPaymentFields = (isPayMode || isAddMode) && !!collectedAmount;
+
+  // Calculate date range for payment date (today to 15 days back)
+  const paymentDateMin = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 15);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }, []);
+  
+  const paymentDateMax = useMemo(() => {
+    const d = new Date();
+    d.setHours(23, 59, 59, 999);
+    return d;
+  }, []);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["top", "left", "right", "bottom"]}>
@@ -1006,12 +1148,12 @@ export default function PayOrEditDue() {
                     placeholder="Select category"
                     options={PAYMENT_CATEGORIES}
                     onChange={setPaymentCategory}
-                    disabled={isPayMode}
+                    disabled={isPayMode} // Editable in add and edit mode, disabled in pay mode
                   />
                 </Labeled>
 
                 {/* Due Amount */}
-                <Labeled label="Due Amount" required>
+                <Labeled label="Due Amount" required={isAddMode || isEditMode}>
                   <View style={styles.amountRow}>
                     <View style={styles.currencyPrefix}>
                       <Text style={styles.currencyText}>₹</Text>
@@ -1036,7 +1178,7 @@ export default function PayOrEditDue() {
                         accessibilityHint="Enter the due amount in rupees"
                         returnKeyType="done"
                         onSubmitEditing={() => Keyboard.dismiss()}
-                        disabled={isPayMode}
+                        disabled={isPayMode} // Editable in add and edit mode, disabled in pay mode
                       />
                     </View>
                   </View>
@@ -1049,7 +1191,7 @@ export default function PayOrEditDue() {
                     onPress={isPayMode ? undefined : openDueDatePicker}
                     accessibilityRole="button"
                     accessibilityLabel={`Select due date, current: ${formatDisplayDate(dueDate)}`}
-                    accessibilityState={{ disabled: isPayMode }}
+                    accessibilityState={{ disabled: isPayMode }} // Editable in add and edit mode
                     accessible
                   >
                     <MaterialIcons name="event" size={20} color={colors.textSecondary} />
@@ -1094,8 +1236,8 @@ export default function PayOrEditDue() {
                 </Labeled>
               </View>
 
-              {/* Payment Collection Section - Only in Pay Mode */}
-              {isPayMode && (
+              {/* Payment Collection Section - In Pay Mode and Add Mode */}
+              {(isPayMode || isAddMode) && (
                 <View style={styles.sectionCard}>
                   <Text style={styles.sectionTitle} accessible accessibilityRole="header">
                     Payment Collection
@@ -1199,10 +1341,10 @@ export default function PayOrEditDue() {
                   onPress={onSubmit}
                   loading={isSubmitting}
                   disabled={isSubmitting}
-                  accessibilityLabel={isPayMode ? "Submit payment" : "Update due"}
-                  accessibilityHint={isPayMode ? "Processes the payment" : "Saves changes to due"}
+                  accessibilityLabel={isAddMode ? "Add due" : isPayMode ? "Submit payment" : "Update due"}
+                  accessibilityHint={isAddMode ? "Creates a new due" : isPayMode ? "Processes the payment" : "Saves changes to due"}
                 >
-                  {isPayMode ? "Submit" : "Update"}
+                  {isAddMode ? "Add" : isPayMode ? "Submit" : "Update"}
                 </Button>
               </View>
             </ScrollView>
@@ -1220,12 +1362,14 @@ export default function PayOrEditDue() {
         />
       )}
 
-      {/* Payment Date Picker - Platform specific */}
+      {/* Payment Date Picker - Platform specific (today to 15 days back) */}
       {Platform.OS === "android" && showPaymentDatePicker && (
         <DateTimePicker
           value={paymentDate || new Date()}
           mode="date"
           display="default"
+          minimumDate={paymentDateMin}
+          maximumDate={paymentDateMax}
           onChange={handlePaymentDateChange}
         />
       )}
@@ -1267,7 +1411,7 @@ export default function PayOrEditDue() {
         </Modal>
       )}
 
-      {/* iOS Payment Date Picker Modal */}
+      {/* iOS Payment Date Picker Modal (today to 15 days back) */}
       {Platform.OS === "ios" && showPaymentDatePicker && (
         <Modal
           visible={showPaymentDatePicker}
@@ -1294,6 +1438,8 @@ export default function PayOrEditDue() {
                 }
                 mode="date"
                 display="spinner"
+                minimumDate={paymentDateMin}
+                maximumDate={paymentDateMax}
                 onChange={handlePaymentDateChange}
                 style={{ height: 200 }}
                 textColor={colors.textPrimary}
@@ -1303,6 +1449,17 @@ export default function PayOrEditDue() {
           </Pressable>
         </Modal>
       )}
+
+      {/* Snackbar for success messages */}
+      <Snackbar
+        visible={snackbarVisible}
+        onDismiss={() => setSnackbarVisible(false)}
+        duration={3000}
+        style={{ backgroundColor: colors.cardBackground }}
+        action={{ label: "OK", onPress: () => setSnackbarVisible(false), textColor: colors.accent }}
+      >
+        <Text style={{ color: colors.textPrimary }}>{snackbarMessage}</Text>
+      </Snackbar>
     </SafeAreaView>
   );
 }

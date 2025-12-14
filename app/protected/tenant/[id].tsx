@@ -1167,9 +1167,18 @@ export default function TenantAddEditScreen() {
       formData.append("dueDepositAmount", String(depositNum));
 
       insertTenant.mutate(formData, {
-        onSuccess: () => {
+        onSuccess: (data) => {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          navigateBackToTab();
+          // Redirect to the new tenant profile view
+          const newTenantId = str(data?.data?._id || data?._id || "", "");
+          if (newTenantId) {
+            router.replace({
+              pathname: `/protected/tenant/view/${newTenantId}`,
+            });
+          } else {
+            // Fallback to navigating back to the Tenants tab
+            navigateBackToTab();
+          }
         },
         onError: (error) => {
           const errMsg =
