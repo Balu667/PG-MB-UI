@@ -1,7 +1,7 @@
 // src/components/property/TenantCard.tsx
 // Premium Tenant Card Design
-import React, { useMemo, useState } from "react";
-import { View, Text, StyleSheet, Image, Pressable, Platform, Animated, I18nManager } from "react-native";
+import React, { useMemo, useState, useCallback } from "react";
+import { View, Text, StyleSheet, Image, Pressable, Platform, Animated, I18nManager, Linking, Alert } from "react-native";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 import { Portal, Dialog, Button } from "react-native-paper";
@@ -301,12 +301,21 @@ const TenantCard: React.FC<Props> = ({ tenant, onDelete }) => {
         phoneRow: {
           flexDirection: "row",
           alignItems: "center",
-          gap: 4,
+          gap: 6,
           marginBottom: spacing.xs,
+        },
+        phoneBtn: {
+          width: 22,
+          height: 22,
+          borderRadius: 11,
+          backgroundColor: "#10B981",
+          alignItems: "center",
+          justifyContent: "center",
         },
         phoneText: {
           fontSize: typography.fontSizeSm,
-          color: colors.textMuted,
+          color: colors.accent,
+          fontWeight: "600",
         },
         statusChip: {
           flexDirection: "row",
@@ -443,9 +452,24 @@ const TenantCard: React.FC<Props> = ({ tenant, onDelete }) => {
                 </Pressable>
               </View>
 
-              {/* Phone */}
+              {/* Phone Row with Call Button */}
               <View style={styles.phoneRow}>
-                <MaterialIcons name="phone" size={14} color={colors.textMuted} />
+                <Pressable
+                  style={styles.phoneBtn}
+                  onPress={() => {
+                    if (phone && phone !== "—") {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      Linking.openURL(`tel:${phone}`).catch(() => {
+                        Alert.alert("Error", "Could not open phone dialer.");
+                      });
+                    }
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Call ${phone}`}
+                  accessibilityHint="Opens phone dialer"
+                >
+                  <MaterialIcons name="phone" size={14} color="#FFFFFF" />
+                </Pressable>
                 <Text style={styles.phoneText} numberOfLines={1}>
                   {phone}
                 </Text>

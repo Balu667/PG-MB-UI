@@ -12,6 +12,7 @@ import {
   useWindowDimensions,
   LayoutAnimation,
   UIManager,
+  Linking,
 } from "react-native";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
@@ -406,10 +407,24 @@ const AdvancedBookingCard: React.FC<Props> = ({
           fontWeight: "700",
           color: statusConfig.color,
         },
+        phoneRow: {
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 6,
+          marginTop: 2,
+        },
+        phoneBtn: {
+          width: 20,
+          height: 20,
+          borderRadius: 10,
+          backgroundColor: "#10B981",
+          alignItems: "center",
+          justifyContent: "center",
+        },
         phone: {
           fontSize: 12,
-          color: colors.textSecondary,
-          marginTop: 2,
+          color: colors.accent,
+          fontWeight: "600",
         },
         amountBadge: {
           backgroundColor: hexToRgba(colors.accent, 0.1),
@@ -535,7 +550,25 @@ const AdvancedBookingCard: React.FC<Props> = ({
                   <Text style={styles.statusText}>{statusConfig.label}</Text>
                 </View>
               </View>
-              <Text style={styles.phone}>{phone}</Text>
+              <View style={styles.phoneRow}>
+                <Pressable
+                  style={styles.phoneBtn}
+                  onPress={() => {
+                    if (phone && phone !== "—") {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      Linking.openURL(`tel:${phone}`).catch(() => {
+                        Alert.alert("Error", "Could not open phone dialer.");
+                      });
+                    }
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Call ${phone}`}
+                  accessibilityHint="Opens phone dialer"
+                >
+                  <MaterialCommunityIcons name="phone" size={12} color="#FFFFFF" />
+                </Pressable>
+                <Text style={styles.phone}>{phone}</Text>
+              </View>
             </View>
 
             <View style={styles.amountBadge}>

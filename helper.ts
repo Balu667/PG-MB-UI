@@ -9,7 +9,7 @@ const { apiUrl, fileUrl } = (Constants as any).expoConfig?.extra || {};
 export interface FetchParams {
   baseUrl?: string;
   url: string;
-  method?: "GET" | "POST" | "PUT" | "DELETE";
+  method?: "GET" | "POST" | "PUT" | "DELETE" | "PATCH";
   body?: any;
   headers?: Record<string, string>;
   isAuthRequired?: boolean;

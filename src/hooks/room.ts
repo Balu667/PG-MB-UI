@@ -112,4 +112,40 @@ const useDeleteRoomImage = (onSuccessFunctions: (data: any) => void) => {
   });
 };
 
-export { useGetAllRooms, useInsertRoom, useUpdateRoom, useDeleteRoomImage };
+// --- Get Rooms for Short-Term Booking ---
+interface ShortTermBookingParams {
+  joiningDate?: string;
+  moveOutDate?: string;
+}
+
+interface ShortTermRoomsResponse {
+  success: boolean;
+  metadata?: {
+    totalShortBookings: number;
+    activeShortBookings: number;
+    upcomingShortBookings: number;
+  };
+  rooms: Room[];
+}
+
+const useGetRoomsForShortTermBooking = (
+  propertyId: string | null,
+  params: ShortTermBookingParams = {}
+) => {
+  const { joiningDate, moveOutDate } = params;
+
+  return useQuery<ShortTermRoomsResponse>({
+    queryKey: ["roomsList", propertyId, "shortTerm", joiningDate, moveOutDate],
+    queryFn: async () => {
+      const response = await fetchData({
+        url: `rooms/properties/${propertyId}/available/short-bookings?joiningDate=${joiningDate}&moveOutDate=${moveOutDate}`,
+        method: "GET",
+      });
+      return response ?? { rooms: [] };
+    },
+    enabled: Boolean(propertyId && joiningDate && moveOutDate),
+    placeholderData: { success: false, rooms: [] },
+  });
+};
+
+export { useGetAllRooms, useInsertRoom, useUpdateRoom, useDeleteRoomImage, useGetRoomsForShortTermBooking };

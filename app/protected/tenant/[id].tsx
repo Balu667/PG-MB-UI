@@ -923,16 +923,18 @@ export default function TenantAddEditScreen() {
 
   /* ----------------------------- Joining Date Limits ----------------------------- */
 
+  // Date of Joining: Allow from today to 1 month back only
   const minJoiningDate = useMemo(() => {
     const d = new Date();
     d.setMonth(d.getMonth() - 1);
+    d.setHours(0, 0, 0, 0);
     return d;
   }, []);
 
   const maxJoiningDate = useMemo(() => {
     const d = new Date();
-    d.setMonth(d.getMonth() + 1);
-    return d;
+    d.setHours(23, 59, 59, 999);
+    return d; // Today is the max date (no future dates)
   }, []);
 
   /* ----------------------------- Due Days Help Text ----------------------------- */
@@ -1062,22 +1064,19 @@ export default function TenantAddEditScreen() {
       const collectedRentNum = Number(parseFormattedNumber(rentCollected) || 0);
       const collectedDepositNum = Number(parseFormattedNumber(depositCollected) || 0);
 
-      if (!rentCollected.trim()) {
-        errs.push("• Collected rent amount is required.");
-      } else if (collectedRentNum <= 0) {
-        errs.push("• Collected rent amount must be greater than 0.");
+      // Collected rent and deposit are now optional - only validate if provided
+      if (rentCollected.trim() && collectedRentNum < 0) {
+        errs.push("• Collected rent amount cannot be negative.");
       }
 
-      if (!depositCollected.trim()) {
-        errs.push("• Collected deposit amount is required.");
-      } else if (collectedDepositNum < 0) {
+      if (depositCollected.trim() && collectedDepositNum < 0) {
         errs.push("• Collected deposit amount cannot be negative.");
       }
 
-      if (collectedRentNum > rentNum) {
+      if (rentCollected.trim() && collectedRentNum > rentNum) {
         errs.push("• Collected rent cannot exceed rent amount.");
       }
-      if (collectedDepositNum > depositNum) {
+      if (depositCollected.trim() && collectedDepositNum > depositNum) {
         errs.push("• Collected deposit cannot exceed deposit amount.");
       }
     }
@@ -1869,7 +1868,7 @@ export default function TenantAddEditScreen() {
 
                   <View style={styles.row}>
                     <View style={styles.col}>
-                      <Labeled label="Collected Rent" required>
+                      <Labeled label="Collected Rent">
                         <TextInput
                           value={rentCollected}
                           onChangeText={onAmountChange(setRentCollected, false)}
@@ -1894,7 +1893,7 @@ export default function TenantAddEditScreen() {
                       </Labeled>
                     </View>
                     <View style={styles.col}>
-                      <Labeled label="Collected Deposit" required>
+                      <Labeled label="Collected Deposit">
                         <TextInput
                           value={depositCollected}
                           onChangeText={onAmountChange(setDepositCollected, false)}

@@ -28,6 +28,7 @@ import RoomsTab from "@/src/components/property/RoomsTab";
 import TenantsTab from "@/src/components/property/TenantsTab";
 import ExpensesTab from "@/src/components/property/ExpensesTab";
 import AdvanceBookingTab from "@/src/components/property/AdvanceBookingTab";
+import IntrimTab from "@/src/components/property/IntrimTab";
 import DuesTab from "@/src/components/property/DuesTab";
 import CollectionsTab from "@/src/components/property/CollectionsTab";
 import StaffTab from "@/src/components/property/StaffTab";
@@ -51,6 +52,7 @@ const TAB_CONFIG: readonly TabConfig[] = [
   { key: "Property Details", title: "Property Details" },
   { key: "PG Layout", title: "PG Layout" },
   { key: "Advance Booking", title: "Advance Booking" },
+  { key: "Interim Bookings", title: "Interim Bookings" },
   { key: "Rooms", title: "Rooms" },
   { key: "Tenants", title: "Tenants" },
   { key: "Expenses", title: "Expenses" },
@@ -586,6 +588,7 @@ export default function PropertyDetails() {
     "Property Details": React.createRef<ScrollView>(),
     "PG Layout": React.createRef<ScrollView>(),
     "Advance Booking": React.createRef<FlatList>(),
+    "Interim Bookings": React.createRef<FlatList>(),
     "Rooms": React.createRef<FlatList>(),
     "Tenants": React.createRef<FlatList>(),
     "Expenses": React.createRef<FlatList>(),
@@ -639,6 +642,7 @@ export default function PropertyDetails() {
   const duesQuery = useGetAllPropertyPayments(`${id}?status=2&tenantStatus=1,2,3`);
   const tenantsActiveQuery = useGetAllTenants(id as string, "?status=1,2");
   const tenantsAdvanceQuery = useGetAllTenants(id as string, "?status=3,5,6");
+  const tenantsIntrimQuery = useGetAllTenants(id as string, "?status=7");
   const expensesQuery = useGetDailyExpensesList(id as string);
   const layoutQuery = useGetPropertyDetails(id as string);
 
@@ -674,6 +678,25 @@ export default function PropertyDetails() {
     [tenantsAdvanceQuery?.data]
   );
 
+  const { tenants: tenantsIntrim } = useMemo(
+    () => parseTenantsResponse(tenantsIntrimQuery?.data),
+    [tenantsIntrimQuery?.data]
+  );
+
+  // Extract raw metadata for interim bookings (includes shortTerm keys)
+  const intrimRawMeta = useMemo(() => {
+    const raw = tenantsIntrimQuery?.data;
+    if (raw && typeof raw === "object" && Array.isArray((raw as Record<string, unknown>)?.data)) {
+      const bucket = ((raw as Record<string, unknown>)?.data as unknown[])?.[0] as Record<string, unknown> | undefined;
+      return (bucket?.metadata as Record<string, unknown>) ?? {};
+    }
+    if (Array.isArray(raw)) {
+      const first = raw?.[0] as Record<string, unknown> | undefined;
+      return (first?.metadata as Record<string, unknown>) ?? {};
+    }
+    return {};
+  }, [tenantsIntrimQuery?.data]);
+
   const expenses = useMemo(
     () => (Array.isArray(expensesQuery?.data) ? expensesQuery?.data : []),
     [expensesQuery?.data]
@@ -699,6 +722,7 @@ export default function PropertyDetails() {
       "Property Details": undefined,
       "PG Layout": layoutQuery?.refetch ? () => layoutQuery.refetch() : undefined,
       "Advance Booking": tenantsAdvanceQuery?.refetch ? () => tenantsAdvanceQuery.refetch() : undefined,
+      "Interim Bookings": tenantsIntrimQuery?.refetch ? () => tenantsIntrimQuery.refetch() : undefined,
       "Rooms": roomsQuery?.refetch ? () => roomsQuery.refetch() : undefined,
       "Tenants": tenantsActiveQuery?.refetch ? () => tenantsActiveQuery.refetch() : undefined,
       "Expenses": expensesQuery?.refetch ? () => expensesQuery.refetch() : undefined,
@@ -709,6 +733,7 @@ export default function PropertyDetails() {
     [
       layoutQuery,
       tenantsAdvanceQuery,
+      tenantsIntrimQuery,
       roomsQuery,
       tenantsActiveQuery,
       expensesQuery,
@@ -728,6 +753,7 @@ export default function PropertyDetails() {
       "Property Details": false,
       "PG Layout": !!layoutQuery?.isFetching,
       "Advance Booking": !!tenantsAdvanceQuery?.isFetching,
+      "Interim Bookings": !!tenantsIntrimQuery?.isFetching,
       "Rooms": !!roomsQuery?.isFetching,
       "Tenants": !!tenantsActiveQuery?.isFetching,
       "Expenses": !!expensesQuery?.isFetching,
@@ -740,6 +766,7 @@ export default function PropertyDetails() {
     activeTab,
     layoutQuery?.isFetching,
     tenantsAdvanceQuery?.isFetching,
+    tenantsIntrimQuery?.isFetching,
     roomsQuery?.isFetching,
     tenantsActiveQuery?.isFetching,
     expensesQuery?.isFetching,
@@ -793,6 +820,19 @@ export default function PropertyDetails() {
             refreshing={!!tenantsAdvanceQuery?.isFetching}
             onRefresh={tenantsAdvanceQuery?.refetch}
             scrollRef={scrollRefs.current["Advance Booking"] as React.RefObject<FlatList>}
+            onScroll={handleScroll}
+          />
+        );
+
+      case "Interim Bookings":
+        return (
+          <IntrimTab
+            data={(tenantsIntrim ?? []) as Record<string, unknown>[]}
+            metadata={intrimRawMeta}
+            refreshing={!!tenantsIntrimQuery?.isFetching}
+            onRefresh={tenantsIntrimQuery?.refetch}
+            propertyId={id as string}
+            scrollRef={scrollRefs.current["Interim Bookings"] as React.RefObject<FlatList>}
             onScroll={handleScroll}
           />
         );

@@ -289,11 +289,13 @@ export default function PayOrEditDue() {
     dueId?: string;
     mode?: string;
     tenantId?: string;
+    fromTenantView?: string; // Track if coming from tenant view
   }>();
   const propertyId = String(params?.id ?? "");
   const dueId = String(params?.dueId ?? "");
   const mode = String(params?.mode ?? "pay");
   const paramTenantId = String(params?.tenantId ?? "");
+  const fromTenantView = params?.fromTenantView === "true";
   const isPayMode = mode === "pay";
   const isEditMode = mode === "edit";
   const isAddMode = mode === "add";
@@ -484,19 +486,27 @@ export default function PayOrEditDue() {
     paymentDate,
   ]);
 
-  // Navigation back to DuesTab with refresh
-  const navigateBackToDues = useCallback(() => {
+  // Navigation back - either to tenant view or DuesTab
+  const navigateBack = useCallback(() => {
     try {
       queryClient.invalidateQueries({ queryKey: ["tenantPaymentList"] });
       queryClient.invalidateQueries({ queryKey: ["propertyPaymentList"] });
     } catch {
       // Ignore
     }
-    router.replace({
-      pathname: `/protected/property/${propertyId}`,
-      params: { tab: "Dues", refresh: String(Date.now()) },
-    });
-  }, [queryClient, router, propertyId]);
+    
+    // If coming from tenant view, go back there
+    if (fromTenantView && paramTenantId) {
+      router.replace({
+        pathname: `/protected/tenant/view/${paramTenantId}`,
+      });
+    } else {
+      router.replace({
+        pathname: `/protected/property/${propertyId}`,
+        params: { tab: "Dues", refresh: String(Date.now()) },
+      });
+    }
+  }, [queryClient, router, propertyId, fromTenantView, paramTenantId]);
 
   // Show unsaved changes alert
   const showUnsavedChangesAlert = useCallback(
@@ -520,13 +530,13 @@ export default function PayOrEditDue() {
 
   // Handle back button
   const handleBack = useCallback(() => {
-    showUnsavedChangesAlert(navigateBackToDues);
-  }, [showUnsavedChangesAlert, navigateBackToDues]);
+    showUnsavedChangesAlert(navigateBack);
+  }, [showUnsavedChangesAlert, navigateBack]);
 
   // Handle cancel button
   const onCancel = useCallback(() => {
-    showUnsavedChangesAlert(navigateBackToDues);
-  }, [showUnsavedChangesAlert, navigateBackToDues]);
+    showUnsavedChangesAlert(navigateBack);
+  }, [showUnsavedChangesAlert, navigateBack]);
 
   // Android hardware back button
   useEffect(() => {
@@ -783,7 +793,7 @@ export default function PayOrEditDue() {
         {
           onSuccess: () => {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            navigateBackToDues();
+            navigateBack();
           },
           onError: (error: unknown) => {
             // Extract errorMessage from various possible error structures
@@ -826,7 +836,7 @@ export default function PayOrEditDue() {
     paymentDate,
     updatePayment,
     insertPayment,
-    navigateBackToDues,
+    navigateBack,
     dueId,
     paramTenantId,
     queryClient,

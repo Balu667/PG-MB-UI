@@ -512,9 +512,10 @@ const TabBar = React.memo(function TabBar({ tabs, activeTab, onTabChange }: TabB
 interface TransactionCardProps {
   payment: Record<string, unknown>;
   propertyId: string;
+  tenantId?: string;
 }
 
-const TransactionCard = React.memo(function TransactionCard({ payment, propertyId }: TransactionCardProps) {
+const TransactionCard = React.memo(function TransactionCard({ payment, propertyId, tenantId }: TransactionCardProps) {
   const { colors, spacing, radius, typography } = useTheme();
   const router = useRouter();
 
@@ -543,7 +544,7 @@ const TransactionCard = React.memo(function TransactionCard({ payment, propertyI
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     router.push({
       pathname: "/protected/dues/[id]",
-      params: { id: propertyId, dueId: paymentId, mode: "pay" },
+      params: { id: propertyId, dueId: paymentId, mode: "pay", tenantId: tenantId || "", fromTenantView: "true" },
     });
   };
 
@@ -551,7 +552,7 @@ const TransactionCard = React.memo(function TransactionCard({ payment, propertyI
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     router.push({
       pathname: "/protected/dues/[id]",
-      params: { id: propertyId, dueId: paymentId, mode: "edit" },
+      params: { id: propertyId, dueId: paymentId, mode: "edit", tenantId: tenantId || "", fromTenantView: "true" },
     });
   };
 
@@ -1160,6 +1161,34 @@ export default function TenantProfileView() {
     setIsEditing((prev) => !prev);
   }, []);
 
+  // Cancel editing and reset form values to original
+  const handleCancelEdit = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    // Reset all form fields to original tenant data
+    setTenantName(str(tenant?.tenantName, ""));
+    setJoiningDate(parseISODate(tenant?.joiningDate));
+    setNoticePeriod(String(num(tenant?.noticePeriod, 15)));
+    setRoomNumber(str(tenant?.roomNumber, ""));
+    setBedNumber(str(tenant?.bedNumber, ""));
+    setRentAmount(String(num(tenant?.rentAmount, 0)));
+    setDepositAmount(String(num(tenant?.depositAmount, 0)));
+    setPhoneNumber(str(tenant?.phoneNumber, ""));
+    setGender(str(tenant?.gender, "Male"));
+    setAlternativeNumber(str(tenant?.alternativeNumber, ""));
+    setEmail(str(tenant?.email, ""));
+    setMealType(str(tenant?.tenantMealType, ""));
+    setBloodGroup(str(tenant?.bloodGroup, ""));
+    setWorkingName(str(tenant?.workingName, ""));
+    setWorkingAddress(str(tenant?.workingAddress, ""));
+    setPermanentAddress(str(tenant?.permanentAddress, ""));
+    setVehicleType(str(tenant?.vehicleType, ""));
+    setVehicleNumber(str(tenant?.vehicleNumber, ""));
+    setEmContactName(str(tenant?.emContactName, ""));
+    setEmContactNumber(str(tenant?.emContactNumber, ""));
+    setEmRelation(str(tenant?.emRelation, ""));
+    setIsEditing(false);
+  }, [tenant]);
+
   // Validate and save
   const handleSave = useCallback(() => {
     const errors: string[] = [];
@@ -1244,6 +1273,9 @@ export default function TenantProfileView() {
       {
         onSuccess: () => {
           setIsEditing(false);
+          // Refetch tenant data to ensure latest data is available (e.g., for Give Notice)
+          tenantQuery.refetch();
+          showSnackbar("Details updated successfully");
         },
         onError: (error: unknown) => {
           const msg = error instanceof Error ? error.message : "Failed to update tenant.";
@@ -1794,13 +1826,26 @@ export default function TenantProfileView() {
           </Text>
         </View>
         {activeTab === "Profile Details" && (
-          <Pressable style={styles.editBtn} onPress={isEditing ? handleSave : toggleEdit} disabled={updateTenant.isPending}>
-            {updateTenant.isPending ? (
-              <ActivityIndicator size="small" color={isEditing ? "#FFFFFF" : colors.accent} />
-            ) : (
-              <Text style={styles.editBtnText}>{isEditing ? "Save Details" : "Edit Details"}</Text>
+          <View style={{ flexDirection: "row", gap: 8 }}>
+            {isEditing && (
+              <Pressable
+                style={[styles.editBtn, { backgroundColor: hexToRgba(colors.textMuted, 0.1), borderWidth: 1, borderColor: colors.borderColor }]}
+                onPress={handleCancelEdit}
+                disabled={updateTenant.isPending}
+                accessibilityRole="button"
+                accessibilityLabel="Cancel editing"
+              >
+                <Text style={[styles.editBtnText, { color: colors.textPrimary }]}>Cancel</Text>
+              </Pressable>
             )}
-          </Pressable>
+            <Pressable style={styles.editBtn} onPress={isEditing ? handleSave : toggleEdit} disabled={updateTenant.isPending}>
+              {updateTenant.isPending ? (
+                <ActivityIndicator size="small" color={isEditing ? "#FFFFFF" : colors.accent} />
+              ) : (
+                <Text style={styles.editBtnText}>{isEditing ? "Save Details" : "Edit Details"}</Text>
+              )}
+            </Pressable>
+          </View>
         )}
       </View>
 
@@ -2270,7 +2315,7 @@ export default function TenantProfileView() {
 
           {paymentsData.duePayments.length > 0 ? (
             paymentsData.duePayments.map((payment, idx) => (
-              <TransactionCard key={str(payment?._id, String(idx))} payment={payment} propertyId={propertyId} />
+              <TransactionCard key={str(payment?._id, String(idx))} payment={payment} propertyId={propertyId} tenantId={tenantId} />
             ))
           ) : (
             <View style={styles.emptyState}>
@@ -2284,7 +2329,7 @@ export default function TenantProfileView() {
             <>
               <Text style={[styles.sectionTitle, { marginTop: spacing.lg, marginBottom: spacing.sm }]}>Paid Payments</Text>
               {paymentsData.paidPayments.map((payment, idx) => (
-                <TransactionCard key={str(payment?._id, String(idx))} payment={payment} propertyId={propertyId} />
+                <TransactionCard key={str(payment?._id, String(idx))} payment={payment} propertyId={propertyId} tenantId={tenantId} />
               ))}
             </>
           )}
@@ -2298,7 +2343,7 @@ export default function TenantProfileView() {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
             router.push({
               pathname: `/protected/dues/${propertyId}`,
-              params: { mode: "add", tenantId: tenantId },
+              params: { mode: "add", tenantId: tenantId, fromTenantView: "true" },
             });
           }}
         />

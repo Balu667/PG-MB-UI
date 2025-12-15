@@ -109,12 +109,18 @@ const AnimatedTabBar: React.FC<AnimatedTabBarProps> = ({
       animateIndicator(layout.x, layout.width);
 
       // Scroll to center the active tab for better visibility
-      // Calculate scroll position to center the tab in the viewport
-      const scrollX = Math.max(0, layout.x - (screenWidth / 2) + (layout.width / 2));
-      scrollViewRef.current?.scrollTo({
-        x: scrollX,
-        animated: true,
-      });
+      // Use setTimeout to ensure scroll happens after any pending layout
+      setTimeout(() => {
+        const tabLayout = tabLayoutsRef.current.get(activeTab);
+        if (tabLayout) {
+          // Calculate scroll position to center the tab in the viewport
+          const scrollX = Math.max(0, tabLayout.x - (screenWidth / 2) + (tabLayout.width / 2));
+          scrollViewRef.current?.scrollTo({
+            x: scrollX,
+            animated: true,
+          });
+        }
+      }, 50);
     }
   }, [activeTab, animateIndicator, screenWidth]);
 

@@ -179,6 +179,28 @@ const useGetTenantDetailsByTenant = (id: string) => {
   });
 };
 
+// 🔹 Insert Short-Term Booking
+const useInsertShortTerm = (onSuccessFunctions: (data: unknown) => void) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: FormData) =>
+      fetchData({
+        url: `${BASE_URL}shortTerm`,
+        method: "POST",
+        body: data,
+      }),
+    onError: (error: Error) => {
+      // Error handled by component
+    },
+    onSuccess: (data: unknown) => {
+      onSuccessFunctions(data);
+      queryClient.invalidateQueries({ queryKey: ["tenantsList"] });
+      queryClient.invalidateQueries({ queryKey: ["roomsList"] });
+      queryClient.invalidateQueries({ queryKey: ["propertyLayoutDetails"] });
+    },
+  });
+};
+
 export {
   useGetAllTenants,
   useInsertTenant,
@@ -189,4 +211,5 @@ export {
   useNotifyTenant,
   useUpdateTenantByTenant,
   useGetTenantDetailsByTenant,
+  useInsertShortTerm,
 };
