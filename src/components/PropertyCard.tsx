@@ -4,45 +4,18 @@ import {
   Text,
   StyleSheet,
   Pressable,
-  Animated,
   Platform,
   useWindowDimensions,
   I18nManager,
 } from "react-native";
-import { MaterialIcons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { MaterialIcons } from "@expo/vector-icons";
+import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { useTheme } from "@/src/theme/ThemeContext";
 import { hexToRgba } from "../theme";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 import { Portal, Dialog, Button } from "react-native-paper";
 import { useProperty } from "@/src/context/PropertyContext";
-
-/* ─────────────────────────────────────────────────────────────────────────────
-   HELPERS
-───────────────────────────────────────────────────────────────────────────── */
-
-const formatIndianNumber = (num: number | undefined | null): string => {
-  if (num === undefined || num === null || isNaN(num)) return "0";
-  const str = Math.abs(Math.round(num)).toString();
-  let result = "";
-  const len = str.length;
-  
-  if (len <= 3) return num < 0 ? `-${str}` : str;
-  
-  result = str.slice(-3);
-  let remaining = str.slice(0, -3);
-  
-  while (remaining.length > 2) {
-    result = remaining.slice(-2) + "," + result;
-    remaining = remaining.slice(0, -2);
-  }
-  
-  if (remaining.length > 0) {
-    result = remaining + "," + result;
-  }
-  
-  return num < 0 ? `-${result}` : result;
-};
 
 /* ─────────────────────────────────────────────────────────────────────────────
    TYPES
@@ -86,540 +59,624 @@ interface PropertyCardProps {
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   MAIN PROPERTY CARD - Clean Compact Design
+   HELPERS
+───────────────────────────────────────────────────────────────────────────── */
+
+const formatCurrency = (num: number | undefined | null): string => {
+  if (num === undefined || num === null || isNaN(num)) return "₹0";
+  if (num >= 100000) return `₹${(num / 100000).toFixed(1)}L`;
+  if (num >= 1000) return `₹${(num / 1000).toFixed(1)}K`;
+  return `₹${num}`;
+};
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   PROPERTY CARD - Premium Enhanced Design
 ───────────────────────────────────────────────────────────────────────────── */
 
 const PropertyCard = React.memo<PropertyCardProps>(({ data, onPress, onDelete }) => {
-  const { colors, radius, spacing } = useTheme();
+  const { colors, spacing, radius } = useTheme();
   const { width: screenWidth } = useWindowDimensions();
   const router = useRouter();
   const { setSelected } = useProperty();
-  
+
   const [menuVisible, setMenuVisible] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  
-  const scaleAnim = React.useRef(new Animated.Value(1)).current;
 
-  // Responsive sizing - wider columns for better visibility (20% larger)
-  const numColumns = screenWidth >= 1400 ? 4 : screenWidth >= 1000 ? 3 : screenWidth >= 700 ? 2 : 1;
-  const cardMargin = 8;
-  const horizontalPadding = spacing.md;
-  const cardWidth = numColumns === 1 
-    ? screenWidth - horizontalPadding * 2 
-    : (screenWidth - horizontalPadding * 2 - cardMargin * (numColumns - 1)) / numColumns;
-  
-  // Compact mode only for very small screens
-  const isCompact = cardWidth < 320;
+  // Responsive column calculation - improved breakpoints
+  const numColumns = screenWidth >= 1200 ? 3 : screenWidth >= 768 ? 2 : 1;
+  const horizontalPadding = spacing.md * 2;
+  const gap = spacing.md;
+  const cardWidth = numColumns === 1
+    ? screenWidth - horizontalPadding
+    : (screenWidth - horizontalPadding - gap * (numColumns - 1)) / numColumns;
 
-  // Press handlers
-  const handlePressIn = useCallback(() => {
-    Animated.spring(scaleAnim, {
-      toValue: 0.98,
-      useNativeDriver: true,
-      friction: 10,
-    }).start();
-  }, [scaleAnim]);
-
-  const handlePressOut = useCallback(() => {
-    Animated.spring(scaleAnim, {
-      toValue: 1,
-      useNativeDriver: true,
-      friction: 10,
-    }).start();
-  }, [scaleAnim]);
-
+  // Handlers
   const handlePress = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setMenuVisible(false);
-    setConfirmDelete(false);
     setSelected?.(data._id);
-    if (onPress) {
-      onPress();
-    } else {
-      router.push(`/protected/property/${data._id}`);
-    }
+    if (onPress) onPress();
+    else router.push(`/protected/property/${data._id}`);
   }, [data._id, onPress, router, setSelected]);
-
-  const handleMenuOpen = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setMenuVisible(true);
-  }, []);
-
-  const handleMenuClose = useCallback(() => {
-    setMenuVisible(false);
-  }, []);
 
   const handleEdit = useCallback(() => {
     setMenuVisible(false);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    router.push({
-      pathname: "/protected/property/edit/[id]",
-      params: { id: data._id },
-    });
+    router.push({ pathname: "/protected/property/edit/[id]", params: { id: data._id } });
   }, [data._id, router]);
 
-  const handleDeletePress = useCallback(() => {
-    setMenuVisible(false);
-    setConfirmDelete(true);
-  }, []);
-
-  const handleConfirmDelete = useCallback(() => {
+  const handleDeleteConfirm = useCallback(() => {
     setConfirmDelete(false);
-    if (onDelete) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      onDelete(data._id);
-    }
+    onDelete?.(data._id);
   }, [data._id, onDelete]);
 
-  // Type configuration - simple label-based
-  const typeConfig = useMemo(() => {
+  // Computed values
+  const meta = data.metadata || {};
+  const totalBeds = meta.totalBeds || 0;
+  const occupiedBeds = meta.occupiedBeds || 0;
+  const occupancyRate = totalBeds > 0 ? Math.round((occupiedBeds / totalBeds) * 100) : 0;
+
+  // Tenant type config
+  const tenantTypeConfig = useMemo(() => {
     switch (data.tenantType) {
       case "Male":
-        return { color: "#3B82F6", icon: "gender-male", label: "Men's" };
+        return { label: "Men", icon: "human-male" as const, color: "#3B82F6" };
       case "Female":
-        return { color: "#EC4899", icon: "gender-female", label: "Women's" };
+        return { label: "Women", icon: "human-female" as const, color: "#EC4899" };
       default:
-        return { color: "#8B5CF6", icon: "account-group", label: "Co-living" };
+        return { label: "Co-living", icon: "account-group" as const, color: colors.accent };
     }
-  }, [data.tenantType]);
+  }, [data.tenantType, colors.accent]);
 
-  // Meal type config
-  const mealConfig = useMemo(() => {
-    const meal = data.mealType?.toLowerCase();
-    if (meal?.includes("non")) return { color: "#EF4444", icon: "food-drumstick", label: "Non-Veg" };
-    if (meal?.includes("both")) return { color: "#F59E0B", icon: "food", label: "Both" };
-    return { color: "#10B981", icon: "leaf", label: "Veg" };
-  }, [data.mealType]);
+  // Occupancy color based on rate
+  const occupancyColor = useMemo(() => {
+    if (occupancyRate >= 90) return "#22C55E";
+    if (occupancyRate >= 70) return colors.accent;
+    if (occupancyRate >= 50) return "#F59E0B";
+    return "#EF4444";
+  }, [occupancyRate, colors.accent]);
 
-  // Occupancy percentage
-  const occupancy = useMemo(() => {
-    const total = data.metadata?.totalBeds || 0;
-    const occupied = data.metadata?.occupiedBeds || 0;
-    return total > 0 ? Math.round((occupied / total) * 100) : 0;
-  }, [data.metadata]);
-
-  const occupancyColor = occupancy >= 80 ? "#10B981" : occupancy >= 50 ? "#3B82F6" : occupancy >= 30 ? "#F59E0B" : "#EF4444";
-
-  // Styles
-  const styles = useMemo(
-    () =>
-      StyleSheet.create({
-        container: {
-          width: numColumns === 1 ? "100%" : cardWidth,
-          marginBottom: cardMargin * 1.5,
+  const styles = useMemo(() => StyleSheet.create({
+    container: {
+      width: numColumns === 1 ? "100%" : cardWidth,
+      marginBottom: spacing.md + 2,
+    },
+    card: {
+      backgroundColor: colors.cardBackground,
+      borderRadius: radius.lg,
+      borderWidth: 1.5,
+      borderColor: hexToRgba(colors.borderColor, 0.5),
+      overflow: "hidden",
+      ...Platform.select({
+        ios: {
+          shadowColor: "#000",
+          shadowOffset: { width: 0, height: 3 },
+          shadowOpacity: 0.06,
+          shadowRadius: 12,
         },
-        card: {
-          backgroundColor: colors.cardBackground,
-          borderRadius: radius.lg + 2,
-          overflow: "hidden",
-          borderWidth: 1,
-          borderColor: hexToRgba(colors.borderColor, 0.5),
-          ...(Platform.OS === "ios"
-            ? {
-                shadowColor: "#000",
-                shadowOffset: { width: 0, height: 3 },
-                shadowOpacity: 0.08,
-                shadowRadius: 10,
-              }
-            : { elevation: 4 }),
-        },
-        header: {
-          flexDirection: "row",
-          alignItems: "flex-start",
-          justifyContent: "space-between",
-          padding: isCompact ? 14 : 16,
-          borderBottomWidth: 1,
-          borderBottomColor: hexToRgba(colors.borderColor, 0.3),
-        },
-        headerLeft: {
-          flex: 1,
-          marginRight: 10,
-        },
-        propertyId: {
-          fontSize: 11,
-          fontWeight: "600",
-          color: colors.textMuted,
-          marginBottom: 3,
-          letterSpacing: 0.4,
-        },
-        propertyName: {
-          fontSize: isCompact ? 16 : 18,
-          fontWeight: "700",
-          color: colors.textPrimary,
-          lineHeight: isCompact ? 22 : 24,
-        },
-        locationRow: {
-          flexDirection: "row",
-          alignItems: "center",
-          marginTop: 4,
-        },
-        locationText: {
-          fontSize: 12,
-          color: colors.textSecondary,
-          marginLeft: 4,
-          flexShrink: 1,
-        },
-        headerRight: {
-          alignItems: "flex-end",
-        },
-        menuBtn: {
-          width: 34,
-          height: 34,
-          borderRadius: 17,
-          backgroundColor: hexToRgba(colors.textMuted, 0.08),
-          alignItems: "center",
-          justifyContent: "center",
-        },
-        badgesRow: {
-          flexDirection: "row",
-          flexWrap: "wrap",
-          gap: 8,
-          marginTop: 8,
-        },
-        badge: {
-          flexDirection: "row",
-          alignItems: "center",
-          gap: 4,
-          paddingHorizontal: 8,
-          paddingVertical: 4,
-          borderRadius: 8,
-        },
-        badgeText: {
-          fontSize: 10,
-          fontWeight: "700",
-          textTransform: "uppercase",
-          letterSpacing: 0.3,
-        },
-        body: {
-          padding: isCompact ? 14 : 16,
-        },
-        statsRow: {
-          flexDirection: "row",
-          justifyContent: "space-between",
-          marginBottom: 14,
-        },
-        statItem: {
-          alignItems: "center",
-          flex: 1,
-          minWidth: 0,
-        },
-        statValue: {
-          fontSize: isCompact ? 18 : 20,
-          fontWeight: "800",
-          color: colors.textPrimary,
-        },
-        statLabel: {
-          fontSize: 10,
-          fontWeight: "600",
-          color: colors.textMuted,
-          textTransform: "uppercase",
-          marginTop: 2,
-          letterSpacing: 0.3,
-        },
-        progressSection: {
-          marginBottom: 14,
-        },
-        progressHeader: {
-          flexDirection: "row",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: 6,
-        },
-        progressLabel: {
-          fontSize: 12,
-          fontWeight: "600",
-          color: colors.textSecondary,
-        },
-        progressValue: {
-          fontSize: 13,
-          fontWeight: "700",
-        },
-        progressBar: {
-          height: 6,
-          backgroundColor: hexToRgba(colors.textMuted, 0.1),
-          borderRadius: 3,
-          overflow: "hidden",
-        },
-        progressFill: {
-          height: "100%",
-          borderRadius: 3,
-        },
-        financialRow: {
-          flexDirection: "row",
-          flexWrap: "wrap",
-          gap: 8,
-        },
-        financialItem: {
-          flex: 1,
-          minWidth: 90,
-          flexDirection: "row",
-          alignItems: "center",
-          paddingVertical: 8,
-          paddingHorizontal: 10,
-          borderRadius: 10,
-          gap: 8,
-        },
-        financialValue: {
-          fontSize: 13,
-          fontWeight: "700",
-        },
-        financialLabel: {
-          fontSize: 10,
-          fontWeight: "600",
-          color: colors.textMuted,
-        },
-        menuOverlay: {
-          ...StyleSheet.absoluteFillObject,
-          backgroundColor: "rgba(0,0,0,0.25)",
-          justifyContent: "flex-start",
-          alignItems: I18nManager.isRTL ? "flex-start" : "flex-end",
-          padding: 8,
-          borderRadius: radius.lg,
-        },
-        menuContainer: {
-          backgroundColor: colors.cardBackground,
-          borderRadius: radius.md,
-          overflow: "hidden",
-          minWidth: 120,
-          borderWidth: 1,
-          borderColor: colors.borderColor,
-          ...(Platform.OS === "ios"
-            ? {
-                shadowColor: "#000",
-                shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.12,
-                shadowRadius: 10,
-              }
-            : { elevation: 6 }),
-        },
-        menuItem: {
-          flexDirection: "row",
-          alignItems: "center",
-          gap: 8,
-          paddingVertical: 10,
-          paddingHorizontal: 12,
-        },
-        menuItemText: {
-          fontSize: 13,
-          fontWeight: "600",
-        },
-        menuDivider: {
-          height: 1,
-          backgroundColor: hexToRgba(colors.borderColor, 0.5),
-        },
+        android: { elevation: 3 },
       }),
-    [colors, radius, spacing, cardWidth, numColumns, isCompact, occupancyColor]
-  );
+    },
+    pressable: {
+      padding: spacing.md + 6,
+    },
+    
+    // Header - Enhanced
+    header: {
+      flexDirection: I18nManager.isRTL ? "row-reverse" : "row",
+      justifyContent: "space-between",
+      alignItems: "flex-start",
+      marginBottom: spacing.md + 2,
+    },
+    headerContent: {
+      flex: 1,
+      marginRight: I18nManager.isRTL ? 0 : spacing.sm,
+      marginLeft: I18nManager.isRTL ? spacing.sm : 0,
+    },
+    name: {
+      fontSize: 18,
+      fontWeight: "700",
+      color: colors.textPrimary,
+      letterSpacing: -0.4,
+      lineHeight: 24,
+      textAlign: I18nManager.isRTL ? "right" : "left",
+    },
+    locationRow: {
+      flexDirection: I18nManager.isRTL ? "row-reverse" : "row",
+      alignItems: "center",
+      marginTop: 5,
+    },
+    location: {
+      fontSize: 13,
+      color: colors.textSecondary,
+      marginLeft: I18nManager.isRTL ? 0 : 5,
+      marginRight: I18nManager.isRTL ? 5 : 0,
+      fontWeight: "500",
+    },
+    tagsRow: {
+      flexDirection: I18nManager.isRTL ? "row-reverse" : "row",
+      alignItems: "center",
+      marginTop: 10,
+      gap: 8,
+    },
+    typeTag: {
+      flexDirection: I18nManager.isRTL ? "row-reverse" : "row",
+      alignItems: "center",
+      gap: 5,
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      backgroundColor: hexToRgba(tenantTypeConfig.color, 0.12),
+      borderRadius: 6,
+    },
+    typeText: {
+      fontSize: 11,
+      fontWeight: "700",
+      color: tenantTypeConfig.color,
+    },
+    mealTag: {
+      flexDirection: I18nManager.isRTL ? "row-reverse" : "row",
+      alignItems: "center",
+      gap: 5,
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      backgroundColor: hexToRgba("#22C55E", 0.12),
+      borderRadius: 6,
+    },
+    mealText: {
+      fontSize: 11,
+      fontWeight: "700",
+      color: "#22C55E",
+    },
+    menuButton: {
+      width: 36,
+      height: 36,
+      borderRadius: 10,
+      backgroundColor: hexToRgba(colors.textMuted, 0.08),
+      alignItems: "center",
+      justifyContent: "center",
+      minWidth: 44,
+      minHeight: 44,
+    },
 
-  // Stats data
-  const stats = useMemo(() => [
-    { value: data.metadata?.totalBeds || 0, label: "Total" },
-    { value: data.metadata?.vacantBeds || 0, label: "Vacant" },
-    { value: data.metadata?.occupiedBeds || 0, label: "Filled" },
-    { value: data.metadata?.advancedBookings || 0, label: "Booked" },
-    { value: data.metadata?.shortTermBeds || 0, label: "Short" },
-    { value: data.metadata?.underNotice || 0, label: "Notice" },
-  ], [data.metadata]);
+    // Divider - Enhanced
+    divider: {
+      height: 1,
+      backgroundColor: hexToRgba(colors.borderColor, 0.4),
+      marginBottom: spacing.md + 2,
+    },
+
+    // Stats Grid - Enhanced 2x3
+    statsGrid: {
+      flexDirection: I18nManager.isRTL ? "row-reverse" : "row",
+      flexWrap: "wrap",
+      marginHorizontal: -6,
+    },
+    statCell: {
+      width: "33.33%",
+      paddingHorizontal: 6,
+      marginBottom: 14,
+    },
+    statInner: {
+      alignItems: "center",
+      backgroundColor: colors.surface,
+      borderRadius: 10,
+      paddingVertical: 12,
+      paddingHorizontal: 8,
+      borderWidth: 1,
+      borderColor: hexToRgba(colors.borderColor, 0.4),
+    },
+    statValue: {
+      fontSize: 19,
+      fontWeight: "700",
+      color: colors.textPrimary,
+      letterSpacing: -0.5,
+    },
+    statLabel: {
+      fontSize: 10,
+      fontWeight: "600",
+      color: colors.textMuted,
+      marginTop: 4,
+      textAlign: "center",
+      textTransform: "uppercase",
+      letterSpacing: 0.3,
+    },
+
+    // Occupancy bar - Enhanced
+    occupancySection: {
+      marginTop: 2,
+      backgroundColor: colors.surface,
+      borderRadius: 10,
+      padding: 12,
+      borderWidth: 1,
+      borderColor: hexToRgba(colors.borderColor, 0.4),
+    },
+    occupancyHeader: {
+      flexDirection: I18nManager.isRTL ? "row-reverse" : "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 8,
+    },
+    occupancyLabel: {
+      fontSize: 12,
+      color: colors.textSecondary,
+      fontWeight: "600",
+    },
+    occupancyValue: {
+      fontSize: 13,
+      fontWeight: "700",
+      color: occupancyColor,
+    },
+    progressTrack: {
+      height: 6,
+      backgroundColor: hexToRgba(colors.textMuted, 0.12),
+      borderRadius: 3,
+      overflow: "hidden",
+    },
+    progressFill: {
+      height: "100%",
+      backgroundColor: occupancyColor,
+      borderRadius: 3,
+    },
+
+    // Footer with financials - Enhanced
+    footer: {
+      flexDirection: I18nManager.isRTL ? "row-reverse" : "row",
+      marginTop: spacing.md + 2,
+      paddingTop: spacing.md,
+      borderTopWidth: 1,
+      borderTopColor: hexToRgba(colors.borderColor, 0.4),
+    },
+    finItem: {
+      flex: 1,
+      alignItems: "center",
+      paddingVertical: 4,
+    },
+    finIconWrap: {
+      width: 28,
+      height: 28,
+      borderRadius: 7,
+      alignItems: "center",
+      justifyContent: "center",
+      marginBottom: 6,
+    },
+    finValue: {
+      fontSize: 15,
+      fontWeight: "700",
+      color: colors.textPrimary,
+      letterSpacing: -0.3,
+    },
+    finLabel: {
+      fontSize: 10,
+      fontWeight: "600",
+      color: colors.textMuted,
+      marginTop: 3,
+      textTransform: "uppercase",
+      letterSpacing: 0.3,
+    },
+    finDivider: {
+      width: 1,
+      backgroundColor: hexToRgba(colors.borderColor, 0.4),
+      marginHorizontal: 10,
+      marginVertical: 4,
+    },
+
+    // Menu dropdown - Enhanced
+    menuOverlay: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: "transparent",
+    },
+    menuDropdown: {
+      position: "absolute",
+      top: 48,
+      right: I18nManager.isRTL ? undefined : spacing.md,
+      left: I18nManager.isRTL ? spacing.md : undefined,
+      backgroundColor: colors.cardBackground,
+      borderRadius: radius.md,
+      borderWidth: 1.5,
+      borderColor: hexToRgba(colors.borderColor, 0.7),
+      minWidth: 140,
+      overflow: "hidden",
+      ...Platform.select({
+        ios: {
+          shadowColor: "#000",
+          shadowOffset: { width: 0, height: 6 },
+          shadowOpacity: 0.15,
+          shadowRadius: 16,
+        },
+        android: { elevation: 12 },
+      }),
+    },
+    menuItem: {
+      flexDirection: I18nManager.isRTL ? "row-reverse" : "row",
+      alignItems: "center",
+      paddingVertical: 14,
+      paddingHorizontal: 16,
+      gap: 12,
+      minHeight: 48,
+    },
+    menuItemText: {
+      fontSize: 14,
+      fontWeight: "500",
+      color: colors.textPrimary,
+    },
+    menuSeparator: {
+      height: 1,
+      backgroundColor: hexToRgba(colors.borderColor, 0.4),
+    },
+  }), [colors, spacing, radius, cardWidth, numColumns, tenantTypeConfig, occupancyColor]);
+
+  // Stats data with colors
+  const statsData = useMemo(() => [
+    { key: "total", label: "Total", value: totalBeds, color: colors.primary },
+    { key: "vacant", label: "Vacant", value: meta.vacantBeds || 0, color: "#22C55E" },
+    { key: "occupied", label: "Occupied", value: occupiedBeds, color: "#EF4444" },
+    { key: "booked", label: "Booked", value: meta.advancedBookings || 0, color: "#F59E0B" },
+    { key: "shortTerm", label: "Short", value: meta.shortTermBeds || 0, color: "#3B82F6" },
+    { key: "notice", label: "Notice", value: meta.underNotice || 0, color: "#8B5CF6" },
+  ], [totalBeds, meta, occupiedBeds, colors.primary]);
 
   return (
     <View style={styles.container}>
-      <Animated.View style={[styles.card, { transform: [{ scale: scaleAnim }] }]}>
+      <View style={styles.card}>
         <Pressable
           onPress={handlePress}
-          onPressIn={handlePressIn}
-          onPressOut={handlePressOut}
-          android_ripple={{ color: hexToRgba(colors.primary, 0.08) }}
-          accessibilityRole="button"
-          accessibilityLabel={`${data.propertyName} property card`}
-          accessibilityHint="Tap to view property details"
+          style={styles.pressable}
+          android_ripple={{ color: hexToRgba(colors.textMuted, 0.08) }}
           accessible
+          accessibilityRole="button"
+          accessibilityLabel={`${data.propertyName} property in ${data.area}, ${data.city}`}
+          accessibilityHint="Double tap to view property details"
         >
-          {/* Header */}
+          {/* Header - Enhanced */}
           <View style={styles.header}>
-            <View style={styles.headerLeft}>
-              {data.propertyId && (
-                <Text style={styles.propertyId} numberOfLines={1}>{data.propertyId}</Text>
-              )}
-              <Text style={styles.propertyName} numberOfLines={2} ellipsizeMode="tail">
+            <View style={styles.headerContent}>
+              <Text 
+                style={styles.name} 
+                numberOfLines={2}
+                accessible
+              >
                 {data.propertyName}
               </Text>
               <View style={styles.locationRow}>
-                <MaterialIcons name="location-on" size={13} color={colors.textSecondary} />
-                <Text style={styles.locationText} numberOfLines={1} ellipsizeMode="tail">
+                <MaterialIcons 
+                  name="place" 
+                  size={15} 
+                  color={colors.textSecondary}
+                  accessible={false}
+                />
+                <Text 
+                  style={styles.location} 
+                  numberOfLines={1}
+                  accessible
+                  accessibilityLabel={`Location: ${data.area}, ${data.city}`}
+                >
                   {data.area}, {data.city}
                 </Text>
               </View>
-              
-              {/* Badges */}
-              <View style={styles.badgesRow}>
-                <View style={[styles.badge, { backgroundColor: hexToRgba(typeConfig.color, 0.1) }]}>
-                  <MaterialCommunityIcons name={typeConfig.icon as never} size={12} color={typeConfig.color} />
-                  <Text style={[styles.badgeText, { color: typeConfig.color }]}>{typeConfig.label}</Text>
+              <View style={styles.tagsRow}>
+                <View 
+                  style={styles.typeTag}
+                  accessible
+                  accessibilityLabel={`Tenant type: ${tenantTypeConfig.label}`}
+                >
+                  <MaterialCommunityIcons 
+                    name={tenantTypeConfig.icon} 
+                    size={13} 
+                    color={tenantTypeConfig.color} 
+                  />
+                  <Text style={styles.typeText}>{tenantTypeConfig.label}</Text>
                 </View>
                 {data.mealType && (
-                  <View style={[styles.badge, { backgroundColor: hexToRgba(mealConfig.color, 0.1) }]}>
-                    <MaterialCommunityIcons name={mealConfig.icon as never} size={12} color={mealConfig.color} />
-                    <Text style={[styles.badgeText, { color: mealConfig.color }]}>{mealConfig.label}</Text>
+                  <View 
+                    style={styles.mealTag}
+                    accessible
+                    accessibilityLabel={`Meal type: ${data.mealType}`}
+                  >
+                    <MaterialCommunityIcons 
+                      name="silverware-fork-knife" 
+                      size={12} 
+                      color="#22C55E" 
+                    />
+                    <Text style={styles.mealText}>{data.mealType}</Text>
                   </View>
                 )}
               </View>
             </View>
 
-            <View style={styles.headerRight}>
-              <Pressable
-                onPress={handleMenuOpen}
-                style={styles.menuBtn}
-                hitSlop={10}
-                accessibilityRole="button"
-                accessibilityLabel="Property options"
-                accessible
-              >
-                <MaterialIcons name="more-vert" size={20} color={colors.textSecondary} />
-              </Pressable>
+            <Pressable
+              onPress={() => setMenuVisible(true)}
+              style={({ pressed }) => [
+                styles.menuButton,
+                pressed && { opacity: 0.7 }
+              ]}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessible
+              accessibilityRole="button"
+              accessibilityLabel="More options menu"
+              accessibilityHint="Double tap to open property options"
+            >
+              <MaterialIcons name="more-horiz" size={22} color={colors.textSecondary} />
+            </Pressable>
+          </View>
+
+          <View style={styles.divider} />
+
+          {/* Stats Grid - Enhanced */}
+          <View 
+            style={styles.statsGrid}
+            accessible={false}
+          >
+            {statsData.map((stat) => (
+              <View key={stat.key} style={styles.statCell}>
+                <View 
+                  style={styles.statInner}
+                  accessible
+                  accessibilityLabel={`${stat.label}: ${stat.value}`}
+                >
+                  <Text style={[styles.statValue, { color: stat.color }]}>
+                    {stat.value}
+                  </Text>
+                  <Text style={styles.statLabel}>{stat.label}</Text>
+                </View>
+              </View>
+            ))}
+          </View>
+
+          {/* Occupancy Progress - Enhanced */}
+          <View 
+            style={styles.occupancySection}
+            accessible
+            accessibilityLabel={`Occupancy rate: ${occupancyRate} percent`}
+          >
+            <View style={styles.occupancyHeader}>
+              <Text style={styles.occupancyLabel}>Occupancy Rate</Text>
+              <Text style={styles.occupancyValue}>{occupancyRate}%</Text>
+            </View>
+            <View style={styles.progressTrack}>
+              <View 
+                style={[
+                  styles.progressFill, 
+                  { width: `${Math.min(occupancyRate, 100)}%` }
+                ]} 
+              />
             </View>
           </View>
 
-          {/* Body */}
-          <View style={styles.body}>
-            {/* Bed Stats Row */}
-            <View style={styles.statsRow}>
-              {stats.map((stat, idx) => (
-                <View key={idx} style={styles.statItem}>
-                  <Text 
-                    style={styles.statValue} 
-                    numberOfLines={1}
-                    adjustsFontSizeToFit
-                    minimumFontScale={0.7}
-                  >
-                    {stat.value}
-                  </Text>
-                  <Text 
-                    style={styles.statLabel} 
-                    numberOfLines={1}
-                  >
-                    {stat.label}
-                  </Text>
-                </View>
-              ))}
+          {/* Footer - Financials Enhanced */}
+          <View 
+            style={styles.footer}
+            accessible={false}
+          >
+            <View 
+              style={styles.finItem}
+              accessible
+              accessibilityLabel={`Income: ${formatCurrency(meta.income)}`}
+            >
+              <View style={[styles.finIconWrap, { backgroundColor: hexToRgba("#22C55E", 0.12) }]}>
+                <MaterialCommunityIcons name="arrow-down" size={16} color="#22C55E" />
+              </View>
+              <Text style={[styles.finValue, { color: "#22C55E" }]}>
+                {formatCurrency(meta.income)}
+              </Text>
+              <Text style={styles.finLabel}>Income</Text>
             </View>
-
-            {/* Occupancy Progress */}
-            <View style={styles.progressSection}>
-              <View style={styles.progressHeader}>
-                <Text style={styles.progressLabel}>Occupancy</Text>
-                <Text style={[styles.progressValue, { color: occupancyColor }]}>{occupancy}%</Text>
+            <View style={styles.finDivider} />
+            <View 
+              style={styles.finItem}
+              accessible
+              accessibilityLabel={`Expenses: ${formatCurrency(meta.expenses)}`}
+            >
+              <View style={[styles.finIconWrap, { backgroundColor: hexToRgba("#EF4444", 0.12) }]}>
+                <MaterialCommunityIcons name="arrow-up" size={16} color="#EF4444" />
               </View>
-              <View style={styles.progressBar}>
-                <View 
-                  style={[
-                    styles.progressFill, 
-                    { 
-                      width: `${occupancy}%`, 
-                      backgroundColor: occupancyColor 
-                    }
-                  ]} 
-                />
-              </View>
+              <Text style={[styles.finValue, { color: "#EF4444" }]}>
+                {formatCurrency(meta.expenses)}
+              </Text>
+              <Text style={styles.finLabel}>Expenses</Text>
             </View>
-
-            {/* Financial Row */}
-            <View style={styles.financialRow}>
-              <View style={[styles.financialItem, { backgroundColor: hexToRgba("#10B981", 0.08) }]}>
-                <MaterialCommunityIcons name="arrow-down-bold" size={14} color="#10B981" />
-                <View style={{ flex: 1 }}>
-                  <Text 
-                    style={[styles.financialValue, { color: "#10B981" }]}
-                    numberOfLines={1}
-                    adjustsFontSizeToFit
-                    minimumFontScale={0.75}
-                  >
-                    ₹{formatIndianNumber(data.metadata?.income)}
-                  </Text>
-                  <Text style={styles.financialLabel}>Income</Text>
-                </View>
+            <View style={styles.finDivider} />
+            <View 
+              style={styles.finItem}
+              accessible
+              accessibilityLabel={`Dues: ${formatCurrency(meta.dues)}`}
+            >
+              <View style={[styles.finIconWrap, { backgroundColor: hexToRgba("#F59E0B", 0.12) }]}>
+                <MaterialCommunityIcons name="clock-outline" size={16} color="#F59E0B" />
               </View>
-              <View style={[styles.financialItem, { backgroundColor: hexToRgba("#EF4444", 0.08) }]}>
-                <MaterialCommunityIcons name="arrow-up-bold" size={14} color="#EF4444" />
-                <View style={{ flex: 1 }}>
-                  <Text 
-                    style={[styles.financialValue, { color: "#EF4444" }]}
-                    numberOfLines={1}
-                    adjustsFontSizeToFit
-                    minimumFontScale={0.75}
-                  >
-                    ₹{formatIndianNumber(data.metadata?.expenses)}
-                  </Text>
-                  <Text style={styles.financialLabel}>Expense</Text>
-                </View>
-              </View>
-              <View style={[styles.financialItem, { backgroundColor: hexToRgba("#F59E0B", 0.08) }]}>
-                <MaterialIcons name="warning" size={14} color="#F59E0B" />
-                <View style={{ flex: 1 }}>
-                  <Text 
-                    style={[styles.financialValue, { color: "#F59E0B" }]}
-                    numberOfLines={1}
-                    adjustsFontSizeToFit
-                    minimumFontScale={0.75}
-                  >
-                    ₹{formatIndianNumber(data.metadata?.dues)}
-                  </Text>
-                  <Text style={styles.financialLabel}>Dues</Text>
-                </View>
-              </View>
+              <Text style={[styles.finValue, { color: "#F59E0B" }]}>
+                {formatCurrency(meta.dues)}
+              </Text>
+              <Text style={styles.finLabel}>Dues</Text>
             </View>
           </View>
         </Pressable>
 
-        {/* Menu Overlay */}
+        {/* Menu Overlay - Enhanced */}
         {menuVisible && (
-          <Pressable style={styles.menuOverlay} onPress={handleMenuClose}>
-            <View style={styles.menuContainer}>
+          <>
+            <Pressable
+              style={styles.menuOverlay}
+              onPress={() => setMenuVisible(false)}
+              accessible
+              accessibilityRole="button"
+              accessibilityLabel="Close menu"
+            />
+            <View style={styles.menuDropdown}>
               <Pressable
-                style={styles.menuItem}
+                style={({ pressed }) => [
+                  styles.menuItem,
+                  pressed && { backgroundColor: hexToRgba(colors.textMuted, 0.08) }
+                ]}
                 onPress={handleEdit}
-                android_ripple={{ color: hexToRgba(colors.primary, 0.1) }}
-                accessibilityRole="menuitem"
+                android_ripple={{ color: hexToRgba(colors.textMuted, 0.1) }}
+                accessible
+                accessibilityRole="button"
                 accessibilityLabel="Edit property"
-                accessible
               >
-                <MaterialIcons name="edit" size={16} color={colors.primary} />
-                <Text style={[styles.menuItemText, { color: colors.textPrimary }]}>Edit</Text>
+                <MaterialIcons name="edit" size={20} color={colors.textSecondary} />
+                <Text style={styles.menuItemText}>Edit</Text>
               </Pressable>
-              <View style={styles.menuDivider} />
+              <View style={styles.menuSeparator} />
               <Pressable
-                style={styles.menuItem}
-                onPress={handleDeletePress}
+                style={({ pressed }) => [
+                  styles.menuItem,
+                  pressed && { backgroundColor: hexToRgba(colors.error, 0.08) }
+                ]}
+                onPress={() => { setMenuVisible(false); setConfirmDelete(true); }}
                 android_ripple={{ color: hexToRgba(colors.error, 0.1) }}
-                accessibilityRole="menuitem"
-                accessibilityLabel="Delete property"
                 accessible
+                accessibilityRole="button"
+                accessibilityLabel="Delete property"
               >
-                <MaterialIcons name="delete" size={16} color={colors.error} />
+                <MaterialIcons name="delete-outline" size={20} color={colors.error} />
                 <Text style={[styles.menuItemText, { color: colors.error }]}>Delete</Text>
               </Pressable>
             </View>
-          </Pressable>
+          </>
         )}
-      </Animated.View>
+      </View>
 
       {/* Delete Confirmation Dialog */}
       <Portal>
         <Dialog
           visible={confirmDelete}
           onDismiss={() => setConfirmDelete(false)}
-          style={{ backgroundColor: colors.cardBackground, borderRadius: radius.lg }}
+          style={{ 
+            backgroundColor: colors.cardBackground,
+            borderRadius: radius.lg,
+          }}
         >
-          <Dialog.Title style={{ color: colors.textPrimary, fontSize: 18 }}>Delete Property?</Dialog.Title>
+          <Dialog.Title 
+            style={{ 
+              color: colors.textPrimary,
+              fontWeight: "600",
+            }}
+          >
+            Delete Property
+          </Dialog.Title>
           <Dialog.Content>
-            <Text style={{ color: colors.textSecondary, lineHeight: 20, fontSize: 14 }}>
+            <Text style={{ 
+              color: colors.textSecondary,
+              fontSize: 14,
+              lineHeight: 20,
+            }}>
               Are you sure you want to delete "{data.propertyName}"? This action cannot be undone.
             </Text>
           </Dialog.Content>
           <Dialog.Actions>
-            <Button onPress={() => setConfirmDelete(false)} textColor={colors.textMuted}>
+            <Button 
+              onPress={() => setConfirmDelete(false)} 
+              textColor={colors.textMuted}
+              accessibilityRole="button"
+              accessibilityLabel="Cancel deletion"
+            >
               Cancel
             </Button>
-            <Button onPress={handleConfirmDelete} textColor={colors.error}>
+            <Button 
+              onPress={handleDeleteConfirm} 
+              textColor={colors.error}
+              accessibilityRole="button"
+              accessibilityLabel="Confirm deletion"
+            >
               Delete
             </Button>
           </Dialog.Actions>

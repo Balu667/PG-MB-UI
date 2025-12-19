@@ -9,15 +9,14 @@ import {
   useWindowDimensions,
   Pressable,
   RefreshControl,
-  AccessibilityInfo,
   Modal,
-  Linking,
-  FlatList,
   Platform,
+  StatusBar,
+  I18nManager,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-import { MaterialIcons, Ionicons } from "@expo/vector-icons";
+import { MaterialIcons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 
@@ -94,7 +93,7 @@ const getTenantStatusLabel = (status: number): { label: string; color: string } 
       return { label: "Short Term", color: "#F59E0B" };
     default:
       return { label: "Unknown", color: "#6C757D" };
-  }
+}
 };
 
 /** Facility label mapping */
@@ -556,18 +555,18 @@ export default function PGLayout({
           opacity: 0.5,
         },
 
-        /** Room Modal - Clean Modern Design */
+        /** Room Modal - Premium Design with Android Navigation Fix */
         modalOverlay: {
           flex: 1,
-          backgroundColor: hexToRgba("#000000", 0.5),
+          backgroundColor: hexToRgba("#000000", 0.55),
           justifyContent: "flex-end",
         },
         modalSheet: {
           backgroundColor: colors.cardBackground,
           borderTopLeftRadius: 24,
           borderTopRightRadius: 24,
-          maxHeight: "85%",
-          minHeight: 500,
+          maxHeight: "92%",
+          minHeight: 600,
           display: "flex",
           flexDirection: "column",
           ...Platform.select({
@@ -577,9 +576,7 @@ export default function PGLayout({
               shadowOpacity: 0.15,
               shadowRadius: 16,
             },
-            android: {
-              elevation: 16,
-            },
+            android: { elevation: 24 },
           }),
         },
         modalBody: {
@@ -589,293 +586,304 @@ export default function PGLayout({
         },
         modalHandle: {
           alignItems: "center",
-          paddingTop: 10,
+          paddingTop: 14,
           paddingBottom: 6,
         },
         modalHandleBar: {
           width: 40,
-          height: 4,
-          borderRadius: 2,
-          backgroundColor: hexToRgba(colors.textMuted, 0.3),
+          height: 5,
+          borderRadius: 3,
+          backgroundColor: hexToRgba(colors.textMuted, 0.25),
         },
         modalHeader: {
-          paddingHorizontal: 16,
-          paddingTop: 4,
-          paddingBottom: 12,
+          paddingHorizontal: spacing.md + 4,
+          paddingTop: 6,
+          paddingBottom: spacing.md + 4,
           borderBottomWidth: 1,
-          borderBottomColor: hexToRgba(colors.textSecondary, 0.08),
+          borderBottomColor: hexToRgba(colors.borderColor, 0.4),
+          backgroundColor: hexToRgba(colors.accent, 0.03),
         },
         modalHeaderTop: {
-          flexDirection: "row",
-          alignItems: "center",
+          flexDirection: I18nManager.isRTL ? "row-reverse" : "row",
+          alignItems: "flex-start",
           justifyContent: "space-between",
         },
         modalTitleWrap: {
-          flexDirection: "row",
+          flexDirection: I18nManager.isRTL ? "row-reverse" : "row",
           alignItems: "center",
-          gap: 10,
+          gap: 14,
           flex: 1,
         },
         modalRoomIcon: {
-          width: 44,
-          height: 44,
-          borderRadius: 12,
-          backgroundColor: hexToRgba(colors.accent, 0.1),
+          width: 52,
+          height: 52,
+          borderRadius: 14,
+          backgroundColor: hexToRgba(colors.accent, 0.12),
           alignItems: "center",
           justifyContent: "center",
+          borderWidth: 1,
+          borderColor: hexToRgba(colors.accent, 0.2),
         },
         modalTitle: {
-          fontSize: 18,
+          fontSize: 21,
           fontWeight: "700",
           color: colors.textPrimary,
-          letterSpacing: -0.2,
+          letterSpacing: -0.5,
         },
         modalSubtitle: {
-          fontSize: 12,
+          fontSize: 13,
           fontWeight: "500",
           color: colors.textSecondary,
-          marginTop: 1,
+          marginTop: 3,
         },
         modalCloseBtn: {
-          width: 36,
-          height: 36,
-          borderRadius: 10,
+          width: 38,
+          height: 38,
+          borderRadius: 19,
           backgroundColor: hexToRgba(colors.textMuted, 0.08),
           alignItems: "center",
           justifyContent: "center",
+          minWidth: 44,
+          minHeight: 44,
         },
         modalQuickStats: {
-          flexDirection: "row",
-          marginTop: 12,
-          gap: 6,
+          flexDirection: I18nManager.isRTL ? "row-reverse" : "row",
+          marginTop: spacing.md + 2,
+          gap: 5,
         },
         quickStatItem: {
           flex: 1,
           backgroundColor: colors.surface,
-          borderRadius: 10,
-          padding: 10,
+          borderRadius: 12,
+          paddingVertical: 14,
+          paddingHorizontal: 10,
           alignItems: "center",
-          borderWidth: 1,
-          borderColor: hexToRgba(colors.textSecondary, 0.06),
+          borderWidth: 1.5,
+          borderColor: hexToRgba(colors.borderColor, 0.6),
         },
         quickStatValue: {
-          fontSize: 16,
+          fontSize: 18,
           fontWeight: "700",
-          letterSpacing: -0.2,
+          color: colors.textPrimary,
+          letterSpacing: -0.4,
         },
         quickStatLabel: {
-          fontSize: 9,
+          fontSize: 10,
           fontWeight: "600",
-          color: colors.textSecondary,
+          color: colors.textMuted,
           textTransform: "uppercase",
-          letterSpacing: 0.2,
-          marginTop: 2,
+          letterSpacing: 0.4,
+          marginTop: 5,
         },
         modalContent: {
-          paddingHorizontal: 16,
-          paddingTop: 12,
-          paddingBottom: 80,
+          paddingHorizontal: spacing.md + 4,
+          paddingTop: spacing.md + 4,
+          paddingBottom: 120,
         },
         modalScrollContent: {
           flexGrow: 1,
         },
         modalSection: {
-          marginBottom: 16,
+          marginBottom: spacing.md,
         },
         modalSectionHeader: {
-          flexDirection: "row",
+          flexDirection: I18nManager.isRTL ? "row-reverse" : "row",
           alignItems: "center",
-          gap: 6,
-          marginBottom: 10,
+          marginBottom: 14,
+          gap: 8,
         },
         modalSectionIcon: {
-          width: 24,
-          height: 24,
-          borderRadius: 6,
+          width: 28,
+          height: 28,
+          borderRadius: 7,
           backgroundColor: hexToRgba(colors.accent, 0.1),
           alignItems: "center",
           justifyContent: "center",
         },
         modalSectionTitle: {
           fontSize: 13,
-          fontWeight: "600",
-          color: colors.textPrimary,
-          letterSpacing: -0.1,
+          fontWeight: "700",
+          color: colors.textSecondary,
+          textTransform: "uppercase",
+          letterSpacing: 0.6,
         },
         modalInfoCard: {
           backgroundColor: colors.surface,
-          borderRadius: 10,
+          borderRadius: 14,
           overflow: "hidden",
           borderWidth: 1,
-          borderColor: hexToRgba(colors.textSecondary, 0.06),
+          borderColor: hexToRgba(colors.borderColor, 0.5),
         },
         modalInfoRow: {
-          flexDirection: "row",
+          flexDirection: I18nManager.isRTL ? "row-reverse" : "row",
           justifyContent: "space-between",
           alignItems: "center",
-          paddingVertical: 10,
-          paddingHorizontal: 12,
+          paddingVertical: 14,
+          paddingHorizontal: 16,
           borderBottomWidth: StyleSheet.hairlineWidth,
-          borderBottomColor: hexToRgba(colors.textSecondary, 0.08),
+          borderBottomColor: hexToRgba(colors.borderColor, 0.5),
         },
         modalInfoRowLast: {
           borderBottomWidth: 0,
         },
         modalInfoLabel: {
-          fontSize: 12,
+          fontSize: 14,
           fontWeight: "500",
           color: colors.textSecondary,
         },
         modalInfoValue: {
-          fontSize: 12,
+          fontSize: 15,
           fontWeight: "600",
           color: colors.textPrimary,
         },
         bedStatsGrid: {
-          flexDirection: "row",
+          flexDirection: I18nManager.isRTL ? "row-reverse" : "row",
           flexWrap: "wrap",
-          gap: 6,
+          gap: 5,
         },
         bedStatCard: {
-          flex: 1,
-          minWidth: "30%",
+          flexBasis: "31%",
+          flexGrow: 1,
           backgroundColor: colors.surface,
-          borderRadius: 10,
-          padding: 10,
+          borderRadius: 12,
+          paddingVertical: 8,
+          paddingHorizontal: 5,
           alignItems: "center",
-          borderWidth: 1,
-          borderColor: hexToRgba(colors.textSecondary, 0.06),
+          borderWidth: 1.5,
+          borderColor: hexToRgba(colors.borderColor, 0.5),
+          minWidth: 80,
         },
         bedStatIcon: {
-          marginBottom: 4,
+          marginBottom: 8,
         },
         bedStatValue: {
-          fontSize: 16,
+          fontSize: 22,
           fontWeight: "700",
           color: colors.textPrimary,
+          letterSpacing: -0.4,
         },
         bedStatLabel: {
-          fontSize: 9,
+          fontSize: 10,
           fontWeight: "600",
-          color: colors.textSecondary,
+          color: colors.textMuted,
+          marginTop: 5,
           textTransform: "uppercase",
-          marginTop: 2,
+          letterSpacing: 0.3,
         },
         facilitiesWrap: {
-          flexDirection: "row",
+          flexDirection: I18nManager.isRTL ? "row-reverse" : "row",
           flexWrap: "wrap",
-          gap: 6,
+          gap: 10,
         },
         facilityChip: {
-          flexDirection: "row",
+          flexDirection: I18nManager.isRTL ? "row-reverse" : "row",
           alignItems: "center",
-          gap: 4,
-          paddingHorizontal: 10,
-          paddingVertical: 6,
-          backgroundColor: hexToRgba(colors.accent, 0.08),
-          borderRadius: 8,
+          gap: 7,
+          paddingHorizontal: 14,
+          paddingVertical: 10,
+          backgroundColor: colors.surface,
+          borderRadius: 10,
+          borderWidth: 1,
+          borderColor: hexToRgba(colors.borderColor, 0.5),
+          minHeight: 44,
         },
         facilityText: {
-          fontSize: 11,
-          fontWeight: "600",
-          color: colors.accent,
+          fontSize: 13,
+          fontWeight: "500",
+          color: colors.textSecondary,
         },
         tenantCard: {
           backgroundColor: colors.surface,
-          borderRadius: 10,
-          padding: 12,
-          marginBottom: 8,
-          borderWidth: 1,
-          borderColor: hexToRgba(colors.textSecondary, 0.06),
+          borderRadius: 14,
+          padding: 16,
+          marginBottom: 12,
+          borderWidth: 1.5,
+          borderColor: hexToRgba(colors.borderColor, 0.5),
         },
         tenantRow: {
-          flexDirection: "row",
+          flexDirection: I18nManager.isRTL ? "row-reverse" : "row",
           alignItems: "center",
         },
         tenantAvatar: {
-          width: 36,
-          height: 36,
-          borderRadius: 10,
+          width: 44,
+          height: 44,
+          borderRadius: 22,
           backgroundColor: hexToRgba(colors.accent, 0.1),
           alignItems: "center",
           justifyContent: "center",
-          marginRight: 10,
+          marginRight: I18nManager.isRTL ? 0 : 14,
+          marginLeft: I18nManager.isRTL ? 14 : 0,
+          borderWidth: 1,
+          borderColor: hexToRgba(colors.accent, 0.15),
         },
         tenantInfo: {
           flex: 1,
         },
         tenantName: {
-          fontSize: 13,
+          fontSize: 16,
           fontWeight: "600",
           color: colors.textPrimary,
+          letterSpacing: -0.3,
+          textAlign: I18nManager.isRTL ? "right" : "left",
         },
         tenantPhone: {
-          fontSize: 11,
+          fontSize: 13,
           color: colors.textSecondary,
-          marginTop: 1,
+          marginTop: 3,
+          textAlign: I18nManager.isRTL ? "right" : "left",
         },
         tenantMeta: {
-          flexDirection: "row",
+          flexDirection: I18nManager.isRTL ? "row-reverse" : "row",
           alignItems: "center",
-          gap: 6,
-          marginTop: 3,
+          gap: 10,
+          marginTop: 8,
         },
         tenantBed: {
-          fontSize: 10,
-          fontWeight: "600",
+          fontSize: 11,
+          fontWeight: "700",
           color: colors.textMuted,
           backgroundColor: hexToRgba(colors.textMuted, 0.1),
-          paddingHorizontal: 6,
-          paddingVertical: 2,
-          borderRadius: 4,
+          paddingHorizontal: 10,
+          paddingVertical: 5,
+          borderRadius: 6,
         },
         statusBadge: {
-          paddingHorizontal: 8,
-          paddingVertical: 3,
+          paddingHorizontal: 12,
+          paddingVertical: 5,
           borderRadius: 6,
         },
         statusText: {
-          fontSize: 10,
-          fontWeight: "600",
+          fontSize: 11,
+          fontWeight: "700",
         },
         modalFooter: {
-          flexDirection: "row",
-          gap: 8,
-          paddingHorizontal: 16,
-          paddingTop: 12,
-          paddingBottom: Math.max(insets.bottom + 12, 20),
+          flexDirection: I18nManager.isRTL ? "row-reverse" : "row",
+          gap: 5,
+          paddingHorizontal: spacing.md + 4,
+          paddingTop: spacing.md,
+          paddingBottom: Math.max(insets.bottom + spacing.md, 28),
           borderTopWidth: 1,
-          borderTopColor: hexToRgba(colors.textSecondary, 0.08),
+          borderTopColor: hexToRgba(colors.borderColor, 0.4),
           backgroundColor: colors.cardBackground,
           flexShrink: 0,
         },
         modalBtn: {
           flex: 1,
-          flexDirection: "row",
+          flexDirection: I18nManager.isRTL ? "row-reverse" : "row",
           alignItems: "center",
           justifyContent: "center",
-          gap: 4,
-          paddingVertical: 12,
-          borderRadius: 10,
+          gap: 5,
+          paddingVertical: 15,
+          borderRadius: 12,
+          minHeight: 50,
         },
         modalBtnPrimary: {
           backgroundColor: colors.accent,
-          ...Platform.select({
-            ios: {
-              shadowColor: colors.accent,
-              shadowOffset: { width: 0, height: 2 },
-              shadowOpacity: 0.2,
-              shadowRadius: 4,
-            },
-            android: {
-              elevation: 2,
-            },
-          }),
         },
         modalBtnSecondary: {
           backgroundColor: colors.surface,
-          borderWidth: 1,
-          borderColor: hexToRgba(colors.textSecondary, 0.1),
+          borderWidth: 1.5,
+          borderColor: hexToRgba(colors.borderColor, 0.8),
         },
         modalBtnText: {
           fontSize: 12,
@@ -888,14 +896,14 @@ export default function PGLayout({
           color: colors.textPrimary,
         },
         noTenantsText: {
-          fontSize: 12,
+          fontSize: 13,
           color: colors.textMuted,
           textAlign: "center",
-          paddingVertical: 24,
+          paddingVertical: 28,
           backgroundColor: colors.surface,
           borderRadius: 14,
           borderWidth: 1,
-          borderColor: hexToRgba(colors.textSecondary, 0.06),
+          borderColor: hexToRgba(colors.textSecondary, 0.08),
         },
       }),
     [colors, spacing, radius, width, insets, bedSize]
@@ -904,31 +912,31 @@ export default function PGLayout({
   /** Legend component */
   const Legend = useCallback(
     () => (
-      <View style={s.legend} accessible accessibilityRole="list">
-        {[
-          { label: "Vacant", color: BED_COLOR.vacant },
-          { label: "Filled", color: BED_COLOR.filled },
+      <View style={s.legend} accessible={false}>
+      {[
+        { label: "Vacant", color: BED_COLOR.vacant },
+        { label: "Filled", color: BED_COLOR.filled },
           { label: "Notice", color: BED_COLOR.notice },
           { label: "Advance", color: BED_COLOR.advance },
           { label: "Short Term", color: BED_COLOR.shortTerm },
-        ].map((x) => (
-          <View
-            key={x.label}
-            style={s.chip}
-            accessible
-            accessibilityRole="text"
+      ].map((x) => (
+        <View
+          key={x.label}
+          style={s.chip}
+          accessible
+          accessibilityRole="text"
             accessibilityLabel={`${x.label} bed indicator`}
-          >
+        >
             <MaterialCommunityIcons
               name="bed"
               size={14}
               color={x.color}
               style={s.chipIcon}
             />
-            <Text style={s.chipTxt}>{x.label}</Text>
-          </View>
-        ))}
-      </View>
+          <Text style={s.chipTxt}>{x.label}</Text>
+        </View>
+      ))}
+    </View>
     ),
     [s, BED_COLOR]
   );
@@ -1031,7 +1039,7 @@ export default function PGLayout({
     ({ room }: { room: RoomInfo }) => {
       const stats = analyzeRoom(room?.beds);
 
-      return (
+    return (
         <View style={s.roomItem}>
           {/* Room Header */}
           <View style={s.roomHeader}>
@@ -1061,8 +1069,8 @@ export default function PGLayout({
                     />
                     <Text style={[s.roomStatText, { color: BED_COLOR.vacant }]}>
                       {stats.vacant}
-                    </Text>
-                  </View>
+          </Text>
+        </View>
                 )}
                 {stats.filled > 0 && (
                   <View
@@ -1086,7 +1094,7 @@ export default function PGLayout({
               <Pressable
                 style={s.infoBtn}
                 onPress={() => handleRoomInfo(room?.roomNo)}
-                accessible
+            accessible
                 accessibilityRole="button"
                 accessibilityLabel={`View details for Room ${room?.roomNo}`}
               >
@@ -1142,27 +1150,27 @@ export default function PGLayout({
           <View style={s.sharingSectionHeader}>
             <View style={s.sharingSectionTitle}>
               <View style={s.sharingSectionIcon}>
-                <MaterialCommunityIcons
-                  name="account-group"
+                      <MaterialCommunityIcons
+                        name="account-group"
                   size={16}
-                  color={colors.accent}
+                        color={colors.accent}
                 />
               </View>
               <Text style={s.sharingSectionText}>
                 {num(group?.sharing)} Sharing
-              </Text>
-            </View>
+                    </Text>
+                      </View>
             <Text style={s.sharingSectionMeta}>
               {roomCount} Rooms • {totalBeds} Beds
             </Text>
-          </View>
+                    </View>
 
           {/* Rooms List */}
           <View style={s.roomsContainer}>
             {(group?.rooms ?? []).map((room) => (
               <RoomItem key={room?.roomNo} room={room} />
             ))}
-          </View>
+                  </View>
         </View>
       );
     },
@@ -1220,7 +1228,7 @@ export default function PGLayout({
     return map[facility] || "checkbox-marked-circle";
   }, []);
 
-  /** Room Info Modal - Premium Design */
+  /** Room Info Modal - Premium Design with Android Navigation Fix */
   const RoomInfoModal = useCallback(() => {
     if (!selectedRoom) return null;
 
@@ -1234,12 +1242,12 @@ export default function PGLayout({
       .sort((a, b) => (a.bedNumber || "").localeCompare(b.bedNumber || ""));
 
     const bedStats = [
-      { key: "total", label: "Total", value: selectedRoom.beds, color: colors.primary },
-      { key: "vacant", label: "Vacant", value: selectedRoom.vacantBeds, color: BED_COLOR.vacant },
-      { key: "filled", label: "Filled", value: selectedRoom.occupiedBeds, color: BED_COLOR.filled },
-      { key: "advance", label: "Advance", value: selectedRoom.advancedBookings, color: BED_COLOR.advance },
-      { key: "notice", label: "Notice", value: selectedRoom.underNoticeBeds, color: BED_COLOR.notice },
-      { key: "short", label: "Short", value: shortTermBeds, color: BED_COLOR.shortTerm },
+      { key: "total", label: "Total", value: selectedRoom.beds, color: colors.primary, icon: "bed" as const },
+      { key: "vacant", label: "Vacant", value: selectedRoom.vacantBeds, color: BED_COLOR.vacant, icon: "bed-empty" as const },
+      { key: "filled", label: "Filled", value: selectedRoom.occupiedBeds, color: BED_COLOR.filled, icon: "bed" as const },
+      { key: "advance", label: "Advance", value: selectedRoom.advancedBookings, color: BED_COLOR.advance, icon: "calendar-clock" as const },
+      { key: "notice", label: "Notice", value: selectedRoom.underNoticeBeds, color: BED_COLOR.notice, icon: "alert-circle-outline" as const },
+      { key: "short", label: "Short", value: shortTermBeds, color: BED_COLOR.shortTerm, icon: "clock-outline" as const },
     ];
 
     return (
@@ -1248,70 +1256,108 @@ export default function PGLayout({
         transparent
         animationType="slide"
         onRequestClose={() => setRoomModalVisible(false)}
+        statusBarTranslucent
       >
+        {/* Apply StatusBar styling for Android */}
+        <StatusBar
+          translucent
+          backgroundColor="transparent"
+          barStyle="light-content"
+        />
         <View style={s.modalOverlay}>
           {/* Background overlay - tap to dismiss */}
           <Pressable
             style={StyleSheet.absoluteFillObject}
             onPress={() => setRoomModalVisible(false)}
-            accessible={true}
+            accessible
             accessibilityRole="button"
-            accessibilityLabel="Close modal"
+            accessibilityLabel="Close room details modal"
+            accessibilityHint="Tap to close this modal"
           />
           
           {/* Modal Sheet - does not dismiss on tap */}
           <View style={s.modalSheet}>
-            {/* Handle */}
+            {/* Handle - draggable indicator */}
             <View style={s.modalHandle}>
-              <View style={s.modalHandleBar} />
+              <View 
+                style={s.modalHandleBar}
+                accessible
+                accessibilityLabel="Modal drag handle"
+              />
             </View>
 
-            {/* Header - Premium Design - Fixed at top */}
+            {/* Header - Enhanced Design */}
             <View style={s.modalHeader}>
               <View style={s.modalHeaderTop}>
                 <View style={s.modalTitleWrap}>
                   <View style={s.modalRoomIcon}>
-                    <MaterialCommunityIcons
-                      name="door"
-                      size={24}
+                    <MaterialCommunityIcons 
+                      name="door" 
+                      size={26} 
                       color={colors.accent}
+                      accessible
+                      accessibilityLabel="Room icon"
                     />
                   </View>
-                  <View>
-                    <Text style={s.modalTitle}>Room {selectedRoom.roomNo}</Text>
-                    <Text style={s.modalSubtitle}>
-                      {selectedRoom.beds} Sharing • Floor {num(selectedRoom.floor ?? 0)}
+                  <View style={{ flex: 1 }}>
+                    <Text 
+                      style={s.modalTitle}
+                      accessible
+                      accessibilityLabel={`Room ${selectedRoom.roomNo}`}
+                    >
+                      Room {selectedRoom.roomNo}
+                    </Text>
+                    <Text 
+                      style={s.modalSubtitle}
+                      accessible
+                      accessibilityLabel={`${selectedRoom.beds} sharing room on floor ${num(selectedRoom.floor ?? 0)}`}
+                    >
+                      {selectedRoom.beds}-Sharing · Floor {num(selectedRoom.floor ?? 0)}
                     </Text>
                   </View>
                 </View>
                 <Pressable
-                  style={({ pressed }) => [s.modalCloseBtn, pressed && { opacity: 0.7 }]}
+                  style={({ pressed }) => [s.modalCloseBtn, pressed && { opacity: 0.6 }]}
                   onPress={() => setRoomModalVisible(false)}
+                  accessible
                   accessibilityRole="button"
                   accessibilityLabel="Close modal"
-                  hitSlop={8}
+                  accessibilityHint="Tap to close room details"
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 >
-                  <MaterialIcons name="close" size={22} color={colors.textSecondary} />
+                  <MaterialIcons name="close" size={22} color={colors.textMuted} />
                 </Pressable>
               </View>
 
-              {/* Quick Stats */}
+              {/* Quick Stats - Enhanced Layout */}
               <View style={s.modalQuickStats}>
-                <View style={s.quickStatItem}>
-                  <Text style={[s.quickStatValue, { color: colors.accent }]}>
+                <View 
+                  style={s.quickStatItem}
+                  accessible
+                  accessibilityLabel={`Rent: ₹${selectedRoom.bedPrice.toLocaleString("en-IN")}`}
+                >
+                  <Text style={s.quickStatValue}>
                     ₹{selectedRoom.bedPrice.toLocaleString("en-IN")}
                   </Text>
-                  <Text style={s.quickStatLabel}>Rent/Bed</Text>
+                  <Text style={s.quickStatLabel}>Rent</Text>
                 </View>
-                <View style={s.quickStatItem}>
-                  <Text style={[s.quickStatValue, { color: colors.textPrimary }]}>
+                <View 
+                  style={s.quickStatItem}
+                  accessible
+                  accessibilityLabel={`Deposit: ₹${selectedRoom.securityDeposit.toLocaleString("en-IN")}`}
+                >
+                  <Text style={s.quickStatValue}>
                     ₹{selectedRoom.securityDeposit.toLocaleString("en-IN")}
                   </Text>
                   <Text style={s.quickStatLabel}>Deposit</Text>
                 </View>
-                <View style={s.quickStatItem}>
+                <View 
+                  style={s.quickStatItem}
+                  accessible
+                  accessibilityLabel={`${selectedRoom.vacantBeds} beds available`}
+                >
                   <Text style={[s.quickStatValue, { color: BED_COLOR.vacant }]}>
-                    {selectedRoom.vacantBeds}/{selectedRoom.beds}
+                    {selectedRoom.vacantBeds}
                   </Text>
                   <Text style={s.quickStatLabel}>Available</Text>
                 </View>
@@ -1328,56 +1374,70 @@ export default function PGLayout({
               keyboardShouldPersistTaps="handled"
               overScrollMode="always"
             >
-              {/* Bed Statistics - Visual Grid */}
+              {/* Bed Statistics - Enhanced Grid */}
               <View style={s.modalSection}>
                 <View style={s.modalSectionHeader}>
                   <View style={s.modalSectionIcon}>
-                    <MaterialCommunityIcons name="bed" size={14} color={colors.accent} />
+                    <MaterialCommunityIcons 
+                      name="bed-outline" 
+                      size={16} 
+                      color={colors.accent} 
+                    />
                   </View>
-                  <Text style={s.modalSectionTitle}>Bed Status Overview</Text>
+                  <Text style={s.modalSectionTitle}>Bed Status</Text>
                 </View>
-                <View style={s.bedStatsGrid}>
-                  {bedStats.map((stat) => {
-                    const bedIconName = 
-                      stat.key === "vacant" ? "bed-empty" :
-                      stat.key === "filled" ? "bed" :
-                      stat.key === "advance" ? "bed-outline" :
-                      stat.key === "notice" ? "bed-clock" :
-                      stat.key === "short" ? "bed-clock" :
-                      "bed";
-                    return (
-                      <View key={stat.key} style={s.bedStatCard}>
-                        <View style={s.bedStatIcon}>
-                          <MaterialCommunityIcons
-                            name={bedIconName as keyof typeof MaterialCommunityIcons.glyphMap}
-                            size={18}
-                            color={stat.color}
-                          />
-                        </View>
-                        <Text style={s.bedStatValue}>{stat.value}</Text>
-                        <Text style={s.bedStatLabel}>{stat.label}</Text>
-                      </View>
-                    );
-                  })}
+                <View 
+                  style={s.bedStatsGrid}
+                  accessible={false}
+                >
+                  {bedStats.map((stat) => (
+                    <View 
+                      key={stat.key} 
+                      style={s.bedStatCard}
+                      accessible
+                      accessibilityLabel={`${stat.label}: ${stat.value}`}
+                    >
+                      <MaterialCommunityIcons 
+                        name={stat.icon} 
+                        size={18} 
+                        color={stat.color} 
+                        style={s.bedStatIcon}
+                      />
+                      <Text style={[s.bedStatValue, { color: stat.color }]}>{stat.value}</Text>
+                      <Text style={s.bedStatLabel}>{stat.label}</Text>
+                    </View>
+                  ))}
                 </View>
               </View>
 
-              {/* Facilities */}
+              {/* Facilities - Enhanced Chips */}
               {selectedRoom.facilities && selectedRoom.facilities.length > 0 && (
                 <View style={s.modalSection}>
                   <View style={s.modalSectionHeader}>
                     <View style={s.modalSectionIcon}>
-                      <MaterialCommunityIcons name="star" size={14} color={colors.accent} />
+                      <MaterialCommunityIcons 
+                        name="checkbox-marked-circle-outline" 
+                        size={16} 
+                        color={colors.accent} 
+                      />
                     </View>
                     <Text style={s.modalSectionTitle}>Amenities</Text>
                   </View>
-                  <View style={s.facilitiesWrap}>
+                  <View 
+                    style={s.facilitiesWrap}
+                    accessible={false}
+                  >
                     {selectedRoom.facilities.map((f) => (
-                      <View key={f} style={s.facilityChip}>
+                      <View 
+                        key={f} 
+                        style={s.facilityChip}
+                        accessible
+                        accessibilityLabel={getFacilityLabel(f)}
+                      >
                         <MaterialCommunityIcons
                           name={getFacilityIcon(f) as keyof typeof MaterialCommunityIcons.glyphMap}
-                          size={14}
-                          color={colors.accent}
+                          size={16}
+                          color={colors.textSecondary}
                         />
                         <Text style={s.facilityText}>{getFacilityLabel(f)}</Text>
                       </View>
@@ -1386,30 +1446,51 @@ export default function PGLayout({
                 </View>
               )}
 
-              {/* Tenants */}
+              {/* Tenants - Enhanced Cards */}
               <View style={s.modalSection}>
                 <View style={s.modalSectionHeader}>
                   <View style={s.modalSectionIcon}>
-                    <MaterialCommunityIcons name="account-group" size={14} color={colors.accent} />
+                    <MaterialCommunityIcons 
+                      name="account-group-outline" 
+                      size={16} 
+                      color={colors.accent} 
+                    />
                   </View>
                   <Text style={s.modalSectionTitle}>
                     Tenants ({activeTenants.length})
                   </Text>
                 </View>
                 {activeTenants.length === 0 ? (
-                  <Text style={s.noTenantsText}>
-                    No tenants currently in this room
-                  </Text>
+                  <View style={{ alignItems: "center" }}>
+                    <MaterialCommunityIcons 
+                      name="account-off-outline" 
+                      size={40} 
+                      color={colors.textMuted}
+                      style={{ marginBottom: 8, opacity: 0.5 }}
+                    />
+                    <Text 
+                      style={s.noTenantsText}
+                      accessible
+                      accessibilityLabel="No tenants currently in this room"
+                    >
+                      No tenants currently in this room
+                    </Text>
+                  </View>
                 ) : (
                   activeTenants.map((tenant, index) => {
                     const statusInfo = getTenantStatusLabel(tenant.tenantStatus);
                     return (
-                      <View key={`${tenant._id}-${index}`} style={s.tenantCard}>
+                      <View 
+                        key={`${tenant._id}-${index}`} 
+                        style={s.tenantCard}
+                        accessible
+                        accessibilityLabel={`${tenant.tenantName || "Unknown Tenant"}, Bed ${tenant.bedNumber}, ${statusInfo.label}`}
+                      >
                         <View style={s.tenantRow}>
                           <View style={s.tenantAvatar}>
                             <MaterialCommunityIcons
                               name="account"
-                              size={22}
+                              size={24}
                               color={colors.accent}
                             />
                           </View>
@@ -1425,7 +1506,7 @@ export default function PGLayout({
                               <View
                                 style={[
                                   s.statusBadge,
-                                  { backgroundColor: hexToRgba(statusInfo.color, 0.12) },
+                                  { backgroundColor: hexToRgba(statusInfo.color, 0.15) },
                                 ]}
                               >
                                 <Text style={[s.statusText, { color: statusInfo.color }]}>
@@ -1441,64 +1522,68 @@ export default function PGLayout({
                 )}
               </View>
               
-              {/* Bottom spacer for scroll content - extra space to ensure visibility */}
-              <View style={{ height: 40 }} />
+              {/* Bottom spacer for scroll content */}
+              <View style={{ height: 50 }} />
             </ScrollView>
 
-            {/* Footer Actions - Fixed at bottom */}
+            {/* Footer Actions - Enhanced Buttons */}
             <View style={s.modalFooter}>
               <Pressable
                 style={({ pressed }) => [
                   s.modalBtn, 
                   s.modalBtnSecondary,
-                  pressed && { opacity: 0.8 }
+                  pressed && { opacity: 0.7, transform: [{ scale: 0.98 }] }
                 ]}
                 onPress={handleShortStayBook}
+                accessible
                 accessibilityRole="button"
-                accessibilityLabel="Short Stay Book"
+                accessibilityLabel="Short Stay booking"
+                accessibilityHint="Tap to create a short stay booking for this room"
               >
-                <MaterialCommunityIcons
-                  name="clock-outline"
-                  size={16}
-                  color={colors.textPrimary}
+                <MaterialCommunityIcons 
+                  name="clock-outline" 
+                  size={18} 
+                  color={colors.textPrimary} 
                 />
-                <Text style={[s.modalBtnText, s.modalBtnTextSecondary]}>
-                  Short Stay
-                </Text>
+                <Text style={[s.modalBtnText, s.modalBtnTextSecondary]}>Short Stay</Text>
               </Pressable>
               <Pressable
                 style={({ pressed }) => [
                   s.modalBtn, 
                   s.modalBtnSecondary,
-                  pressed && { opacity: 0.8 }
+                  pressed && { opacity: 0.7, transform: [{ scale: 0.98 }] }
                 ]}
                 onPress={handleAdvanceBook}
+                accessible
                 accessibilityRole="button"
-                accessibilityLabel="Advance Book"
+                accessibilityLabel="Advance booking"
+                accessibilityHint="Tap to create an advance booking for this room"
               >
-                <MaterialCommunityIcons
-                  name="calendar-clock"
-                  size={16}
-                  color={colors.textPrimary}
+                <MaterialCommunityIcons 
+                  name="calendar-clock" 
+                  size={18} 
+                  color={colors.textPrimary} 
                 />
-                <Text style={[s.modalBtnText, s.modalBtnTextSecondary]}>
-                  Advance
-                </Text>
+                <Text style={[s.modalBtnText, s.modalBtnTextSecondary]}>Adv Book</Text>
               </Pressable>
               <Pressable
                 style={({ pressed }) => [
                   s.modalBtn, 
                   s.modalBtnPrimary,
-                  pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] }
+                  pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] }
                 ]}
                 onPress={handleAddTenantFromModal}
+                accessible
                 accessibilityRole="button"
-                accessibilityLabel="Add Tenant"
+                accessibilityLabel="Add tenant"
+                accessibilityHint="Tap to add a new tenant to this room"
               >
-                <MaterialIcons name="person-add" size={16} color="#FFFFFF" />
-                <Text style={[s.modalBtnText, s.modalBtnTextPrimary]}>
-                  Add Tenant
-                </Text>
+                <MaterialCommunityIcons 
+                  name="account-plus" 
+                  size={18} 
+                  color="#FFFFFF" 
+                />
+                <Text style={[s.modalBtnText, s.modalBtnTextPrimary]}>Add Tenant</Text>
               </Pressable>
             </View>
           </View>
@@ -1539,21 +1624,21 @@ export default function PGLayout({
         </View>
       )}
 
-      <ScrollView
+    <ScrollView
         ref={contentScrollRef}
-        showsVerticalScrollIndicator={false}
+      showsVerticalScrollIndicator={false}
         onScroll={handleScroll}
         scrollEventThrottle={16}
-        refreshControl={
+      refreshControl={
           <RefreshControl
             refreshing={!!refreshing}
             onRefresh={onRefresh}
             tintColor={colors.accent}
           />
-        }
+      }
         keyboardShouldPersistTaps="handled"
         nestedScrollEnabled
-      >
+    >
         {/* 0: Stats Grid */}
         <View style={s.statsSection}>
           <StatsGrid metrics={metrics ?? []} cardHeight={70} minVisible={3} />
@@ -1561,8 +1646,8 @@ export default function PGLayout({
 
         {/* 1: Legend */}
         <View style={s.legendSection}>
-          <Legend />
-        </View>
+        <Legend />
+      </View>
 
         {/* 2: Search Bar */}
         <View 
@@ -1602,7 +1687,7 @@ export default function PGLayout({
             ))
           )}
         </View>
-      </ScrollView>
+    </ScrollView>
 
       {/* Filter Sheet */}
       <FilterSheet
