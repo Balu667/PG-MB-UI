@@ -1,6 +1,6 @@
 // app/protected/profile.tsx
 // Premium Profile Screen with user info, settings, and logout
-import React, { useMemo, useCallback } from "react";
+import React, { useMemo, useCallback, useState } from "react";
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
   Platform,
   I18nManager,
   StatusBar,
+  Modal,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -37,6 +38,8 @@ interface MenuItemProps {
   danger?: boolean;
   badge?: string;
 }
+
+type ThemePreference = "auto" | "light" | "dark";
 
 /* ─────────────────────────────────────────────────────────────────────────────
    MENU ITEM COMPONENT
@@ -155,14 +158,241 @@ const MenuItem = React.memo<MenuItemProps>(
 MenuItem.displayName = "MenuItem";
 
 /* ─────────────────────────────────────────────────────────────────────────────
+   APPEARANCE MODAL COMPONENT
+───────────────────────────────────────────────────────────────────────────── */
+
+interface AppearanceModalProps {
+  visible: boolean;
+  onClose: () => void;
+  currentPreference: ThemePreference;
+  onSelect: (preference: ThemePreference) => void;
+}
+
+const AppearanceModal: React.FC<AppearanceModalProps> = ({
+  visible,
+  onClose,
+  currentPreference,
+  onSelect,
+}) => {
+  const { colors, spacing, radius } = useTheme();
+  const insets = useSafeAreaInsets();
+
+  const options: { key: ThemePreference; label: string; icon: string; description: string }[] = [
+    {
+      key: "light",
+      label: "Light",
+      icon: "sunny-outline",
+      description: "Always use light theme",
+    },
+    {
+      key: "dark",
+      label: "Dark",
+      icon: "moon-outline",
+      description: "Always use dark theme",
+    },
+    {
+      key: "auto",
+      label: "Auto",
+      icon: "phone-portrait-outline",
+      description: "Follow system settings",
+    },
+  ];
+
+  const modalStyles = useMemo(
+    () =>
+      StyleSheet.create({
+        overlay: {
+          flex: 1,
+          backgroundColor: hexToRgba("#000000", 0.5),
+          justifyContent: "flex-end",
+        },
+        sheet: {
+          backgroundColor: colors.cardBackground,
+          borderTopLeftRadius: radius.xl + 4,
+          borderTopRightRadius: radius.xl + 4,
+          paddingBottom: Math.max(insets.bottom, spacing.lg),
+          maxHeight: "70%",
+        },
+        handle: {
+          alignItems: "center",
+          paddingTop: spacing.sm,
+          paddingBottom: spacing.xs,
+        },
+        handleBar: {
+          width: 36,
+          height: 4,
+          borderRadius: 2,
+          backgroundColor: hexToRgba(colors.textMuted, 0.3),
+        },
+        header: {
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          paddingHorizontal: spacing.lg,
+          paddingVertical: spacing.md,
+          borderBottomWidth: 1,
+          borderBottomColor: hexToRgba(colors.textSecondary, 0.1),
+        },
+        headerTitle: {
+          fontSize: 18,
+          fontWeight: "700",
+          color: colors.textPrimary,
+        },
+        closeBtn: {
+          width: 36,
+          height: 36,
+          borderRadius: 18,
+          backgroundColor: hexToRgba(colors.textMuted, 0.1),
+          alignItems: "center",
+          justifyContent: "center",
+        },
+        content: {
+          padding: spacing.md,
+        },
+        option: {
+          flexDirection: "row",
+          alignItems: "center",
+          padding: spacing.md,
+          borderRadius: radius.lg,
+          marginBottom: spacing.sm,
+          backgroundColor: colors.surface,
+          borderWidth: 2,
+          borderColor: "transparent",
+        },
+        optionActive: {
+          borderColor: colors.accent,
+          backgroundColor: hexToRgba(colors.accent, 0.08),
+        },
+        optionIcon: {
+          width: 44,
+          height: 44,
+          borderRadius: 12,
+          alignItems: "center",
+          justifyContent: "center",
+          marginRight: spacing.md,
+        },
+        optionText: {
+          flex: 1,
+        },
+        optionLabel: {
+          fontSize: 16,
+          fontWeight: "600",
+          color: colors.textPrimary,
+          marginBottom: 2,
+        },
+        optionDesc: {
+          fontSize: 13,
+          color: colors.textSecondary,
+        },
+        checkIcon: {
+          width: 28,
+          height: 28,
+          borderRadius: 14,
+          backgroundColor: colors.accent,
+          alignItems: "center",
+          justifyContent: "center",
+        },
+      }),
+    [colors, spacing, radius, insets.bottom]
+  );
+
+  const handleSelect = useCallback(
+    (key: ThemePreference) => {
+      Haptics.selectionAsync();
+      onSelect(key);
+      onClose();
+    },
+    [onSelect, onClose]
+  );
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+      statusBarTranslucent
+    >
+      <Pressable style={modalStyles.overlay} onPress={onClose}>
+        <Pressable style={modalStyles.sheet} onPress={(e) => e.stopPropagation()}>
+          {/* Handle */}
+          <View style={modalStyles.handle}>
+            <View style={modalStyles.handleBar} />
+          </View>
+
+          {/* Header */}
+          <View style={modalStyles.header}>
+            <Text style={modalStyles.headerTitle}>Appearance</Text>
+            <Pressable
+              style={modalStyles.closeBtn}
+              onPress={onClose}
+              accessibilityRole="button"
+              accessibilityLabel="Close"
+            >
+              <Ionicons name="close" size={20} color={colors.textPrimary} />
+            </Pressable>
+          </View>
+
+          {/* Options */}
+          <View style={modalStyles.content}>
+            {options.map((opt) => {
+              const isActive = currentPreference === opt.key;
+              return (
+                <Pressable
+                  key={opt.key}
+                  style={[modalStyles.option, isActive && modalStyles.optionActive]}
+                  onPress={() => handleSelect(opt.key)}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: isActive }}
+                  accessibilityLabel={`${opt.label}: ${opt.description}`}
+                >
+                  <View
+                    style={[
+                      modalStyles.optionIcon,
+                      {
+                        backgroundColor: isActive
+                          ? hexToRgba(colors.accent, 0.15)
+                          : hexToRgba(colors.textMuted, 0.1),
+                      },
+                    ]}
+                  >
+                    <Ionicons
+                      name={opt.icon as never}
+                      size={22}
+                      color={isActive ? colors.accent : colors.textSecondary}
+                    />
+                  </View>
+                  <View style={modalStyles.optionText}>
+                    <Text style={modalStyles.optionLabel}>{opt.label}</Text>
+                    <Text style={modalStyles.optionDesc}>{opt.description}</Text>
+                  </View>
+                  {isActive && (
+                    <View style={modalStyles.checkIcon}>
+                      <Ionicons name="checkmark" size={18} color="#FFFFFF" />
+                    </View>
+                  )}
+                </Pressable>
+              );
+            })}
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+};
+
+/* ─────────────────────────────────────────────────────────────────────────────
    MAIN COMPONENT
 ───────────────────────────────────────────────────────────────────────────── */
 
 export default function ProfileScreen() {
   const router = useRouter();
   const dispatch = useDispatch();
-  const { colors, spacing, radius, typography } = useTheme();
+  const { colors, spacing, radius, preference, setPreference } = useTheme();
   const insets = useSafeAreaInsets();
+
+  // Appearance modal state
+  const [appearanceModalVisible, setAppearanceModalVisible] = useState(false);
 
   // Redux profile data
   const profileData = useSelector(
@@ -199,6 +429,20 @@ export default function ProfileScreen() {
 
   const initials = getInitials(userName);
 
+  // Get current preference label for badge
+  const preferenceLabel = useMemo(() => {
+    switch (preference) {
+      case "auto":
+        return "Auto";
+      case "light":
+        return "Light";
+      case "dark":
+        return "Dark";
+      default:
+        return "Light";
+    }
+  }, [preference]);
+
   // Handlers
   const handleBack = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -209,6 +453,11 @@ export default function ProfileScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     router.push("/protected/settings");
   }, [router]);
+
+  const handleAppearance = useCallback(() => {
+    Haptics.selectionAsync();
+    setAppearanceModalVisible(true);
+  }, []);
 
   const handleLogout = useCallback(() => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
@@ -379,7 +628,10 @@ export default function ProfileScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}>
-      <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
+      <StatusBar
+        barStyle={preference === "dark" ? "light-content" : "dark-content"}
+        backgroundColor={colors.background}
+      />
 
       {/* Header */}
       <View style={styles.header}>
@@ -480,8 +732,8 @@ export default function ProfileScreen() {
             iconFamily="ionicons"
             title="Appearance"
             subtitle="Theme and display settings"
-            badge="Auto"
-            onPress={() => {}}
+            badge={preferenceLabel}
+            onPress={handleAppearance}
           />
         </View>
 
@@ -523,7 +775,14 @@ export default function ProfileScreen() {
         {/* Version */}
         <Text style={styles.versionText}>PGMS Mobile v1.0.0</Text>
       </ScrollView>
+
+      {/* Appearance Modal */}
+      <AppearanceModal
+        visible={appearanceModalVisible}
+        onClose={() => setAppearanceModalVisible(false)}
+        currentPreference={preference}
+        onSelect={setPreference}
+      />
     </SafeAreaView>
   );
 }
-

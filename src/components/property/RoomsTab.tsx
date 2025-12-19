@@ -54,7 +54,7 @@ const deriveStatus = (room: any): DerivedStatus => {
 };
 
 /** Floor label helpers: UI uses GF / 1F / 2F... while API sends numeric floors */
-const toFloorLabel = (floor?: number | string) => {
+const toFloorLabel = (floor?: number | string): string => {
   const f = num(floor, NaN);
   if (Number.isNaN(f)) return "";
   return f === 0 ? "GF" : `${f}F`;
@@ -117,6 +117,7 @@ type Props = {
     occupiedBeds: number;
     advanceBookingBeds: number;
     underNoticeBeds: number;
+    shortTermBeds?: number;
     roomsTotal: number;
   };
   refreshing: boolean;
@@ -169,6 +170,14 @@ export default function RoomsTab({ data, meta, refreshing, onRefresh, scrollRef,
         iconBg: "#DDD6FE",
         iconColor: "#7C3AED",
       },
+      {
+        key: "shortTerm",
+        label: "Short Term",
+        value: num(meta?.shortTermBeds),
+        icon: "bed",
+        iconBg: "#FEF3C7",
+        iconColor: "#F59E0B",
+      },
     ],
     [meta]
   );
@@ -217,9 +226,9 @@ export default function RoomsTab({ data, meta, refreshing, onRefresh, scrollRef,
         if (!sharingSet.has(sh)) return false;
       }
 
-      // 4) Floor (map numeric to GF/1F… and compare against selected values)
+      // 4) Floor (map numeric to GF/1F… and compare against selected values - string match)
       if (floorSet.size) {
-        const floorLabel = toFloorLabel(room?.floor);
+        const floorLabel: string = toFloorLabel(room?.floor);
         if (!floorSet.has(floorLabel)) return false;
       }
 
@@ -251,7 +260,7 @@ export default function RoomsTab({ data, meta, refreshing, onRefresh, scrollRef,
         scrollEventThrottle={16}
         ListHeaderComponent={
           <View>
-            <StatsGrid metrics={metrics} />
+            <StatsGrid metrics={metrics} minVisible={3} cardHeight={72} />
             <SearchBar
               placeholder="Search by room number"
               onSearch={setQuery}

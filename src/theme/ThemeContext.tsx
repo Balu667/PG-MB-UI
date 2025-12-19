@@ -1,26 +1,16 @@
-// // src/theme/ThemeContext.tsx
-// import React, { createContext, useContext } from "react";
-// import { Appearance } from "react-native";
-// import { lightTheme, darkTheme, AppTheme } from "./index";
-
-// const ThemeContext = createContext<AppTheme>(lightTheme);
-
-// export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
-//   const system = Appearance.getColorScheme(); // 'light' | 'dark' | null
-//   const theme = system === "dark" ? darkTheme : lightTheme;
-
-//   return <ThemeContext.Provider value={theme}>{children}</ThemeContext.Provider>;
-// };
-
-// export const useTheme = () => useContext(ThemeContext);
 // src/theme/ThemeContext.tsx
-import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { Appearance, ColorSchemeName, useColorScheme } from "react-native";
+import React, { createContext, useContext, useEffect, useMemo, useState, useCallback } from "react";
+import { Appearance, useColorScheme } from "react-native";
 import * as SystemUI from "expo-system-ui";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Provider as PaperProvider, MD3LightTheme, MD3DarkTheme } from "react-native-paper";
 import { lightTheme, darkTheme, type AppTheme } from "./index";
 
-type Preference = "system" | "light" | "dark";
+/** Preference key for AsyncStorage */
+const THEME_PREFERENCE_KEY = "@app_theme_preference";
+
+/** Theme preference types */
+type Preference = "auto" | "light" | "dark";
 
 type ThemeContextValue = {
   colors: AppTheme["colors"];
@@ -28,40 +18,74 @@ type ThemeContextValue = {
   radius: AppTheme["radius"];
   typography: AppTheme["typography"];
   button: AppTheme["button"];
-  // convenience
+  /** Current active scheme */
   scheme: "light" | "dark";
+  /** User's preference setting */
   preference: Preference;
+  /** Update theme preference */
   setPreference: (p: Preference) => void;
 };
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // current system scheme (updates automatically when user flips system appearance)
-  const systemScheme = useColorScheme(); // "light" | "dark" | null
+  // Current system scheme (updates automatically when user flips system appearance)
+  const systemScheme = useColorScheme();
 
-  // allow future manual override; default to following system
-  const [preference, setPreference] = useState<Preference>("system");
+  // Theme preference state - defaults to "light"
+  const [preference, setPreferenceState] = useState<Preference>("light");
+  const [isLoaded, setIsLoaded] = useState(false);
 
-  // pick active scheme
-  const scheme: "light" | "dark" = preference === "system" ? systemScheme ?? "light" : preference;
+  // Load saved preference on mount
+  useEffect(() => {
+    const loadPreference = async () => {
+      try {
+        const saved = await AsyncStorage.getItem(THEME_PREFERENCE_KEY);
+        if (saved && ["auto", "light", "dark"].includes(saved)) {
+          setPreferenceState(saved as Preference);
+        }
+        // If no saved preference, keep default "light"
+      } catch {
+        // Silently fail - use default
+      } finally {
+        setIsLoaded(true);
+      }
+    };
+    loadPreference();
+  }, []);
 
-  // pick tokens
+  // Persist preference when changed
+  const setPreference = useCallback(async (newPref: Preference) => {
+    setPreferenceState(newPref);
+    try {
+      await AsyncStorage.setItem(THEME_PREFERENCE_KEY, newPref);
+    } catch {
+      // Silently fail
+    }
+  }, []);
+
+  // Determine active scheme based on preference
+  const scheme: "light" | "dark" = useMemo(() => {
+    if (preference === "auto") {
+      return systemScheme ?? "light";
+    }
+    return preference;
+  }, [preference, systemScheme]);
+
+  // Pick tokens based on scheme
   const tokens: AppTheme = scheme === "dark" ? darkTheme : lightTheme;
 
-  // keep native system UI background in sync to avoid flashes on theme flip
+  // Keep native system UI background in sync to avoid flashes on theme flip
   useEffect(() => {
-    SystemUI.setBackgroundColorAsync(tokens.colors.background).catch(() => {});
-  }, [tokens.colors.background]);
+    if (isLoaded) {
+      SystemUI.setBackgroundColorAsync(tokens.colors.background).catch(() => {});
+    }
+  }, [tokens.colors.background, isLoaded]);
 
-  // (Optional) listen to Appearance directly as a backup on some OEM Android skins
+  // Listen to system Appearance changes for auto mode
   useEffect(() => {
     const sub = Appearance.addChangeListener((e) => {
-      // If following system, flipping device theme should re-render via useColorScheme,
-      // but this ensures we repaint immediately even on rare devices.
-      if (preference === "system") {
-        // no-op: useColorScheme already triggers render; this just forces a micro-tick
-        // by setting background again.
+      if (preference === "auto") {
         SystemUI.setBackgroundColorAsync(
           (e.colorScheme === "dark" ? darkTheme : lightTheme).colors.background
         ).catch(() => {});
@@ -70,7 +94,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return () => sub.remove();
   }, [preference]);
 
-  // bridge our tokens to react-native-paper so Paper components re-theme too
+  // Bridge our tokens to react-native-paper so Paper components re-theme too
   const paperTheme = useMemo(() => {
     const base = scheme === "dark" ? MD3DarkTheme : MD3LightTheme;
     return {
@@ -95,8 +119,13 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       preference,
       setPreference,
     }),
-    [tokens, scheme, preference]
+    [tokens, scheme, preference, setPreference]
   );
+
+  // Don't render until preference is loaded to prevent flash
+  if (!isLoaded) {
+    return null;
+  }
 
   return (
     <ThemeContext.Provider value={value}>

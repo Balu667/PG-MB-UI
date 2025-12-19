@@ -432,8 +432,8 @@ export default function AdvanceBookingTab({ data, refreshing, onRefresh, scrollR
         {metrics.length > 0 && (
           <StatsGrid
             metrics={metrics}
-            minVisible={width >= 900 ? 4 : width >= 740 ? 3 : 2}
-            cardHeight={88}
+            minVisible={3}
+            cardHeight={72}
           />
         )}
 

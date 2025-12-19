@@ -779,7 +779,7 @@ const ListHeader: React.FC<HeaderProps> = React.memo(
     return (
       <View style={styles.container}>
         {/* Stats Grid */}
-        <StatsGrid metrics={metrics} minVisible={2} />
+        <StatsGrid metrics={metrics} minVisible={3} cardHeight={72} />
 
         {/* Section Header */}
         <View style={styles.sectionHeader}>

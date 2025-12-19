@@ -113,7 +113,7 @@ const BED_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const MAX_AMOUNT_DIGITS = 9;
 
 type DueType = "Monthly" | "FirstMonth" | "Custom";
-type BedDisplayStatus = "Filled" | "AdvBooked" | "UnderNotice" | "Available";
+type BedDisplayStatus = "Filled" | "AdvBooked" | "UnderNotice" | "ShortTerm" | "Available";
 
 /* ─────────────────────────────────────────────────────────────────────────────
    ROOM & BED HELPERS
@@ -190,11 +190,21 @@ const deriveRoomStatus = (room: Record<string, unknown>): DerivedRoomStatus => {
   return "Partial";
 };
 
+/**
+ * Determine bed display status from tenant status codes.
+ * Priority: 1 (filled) > 7 (shortTerm) > 3 (advBooked) > 2 (underNotice)
+ */
 const bedStatusFromTenantStatuses = (codes: number[]): BedDisplayStatus => {
   if (!codes || codes.length === 0) return "Available";
-  if (codes.some((c) => c === 1)) return "Filled";
-  if (codes.some((c) => c === 3)) return "AdvBooked";
-  if (codes.some((c) => c === 2)) return "UnderNotice";
+  // Filter to only active statuses (1, 2, 3, 7)
+  const activeCodes = codes.filter((c) => [1, 2, 3, 7].includes(c));
+  if (activeCodes.length === 0) return "Available";
+  
+  // Priority: 1 (filled) > 7 (shortTerm) > 3 (advBooked) > 2 (underNotice)
+  if (activeCodes.includes(1)) return "Filled";
+  if (activeCodes.includes(7)) return "ShortTerm";
+  if (activeCodes.includes(3)) return "AdvBooked";
+  if (activeCodes.includes(2)) return "UnderNotice";
   return "Available";
 };
 
@@ -460,10 +470,21 @@ export default function AdvancedBookingScreen() {
   const insets = useSafeAreaInsets();
   const { colors, spacing, radius, typography } = useTheme();
 
-  // Params
-  const params = useLocalSearchParams<{ id: string; mode?: string }>();
+  // Params - include prefill params from room info modal
+  const params = useLocalSearchParams<{ 
+    id: string; 
+    mode?: string;
+    prefillRoom?: string;
+    prefillRent?: string;
+    prefillDeposit?: string;
+  }>();
   const id = String(params?.id ?? "");
   const mode = String(params?.mode ?? "");
+  
+  // Prefill values from navigation params (from room info modal)
+  const prefillRoom = params.prefillRoom || "";
+  const prefillRent = params.prefillRent || "";
+  const prefillDeposit = params.prefillDeposit || "";
 
   // Mode detection
   const isAddMode = id === "add";
@@ -558,6 +579,8 @@ export default function AdvancedBookingScreen() {
   const prefilledTenantId = useRef<string | null>(null);
   // Flag to skip reset effect right after prefill
   const justPrefilled = useRef(false);
+  // Track if we've already handled prefill params
+  const prefillParamsHandled = useRef(false);
 
   // Date picker state
   const [showJoiningDatePicker, setShowJoiningDatePicker] = useState(false);
@@ -578,8 +601,62 @@ export default function AdvancedBookingScreen() {
   /* ----------------------------- Prefill Logic ----------------------------- */
 
   useEffect(() => {
-    // Skip if add mode
-    if (isAddMode) return;
+    // Handle add mode with prefill params from room info modal
+    if (isAddMode) {
+      // Reset form for add mode
+      setTenantName("");
+      setPhone("");
+      setEmail("");
+      setGender("Male");
+      setJoiningDate(null);
+      setBedId("");
+      setDueType("Monthly");
+      setDueDate(null);
+      setAdvRentPaid("");
+      setAdvDepositPaid("");
+      setRentCollected("");
+      setDepositCollected("");
+      prefilledTenantId.current = null;
+      initialJoiningDate.current = null;
+      
+      // Handle prefill from room info modal (only once)
+      if (!prefillParamsHandled.current && prefillRoom) {
+        prefillParamsHandled.current = true;
+        
+        // Find the room by roomNo to get its _id
+        const matchedRoom = rooms.find(
+          (r) => String(r?.roomNo ?? r?.roomNumber ?? "").toLowerCase() === prefillRoom.toLowerCase()
+        );
+        
+        if (matchedRoom) {
+          const matchedRoomId = String(matchedRoom?._id ?? matchedRoom?.id ?? "");
+          setRoomId(matchedRoomId);
+          
+          // Set rent and deposit from prefill params
+          if (prefillRent) {
+            setRentAmount(formatIndianNumber(prefillRent));
+          }
+          if (prefillDeposit) {
+            setDepositAmount(formatIndianNumber(prefillDeposit));
+          }
+        } else {
+          // Room not found yet, just set the amounts
+          setRoomId("");
+          if (prefillRent) {
+            setRentAmount(formatIndianNumber(prefillRent));
+          }
+          if (prefillDeposit) {
+            setDepositAmount(formatIndianNumber(prefillDeposit));
+          }
+        }
+      } else if (!prefillRoom) {
+        // No prefill - reset room and amounts
+        setRoomId("");
+        setRentAmount("");
+        setDepositAmount("");
+      }
+      return;
+    }
     
     // Skip if no tenant data yet
     if (!currentTenant || !currentTenantId) return;
@@ -641,7 +718,22 @@ export default function AdvancedBookingScreen() {
 
     setDueType("Monthly");
     setDueDate(null);
-  }, [isAddMode, currentTenant, currentTenantId]);
+  }, [isAddMode, currentTenant, currentTenantId, prefillRoom, prefillRent, prefillDeposit, rooms]);
+
+  // Effect to bind room when rooms data loads (for prefill params)
+  useEffect(() => {
+    if (!isAddMode || !prefillRoom || !rooms.length || roomId) return;
+    
+    // Find the room by roomNo
+    const matchedRoom = rooms.find(
+      (r) => String(r?.roomNo ?? r?.roomNumber ?? "").toLowerCase() === prefillRoom.toLowerCase()
+    );
+    
+    if (matchedRoom) {
+      const matchedRoomId = String(matchedRoom?._id ?? matchedRoom?.id ?? "");
+      setRoomId(matchedRoomId);
+    }
+  }, [isAddMode, prefillRoom, rooms, roomId]);
 
   /* ----------------------------- Due Date Auto-compute ----------------------------- */
 
@@ -731,7 +823,8 @@ export default function AdvancedBookingScreen() {
     () => ({
       Filled: colors.filledBeds ?? "#EF4444",
       AdvBooked: colors.advBookedBeds ?? "#F59E0B",
-      UnderNotice: colors.underNoticeBeds ?? colors.advBookedBeds ?? "#F59E0B",
+      UnderNotice: colors.underNoticeBeds ?? "#8B5CF6",
+      ShortTerm: colors.shortTermBeds ?? "#F59E0B",
       Available: colors.availableBeds ?? "#22C55E",
     }),
     [colors]
@@ -800,10 +893,11 @@ export default function AdvancedBookingScreen() {
       const isCurrentTenantBed = isSameRoom && tenantOriginalBed === upperLetter;
 
       // Disable logic:
-      // - In Add mode: only "Available" beds can be selected
+      // - In Add mode: Only "Available" beds can be selected (no AdvBooked, Filled, or ShortTerm)
       // - In Edit/Convert mode: "Available" beds + the tenant's original bed can be selected
+      const selectableInAddMode = status === "Available";
       const disabled = isAddMode
-        ? status !== "Available"
+        ? !selectableInAddMode
         : status !== "Available" && !isCurrentTenantBed;
 
       return {
