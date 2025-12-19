@@ -52,6 +52,7 @@ export const lightTheme = {
     advBookedBeds: "#ed6d10",
     filledBeds: "#c80b0b",
     underNoticeBeds: "#6c3fc0",
+    shortTermBeds: "#F59E0B",
   },
 
   spacing: {

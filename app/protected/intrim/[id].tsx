@@ -1,5 +1,5 @@
 // app/protected/intrim/[id].tsx
-// Interim Booking Add/Edit Screen - Short-term bookings
+// Add/Edit Interim Booking Screen - Premium design matching tenant and advancedBooking screens
 import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import {
   View,
@@ -19,9 +19,18 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { TextInput, RadioButton, Snackbar } from "react-native-paper";
+import {
+  TextInput,
+  RadioButton,
+  Text as PaperText,
+  Button,
+  Portal,
+  Dialog,
+  Divider,
+  Snackbar,
+} from "react-native-paper";
 import DateTimePicker, { DateTimePickerEvent } from "@react-native-community/datetimepicker";
-import MaterialIcons from "@expo/vector-icons/MaterialIcons";
+import { MaterialIcons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useSelector } from "react-redux";
 
@@ -31,29 +40,23 @@ import { useGetRoomsForShortTermBooking } from "@/src/hooks/room";
 import { useInsertShortTerm, useUpdateTenant, useGetAllTenantDetails } from "@/src/hooks/tenants";
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   HELPERS
+   HELPERS & CONSTANTS
 ───────────────────────────────────────────────────────────────────────────── */
 
-const str = (v: unknown, f = "") => (v == null ? f : String(v));
-const num = (v: unknown, f = 0) => (typeof v === "number" ? v : Number(v ?? f)) || f;
+const str = (v: unknown, fallback = "") => (v == null ? fallback : String(v));
+const num = (v: unknown, fallback = 0) =>
+  typeof v === "number" ? v : Number(v ?? fallback) || fallback;
 
-const formatIndianNumber = (n: number): string => {
-  if (isNaN(n)) return "0";
-  const s = Math.abs(Math.round(n)).toString();
-  if (s.length <= 3) return n < 0 ? `-${s}` : s;
-  let result = s.slice(-3);
-  let remaining = s.slice(0, -3);
-  while (remaining.length > 2) {
-    result = remaining.slice(-2) + "," + result;
-    remaining = remaining.slice(0, -2);
-  }
-  if (remaining.length > 0) result = remaining + "," + result;
-  return n < 0 ? `-${result}` : result;
+const formatIndianNumber = (num: string): string => {
+  const cleaned = num.replace(/[^0-9]/g, "");
+  if (!cleaned) return "";
+  const number = parseInt(cleaned, 10);
+  if (isNaN(number)) return cleaned;
+  return number.toLocaleString("en-IN");
 };
 
-const parseFormattedNumber = (s: string): number => {
-  const clean = s.replace(/[^0-9.-]/g, "");
-  return Number(clean) || 0;
+const parseFormattedNumber = (formatted: string): string => {
+  return formatted.replace(/[^0-9]/g, "");
 };
 
 const parseISODate = (v: unknown): Date | null => {
@@ -68,11 +71,16 @@ const parseISODate = (v: unknown): Date | null => {
 };
 
 const formatDisplayDate = (d: Date | null): string => {
-  if (!d) return "";
-  return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+  if (!d || !(d instanceof Date) || isNaN(d.getTime())) return "Select date";
+  return d.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
 };
 
-const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+const startOfDay = (d: Date) =>
+  new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
 
 const getDaysInMonth = (year: number, month: number): number => {
   return new Date(year, month + 1, 0).getDate();
@@ -85,162 +93,22 @@ const validateEmail = (email: string): boolean => {
 
 const validatePhone = (phone: string): boolean => /^\d{10}$/.test(phone.replace(/\D/g, ""));
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   SHEET SELECT COMPONENT
-───────────────────────────────────────────────────────────────────────────── */
+const MAX_AMOUNT_DIGITS = 9;
 
-interface SheetSelectOption {
-  id: string;
-  value: string;
-  disabled?: boolean;
-}
-
-interface SheetSelectProps {
-  label: string;
-  value: string;
-  options: SheetSelectOption[];
-  onChange: (value: string) => void;
-  disabled?: boolean;
-}
-
-const SheetSelect: React.FC<SheetSelectProps> = React.memo(function SheetSelect({
-  label,
-  value,
-  options,
-  onChange,
-  disabled,
-}) {
-  const { colors, spacing, radius, typography } = useTheme();
-  const [visible, setVisible] = useState(false);
-
-  const selectedOption = options.find((o) => o.id === value);
-
-  const styles = useMemo(
-    () =>
-      StyleSheet.create({
-        container: {
-          flexDirection: "row",
-          alignItems: "center",
-          borderWidth: 1,
-          borderColor: hexToRgba(colors.textMuted, 0.2),
-          borderRadius: radius.md,
-          paddingHorizontal: spacing.md,
-          paddingVertical: spacing.sm + 4,
-          backgroundColor: colors.surface,
-        },
-        text: {
-          flex: 1,
-          fontSize: typography.fontSizeMd,
-          color: selectedOption ? colors.textPrimary : colors.textMuted,
-        },
-        overlay: {
-          flex: 1,
-          backgroundColor: "rgba(0,0,0,0.5)",
-          justifyContent: "flex-end",
-        },
-        sheet: {
-          backgroundColor: colors.cardBackground,
-          borderTopLeftRadius: radius.xl,
-          borderTopRightRadius: radius.xl,
-          maxHeight: "60%",
-        },
-        header: {
-          flexDirection: "row",
-          justifyContent: "space-between",
-          alignItems: "center",
-          padding: spacing.md,
-          borderBottomWidth: 1,
-          borderBottomColor: hexToRgba(colors.borderColor, 0.3),
-        },
-        title: {
-          fontSize: typography.fontSizeLg,
-          fontWeight: "700",
-          color: colors.textPrimary,
-        },
-        closeText: {
-          fontSize: typography.fontSizeMd,
-          fontWeight: "600",
-          color: colors.accent,
-        },
-        option: {
-          paddingVertical: spacing.md,
-          paddingHorizontal: spacing.lg,
-          borderBottomWidth: 1,
-          borderBottomColor: hexToRgba(colors.borderColor, 0.1),
-        },
-        optionText: {
-          fontSize: typography.fontSizeMd,
-          color: colors.textPrimary,
-        },
-        optionDisabled: {
-          opacity: 0.4,
-        },
-        optionSelected: {
-          backgroundColor: hexToRgba(colors.accent, 0.08),
-        },
-      }),
-    [colors, spacing, radius, typography, selectedOption]
-  );
-
-  return (
-    <>
-      <Pressable
-        style={[styles.container, disabled && { opacity: 0.5 }]}
-        onPress={() => !disabled && setVisible(true)}
-        disabled={disabled}
-        accessibilityRole="button"
-        accessibilityLabel={label}
-      >
-        <Text style={styles.text}>{selectedOption?.value || label}</Text>
-        <MaterialIcons name="keyboard-arrow-down" size={24} color={colors.textMuted} />
-      </Pressable>
-
-      <Modal visible={visible} transparent animationType="slide" onRequestClose={() => setVisible(false)}>
-        <Pressable style={styles.overlay} onPress={() => setVisible(false)}>
-          <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
-            <View style={styles.header}>
-              <Text style={styles.title}>{label}</Text>
-              <Pressable onPress={() => setVisible(false)}>
-                <Text style={styles.closeText}>Close</Text>
-              </Pressable>
-            </View>
-            <ScrollView showsVerticalScrollIndicator={false}>
-              {options.map((option) => (
-                <Pressable
-                  key={option.id}
-                  style={[
-                    styles.option,
-                    option.id === value && styles.optionSelected,
-                    option.disabled && styles.optionDisabled,
-                  ]}
-                  onPress={() => {
-                    if (!option.disabled) {
-                      Haptics.selectionAsync();
-                      onChange(option.id);
-                      setVisible(false);
-                    }
-                  }}
-                  disabled={option.disabled}
-                >
-                  <Text style={styles.optionText}>{option.value}</Text>
-                </Pressable>
-              ))}
-            </ScrollView>
-          </Pressable>
-        </Pressable>
-      </Modal>
-    </>
-  );
-});
-
-// Calculate due amount for stay
+// Calculate due amount for stay - supports same-day (1 day) stays
 const calculateDueAmount = (joiningDate: Date | null, moveOutDate: Date | null, rentAmount: number): number => {
   if (!joiningDate || !moveOutDate || rentAmount <= 0) return 0;
 
   const start = startOfDay(joiningDate);
   const end = startOfDay(moveOutDate);
-  
-  if (end <= start) return 0;
+
+  // Allow same day stay (1 day)
+  if (end.getTime() === start.getTime()) {
+    const daysInMonth = getDaysInMonth(start.getFullYear(), start.getMonth());
+    return Math.round(rentAmount / daysInMonth);
+  }
+
+  if (end < start) return 0;
 
   // Calculate staying days (inclusive)
   const stayingDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
@@ -280,30 +148,259 @@ const calculateDueAmount = (joiningDate: Date | null, moveOutDate: Date | null, 
 };
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   LABELED INPUT WRAPPER
+   LABELED COMPONENT
 ───────────────────────────────────────────────────────────────────────────── */
 
-interface LabeledProps {
-  label: string;
-  required?: boolean;
-  children: React.ReactNode;
-}
-
-const Labeled: React.FC<LabeledProps> = ({ label, required, children }) => {
-  const { colors, spacing, typography } = useTheme();
-  return (
-    <View style={{ marginBottom: spacing.md }}>
-      <Text style={{ fontSize: typography.fontSizeSm, fontWeight: "600", color: colors.textSecondary, marginBottom: 6 }}>
-        {label}
-        {required && <Text style={{ color: colors.error }}> *</Text>}
-      </Text>
-      {children}
-    </View>
-  );
-};
+const Labeled = React.memo(
+  ({
+    label,
+    children,
+    required,
+  }: {
+    label: string;
+    children: React.ReactNode;
+    required?: boolean;
+  }) => {
+    const { colors } = useTheme();
+    return (
+      <View style={{ marginTop: 8, marginBottom: 10 }}>
+        <PaperText
+          style={{ color: colors.textPrimary, fontWeight: "600", marginBottom: 6 }}
+          accessible
+          accessibilityRole="text"
+        >
+          {label}
+          {required && <Text style={{ color: colors.error }}> *</Text>}
+        </PaperText>
+        {children}
+      </View>
+    );
+  }
+);
+Labeled.displayName = "Labeled";
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   MAIN COMPONENT
+   SHEET SELECT COMPONENT (Generic Dropdown)
+───────────────────────────────────────────────────────────────────────────── */
+
+interface SheetSelectOption {
+  id: string;
+  label: string;
+  sublabel?: string;
+  status?: string;
+  statusColor?: string;
+  disabled?: boolean;
+}
+
+interface SheetSelectProps {
+  value?: string;
+  options: SheetSelectOption[];
+  placeholder: string;
+  onChange: (v: string) => void;
+  disabled?: boolean;
+}
+
+const SheetSelect = React.memo(function SheetSelect({
+  value,
+  options,
+  placeholder,
+  onChange,
+  disabled,
+}: SheetSelectProps) {
+  const { colors, radius, spacing, typography } = useTheme();
+  const [open, setOpen] = useState(false);
+
+  const selectedOption = options.find((o) => o.id === value);
+
+  return (
+    <>
+      <Pressable
+        onPress={() => {
+          if (disabled) return;
+          Haptics.selectionAsync();
+          setOpen(true);
+        }}
+        style={{
+          borderWidth: 1,
+          borderColor: colors.borderColor,
+          borderRadius: radius.lg,
+          backgroundColor: disabled ? colors.surface : colors.cardSurface,
+          paddingVertical: 14,
+          paddingHorizontal: 12,
+          opacity: disabled ? 0.6 : 1,
+          minHeight: 55,
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+        }}
+        accessibilityRole="button"
+        accessibilityLabel={placeholder}
+        accessibilityHint="Opens selection menu"
+        accessible
+      >
+        <View style={{ flex: 1 }}>
+          <PaperText
+            style={{
+              color: selectedOption ? colors.textPrimary : colors.textMuted,
+              fontSize: typography.fontSizeMd,
+            }}
+            numberOfLines={1}
+          >
+            {selectedOption?.label || placeholder}
+          </PaperText>
+          {selectedOption?.sublabel && (
+            <PaperText
+              style={{
+                color: colors.textSecondary,
+                fontSize: 12,
+                marginTop: 2,
+              }}
+              numberOfLines={1}
+            >
+              {selectedOption.sublabel}
+            </PaperText>
+          )}
+        </View>
+        <MaterialIcons
+          name={open ? "keyboard-arrow-up" : "keyboard-arrow-down"}
+          size={20}
+          color={colors.textSecondary}
+        />
+      </Pressable>
+
+      <Portal>
+        <Dialog
+          visible={open}
+          onDismiss={() => setOpen(false)}
+          style={{
+            backgroundColor: colors.cardBackground,
+            borderTopLeftRadius: 18,
+            borderTopRightRadius: 18,
+          }}
+        >
+          <Dialog.Title
+            style={{
+              color: colors.textPrimary,
+              marginBottom: 6,
+              fontWeight: "700",
+              fontSize: typography.fontSizeMd,
+            }}
+          >
+            {placeholder}
+          </Dialog.Title>
+          <Dialog.ScrollArea>
+            <ScrollView
+              style={{ maxHeight: 400 }}
+              contentContainerStyle={{ padding: spacing.sm }}
+              keyboardShouldPersistTaps="always"
+            >
+              {options.length === 0 ? (
+                <PaperText style={{ color: colors.textMuted, paddingVertical: 12 }}>
+                  No options available.
+                </PaperText>
+              ) : (
+                options.map((opt) => {
+                  const isSelected = opt.id === value;
+                  const isDisabled = !!opt.disabled;
+
+                  return (
+                    <Pressable
+                      key={opt.id}
+                      disabled={isDisabled}
+                      onPress={() => {
+                        if (isDisabled) return;
+                        Haptics.selectionAsync();
+                        onChange(opt.id);
+                        setOpen(false);
+                      }}
+                      style={{
+                        paddingVertical: 14,
+                        borderBottomWidth: 1,
+                        borderColor: hexToRgba(colors.textSecondary, 0.12),
+                        minHeight: 52,
+                        justifyContent: "center",
+                        backgroundColor: isSelected
+                          ? hexToRgba(colors.accent, 0.1)
+                          : "transparent",
+                        borderRadius: isSelected ? 10 : 0,
+                        paddingHorizontal: 10,
+                        marginBottom: 4,
+                        opacity: isDisabled ? 0.4 : 1,
+                      }}
+                      accessibilityRole="button"
+                      accessibilityLabel={opt.label}
+                      accessibilityState={{ selected: isSelected, disabled: isDisabled }}
+                      accessible
+                    >
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                        }}
+                      >
+                        <View style={{ flex: 1 }}>
+                          <PaperText
+                            style={{
+                              color: colors.textPrimary,
+                              fontWeight: isSelected ? "700" : "500",
+                              fontSize: 14,
+                            }}
+                          >
+                            {opt.label}
+                          </PaperText>
+                          {opt.sublabel && (
+                            <PaperText
+                              style={{
+                                color: colors.textSecondary,
+                                fontSize: 12,
+                                marginTop: 2,
+                              }}
+                            >
+                              {opt.sublabel}
+                            </PaperText>
+                          )}
+                        </View>
+                        {opt.status && (
+                          <View
+                            style={{
+                              backgroundColor: opt.statusColor || colors.textMuted,
+                              borderRadius: 999,
+                              paddingHorizontal: 10,
+                              paddingVertical: 4,
+                            }}
+                          >
+                            <Text
+                              style={{
+                                color: "#FFFFFF",
+                                fontSize: 10,
+                                fontWeight: "700",
+                              }}
+                            >
+                              {opt.status}
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+                    </Pressable>
+                  );
+                })
+              )}
+            </ScrollView>
+          </Dialog.ScrollArea>
+          <Dialog.Actions>
+            <Button onPress={() => setOpen(false)} textColor={colors.accent}>
+              Close
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
+    </>
+  );
+});
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   MAIN SCREEN COMPONENT
 ───────────────────────────────────────────────────────────────────────────── */
 
 export default function IntrimBookingScreen() {
@@ -333,7 +430,7 @@ export default function IntrimBookingScreen() {
   const [phoneNumber, setPhoneNumber] = useState("");
   const [joiningDate, setJoiningDate] = useState<Date | null>(null);
   const [moveOutDate, setMoveOutDate] = useState<Date | null>(null);
-  const [gender, setGender] = useState("Male");
+  const [gender, setGender] = useState<"Male" | "Female">("Male");
   const [roomId, setRoomId] = useState("");
   const [bedNumber, setBedNumber] = useState("");
   const [rentAmount, setRentAmount] = useState("");
@@ -341,18 +438,22 @@ export default function IntrimBookingScreen() {
   const [collectedAdvRent, setCollectedAdvRent] = useState("");
   const [collectedAdvDeposit, setCollectedAdvDeposit] = useState("");
   const [email, setEmail] = useState("");
-  const [calculatedRentAmount, setCalculatedRentAmount] = useState<number | null>(null);
 
   // Date pickers
   const [showJoiningPicker, setShowJoiningPicker] = useState(false);
   const [showMoveOutPicker, setShowMoveOutPicker] = useState(false);
-  const [tempJoiningDate, setTempJoiningDate] = useState<Date>(new Date());
-  const [tempMoveOutDate, setTempMoveOutDate] = useState<Date>(new Date());
+  const [tempJoiningDate, setTempJoiningDate] = useState<Date>(() => new Date());
+  const [tempMoveOutDate, setTempMoveOutDate] = useState<Date>(() => new Date());
 
   // UI state
   const [snackbarVisible, setSnackbarVisible] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState("");
   const prefilled = useRef(false);
+
+  // Track previous dates for clearing amounts
+  const prevJoiningDateRef = useRef<Date | null>(null);
+  const prevMoveOutDateRef = useRef<Date | null>(null);
+  const initialLoadRef = useRef(true);
 
   // APIs
   const tenantQuery = useGetAllTenantDetails(isEditMode ? bookingId : "");
@@ -373,11 +474,16 @@ export default function IntrimBookingScreen() {
   useEffect(() => {
     if (isEditMode && existingTenant && !prefilled.current) {
       prefilled.current = true;
+      initialLoadRef.current = true;
       setTenantName(str(existingTenant?.tenantName, ""));
       setPhoneNumber(str(existingTenant?.phoneNumber, ""));
-      setJoiningDate(parseISODate(existingTenant?.joiningDate));
-      setMoveOutDate(parseISODate(existingTenant?.moveOutDate));
-      setGender(str(existingTenant?.gender, "Male"));
+      const jDate = parseISODate(existingTenant?.joiningDate);
+      const mDate = parseISODate(existingTenant?.moveOutDate);
+      setJoiningDate(jDate);
+      setMoveOutDate(mDate);
+      prevJoiningDateRef.current = jDate;
+      prevMoveOutDateRef.current = mDate;
+      setGender(str(existingTenant?.gender, "Male") === "Female" ? "Female" : "Male");
       setRoomId(str(existingTenant?.roomId, ""));
       setBedNumber(str(existingTenant?.bedNumber, ""));
       setRentAmount(String(num(existingTenant?.rentAmount)));
@@ -385,95 +491,151 @@ export default function IntrimBookingScreen() {
       setCollectedAdvRent(String(num(existingTenant?.advanceRentAmountPaid) || ""));
       setCollectedAdvDeposit(String(num(existingTenant?.advanceDepositAmountPaid) || ""));
       setEmail(str(existingTenant?.email, ""));
-      setCalculatedRentAmount(num(existingTenant?.calcultedRentAmount) || null);
     }
   }, [isEditMode, existingTenant]);
 
+  // Clear room/bed/amounts when dates change (but not on initial load)
+  useEffect(() => {
+    if (initialLoadRef.current) {
+      initialLoadRef.current = false;
+      prevJoiningDateRef.current = joiningDate;
+      prevMoveOutDateRef.current = moveOutDate;
+      return;
+    }
+
+    const joiningChanged = 
+      (prevJoiningDateRef.current !== null && joiningDate?.getTime() !== prevJoiningDateRef.current?.getTime()) ||
+      (prevJoiningDateRef.current === null && joiningDate !== null);
+    
+    const moveOutChanged = 
+      (prevMoveOutDateRef.current !== null && moveOutDate?.getTime() !== prevMoveOutDateRef.current?.getTime()) ||
+      (prevMoveOutDateRef.current === null && moveOutDate !== null);
+
+    if (joiningChanged || moveOutChanged) {
+      // Clear room, bed and all amounts when dates change
+      setRoomId("");
+      setBedNumber("");
+      setRentAmount("");
+      setDepositAmount("");
+      setCollectedAdvRent("");
+      setCollectedAdvDeposit("");
+    }
+
+    prevJoiningDateRef.current = joiningDate;
+    prevMoveOutDateRef.current = moveOutDate;
+  }, [joiningDate, moveOutDate]);
+
   // Room options
-  const roomOptions = useMemo(() => {
-    const rooms = (roomsQuery?.data?.rooms ?? []) as Record<string, unknown>[];
+  const roomOptions: SheetSelectOption[] = useMemo(() => {
+    const rooms = (roomsQuery?.data?.rooms ?? []) as unknown as Record<string, unknown>[];
     return rooms.map((r) => ({
       id: str(r?._id),
-      value: str(r?.roomNo, "Room"),
-      bedPrice: num(r?.bedPrice),
-      securityDeposit: num(r?.securityDeposit),
-      beds: num(r?.beds),
-      bedsPerRoom: (r?.bedsPerRoom ?? []) as unknown[],
+      label: `Room ${str(r?.roomNo, "Room")}`,
+      sublabel: `${num(r?.beds, 0)} beds`,
     }));
   }, [roomsQuery?.data?.rooms]);
 
-  // Bed options based on selected room
-  const bedOptions = useMemo(() => {
-    if (!roomId) return [];
-    const selectedRoom = roomOptions.find((r: { id: string }) => r.id === roomId);
-    if (!selectedRoom) return [];
+  // Selected room data
+  const selectedRoomData = useMemo(() => {
+    const rooms = (roomsQuery?.data?.rooms ?? []) as unknown as Record<string, unknown>[];
+    return rooms.find((r) => str(r?._id) === roomId);
+  }, [roomsQuery?.data?.rooms, roomId]);
 
-    const bedsPerRoom = (selectedRoom.bedsPerRoom ?? []) as Record<string, unknown>[];
-    const bedCount = selectedRoom.beds || 0;
+  // Bed status colors
+  const bedStatusColors: Record<string, string> = useMemo(
+    () => ({
+      Filled: colors.filledBeds ?? "#EF4444",
+      AdvBooked: colors.advBookedBeds ?? "#F59E0B",
+      ShortTerm: colors.advBookedBeds ?? "#F59E0B",
+      Available: colors.availableBeds ?? "#22C55E",
+    }),
+    [colors]
+  );
+
+  // Bed options based on selected room
+  const bedOptions: SheetSelectOption[] = useMemo(() => {
+    if (!roomId || !selectedRoomData) return [];
+
+    const bedsPerRoom = (selectedRoomData?.bedsPerRoom ?? []) as Record<string, unknown>[];
+    const bedCount = num(selectedRoomData?.beds, 0);
     const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
-    const options: { id: string; value: string; disabled: boolean }[] = [];
+    const options: SheetSelectOption[] = [];
 
     for (let i = 0; i < bedCount; i++) {
       const bedId = alphabet[i] || String(i + 1);
       const bedInfo = bedsPerRoom.find((b) => str(b?._id) === bedId);
       const tenants = (bedInfo?.tenantsPerBed ?? []) as Record<string, unknown>[];
 
-      let statusLabel = "";
+      let statusLabel = "Available";
+      let statusColor = bedStatusColors.Available;
       let disabled = false;
 
-      if (tenants.length === 0) {
-        statusLabel = " (Available)";
-      } else {
-        // Check tenant statuses
+      if (tenants.length > 0) {
         const hasActive = tenants.some((t) => num(t?.tenantStatus) === 1);
         const hasShortTerm = tenants.some((t) => num(t?.tenantStatus) === 7);
         const hasAdvance = tenants.some((t) => num(t?.tenantStatus) === 3);
 
         if (hasActive) {
-          statusLabel = " (Filled)";
+          statusLabel = "Filled";
+          statusColor = bedStatusColors.Filled;
           disabled = !isEditMode;
         } else if (hasShortTerm) {
-          statusLabel = " (Short Term)";
+          statusLabel = "Short Term";
+          statusColor = bedStatusColors.ShortTerm;
           disabled = !isEditMode;
         } else if (hasAdvance) {
-          statusLabel = " (Advance Booking)";
+          statusLabel = "Adv Booked";
+          statusColor = bedStatusColors.AdvBooked;
           disabled = !isEditMode;
-        } else {
-          statusLabel = " (Partially Filled)";
         }
       }
 
-      options.push({ id: bedId, value: `Bed ${bedId}${statusLabel}`, disabled });
+      options.push({
+        id: bedId,
+        label: `Bed ${bedId}`,
+        status: statusLabel,
+        statusColor,
+        disabled,
+      });
     }
 
     return options;
-  }, [roomId, roomOptions, isEditMode]);
+  }, [roomId, selectedRoomData, bedStatusColors, isEditMode]);
 
   // Auto-fill rent and deposit when room is selected
   useEffect(() => {
-    if (roomId && !isEditMode) {
-      const selectedRoom = roomOptions.find((r: { id: string }) => r.id === roomId);
-      if (selectedRoom) {
-        setRentAmount(String(selectedRoom.bedPrice || 0));
-        setDepositAmount(String(selectedRoom.securityDeposit || 0));
+    if (roomId && selectedRoomData && !isEditMode) {
+      const price = num(selectedRoomData?.bedPrice, 0);
+      const deposit = num(selectedRoomData?.securityDeposit, 0);
+      if (price > 0) {
+        setRentAmount(String(price));
+      }
+      if (deposit > 0) {
+        setDepositAmount(String(deposit));
       }
     }
-  }, [roomId, roomOptions, isEditMode]);
+  }, [roomId, selectedRoomData, isEditMode]);
 
   // Calculate due amount
   const dueAmountForStay = useMemo(() => {
-    if (calculatedRentAmount) return calculatedRentAmount;
-    const rent = parseFormattedNumber(rentAmount);
+    const rent = Number(parseFormattedNumber(rentAmount)) || 0;
     return calculateDueAmount(joiningDate, moveOutDate, rent);
-  }, [joiningDate, moveOutDate, rentAmount, calculatedRentAmount]);
+  }, [joiningDate, moveOutDate, rentAmount]);
 
   // Stay days note
   const stayDaysNote = useMemo(() => {
     if (!joiningDate || !moveOutDate) return "";
     const start = startOfDay(joiningDate);
     const end = startOfDay(moveOutDate);
-    if (end <= start) return "";
+    
+    // Same day = 1 day stay
+    if (end.getTime() === start.getTime()) {
+      return "Due rent amount is calculated for 1 day";
+    }
+    
+    if (end < start) return "";
+    
     const days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
     return `Due rent amount is calculated for ${days} day${days === 1 ? "" : "s"}`;
   }, [joiningDate, moveOutDate]);
@@ -488,8 +650,28 @@ export default function IntrimBookingScreen() {
 
   const minJoiningDate = today;
   const maxJoiningDate = oneMonthFromToday;
+  // Move out date: min is the joining date (same day allowed), max is 1 month from today
   const minMoveOutDate = joiningDate ? startOfDay(joiningDate) : today;
   const maxMoveOutDate = oneMonthFromToday;
+
+  // Navigation
+  const navigateBack = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    router.replace({
+      pathname: `/protected/property/${propertyId}`,
+      params: { tab: "Interim Bookings", refresh: String(Date.now()) },
+    });
+  }, [router, propertyId]);
+
+  // Back handler
+  useEffect(() => {
+    const backAction = () => {
+      navigateBack();
+      return true;
+    };
+    const subscription = BackHandler.addEventListener("hardwareBackPress", backAction);
+    return () => subscription.remove();
+  }, [navigateBack]);
 
   // Validation
   const validate = useCallback((): string[] => {
@@ -502,12 +684,12 @@ export default function IntrimBookingScreen() {
     if (!moveOutDate) errors.push("• Move out date is required.");
     if (!roomId) errors.push("• Room selection is required.");
     if (!bedNumber) errors.push("• Bed selection is required.");
-    if (!rentAmount.trim() || parseFormattedNumber(rentAmount) <= 0) errors.push("• Rent amount is required.");
-    if (!depositAmount.trim() || parseFormattedNumber(depositAmount) <= 0) errors.push("• Deposit amount is required.");
+    if (!rentAmount.trim() || Number(parseFormattedNumber(rentAmount)) <= 0) errors.push("• Rent amount is required.");
+    if (!depositAmount.trim() || Number(parseFormattedNumber(depositAmount)) <= 0) errors.push("• Deposit amount is required.");
 
-    const advRent = parseFormattedNumber(collectedAdvRent);
-    const advDeposit = parseFormattedNumber(collectedAdvDeposit);
-    const deposit = parseFormattedNumber(depositAmount);
+    const advRent = Number(parseFormattedNumber(collectedAdvRent)) || 0;
+    const advDeposit = Number(parseFormattedNumber(collectedAdvDeposit)) || 0;
+    const deposit = Number(parseFormattedNumber(depositAmount)) || 0;
 
     if (advRent > dueAmountForStay) {
       errors.push("• Collected advance rent cannot exceed due amount for stay.");
@@ -539,16 +721,16 @@ export default function IntrimBookingScreen() {
     formData.append("tenantName", tenantName.trim());
     formData.append("phoneNumber", phoneNumber.trim());
     formData.append("roomId", roomId);
-    formData.append("rentAmount", String(parseFormattedNumber(rentAmount)));
-    formData.append("depositAmount", String(parseFormattedNumber(depositAmount)));
+    formData.append("rentAmount", String(Number(parseFormattedNumber(rentAmount))));
+    formData.append("depositAmount", String(Number(parseFormattedNumber(depositAmount))));
     formData.append("lockingPeriod", "");
     formData.append("noticePeriod", "15");
     formData.append("joiningDate", joiningDate?.toISOString() ?? "");
     formData.append("moveOutDate", moveOutDate?.toISOString() ?? "");
     formData.append("bedNumber", bedNumber);
     formData.append("gender", gender);
-    formData.append("advanceRentAmountPaid", String(parseFormattedNumber(collectedAdvRent) || 0));
-    formData.append("advanceDepositAmountPaid", String(parseFormattedNumber(collectedAdvDeposit) || 0));
+    formData.append("advanceRentAmountPaid", String(Number(parseFormattedNumber(collectedAdvRent)) || 0));
+    formData.append("advanceDepositAmountPaid", String(Number(parseFormattedNumber(collectedAdvDeposit)) || 0));
     formData.append("email", email.trim());
     formData.append("calcultedRentAmount", dueAmountForStay > 0 ? String(dueAmountForStay) : "");
     formData.append("status", "7");
@@ -566,10 +748,7 @@ export default function IntrimBookingScreen() {
             setSnackbarMessage(str(response?.message, "Booking updated successfully"));
             setSnackbarVisible(true);
             setTimeout(() => {
-              router.replace({
-                pathname: `/protected/property/${propertyId}`,
-                params: { tab: "Interim Bookings", refresh: String(Date.now()) },
-              });
+              navigateBack();
             }, 500);
           },
           onError: (error: unknown) => {
@@ -587,10 +766,7 @@ export default function IntrimBookingScreen() {
             setSnackbarMessage(str(response?.message, "Booking created successfully"));
             setSnackbarVisible(true);
             setTimeout(() => {
-              router.replace({
-                pathname: `/protected/property/${propertyId}`,
-                params: { tab: "Interim Bookings", refresh: String(Date.now()) },
-              });
+              navigateBack();
             }, 500);
           } else {
             Alert.alert("Error", str(response?.errorMessage, "Failed to create booking."));
@@ -602,88 +778,94 @@ export default function IntrimBookingScreen() {
         },
       });
     }
-  }, [validate, tenantName, phoneNumber, roomId, rentAmount, depositAmount, joiningDate, moveOutDate, bedNumber, gender, collectedAdvRent, collectedAdvDeposit, email, dueAmountForStay, ownerId, isEditMode, bookingId, propertyId, router, insertShortTerm, updateTenant]);
+  }, [validate, tenantName, phoneNumber, roomId, rentAmount, depositAmount, joiningDate, moveOutDate, bedNumber, gender, collectedAdvRent, collectedAdvDeposit, email, dueAmountForStay, ownerId, isEditMode, bookingId, navigateBack, insertShortTerm, updateTenant]);
 
-  // Navigation
-  const handleBack = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    router.replace({
-      pathname: `/protected/property/${propertyId}`,
-      params: { tab: "Interim Bookings", refresh: String(Date.now()) },
-    });
-  }, [router, propertyId]);
+  // Input handlers
+  const onNameChange = useCallback((text: string) => {
+    setTenantName(text);
+  }, []);
 
-  // Back handler
-  useEffect(() => {
-    const backAction = () => {
-      handleBack();
-      return true;
-    };
-    const subscription = BackHandler.addEventListener("hardwareBackPress", backAction);
-    return () => subscription.remove();
-  }, [handleBack]);
+  const onPhoneChange = useCallback((text: string) => {
+    const digitsOnly = text.replace(/[^\d]/g, "").slice(0, 10);
+    setPhoneNumber(digitsOnly);
+  }, []);
+
+  const onAmountChange = useCallback(
+    (setter: React.Dispatch<React.SetStateAction<string>>) => (text: string) => {
+      const digitsOnly = parseFormattedNumber(text).slice(0, MAX_AMOUNT_DIGITS);
+      setter(digitsOnly ? formatIndianNumber(digitsOnly) : "");
+    },
+    []
+  );
 
   // Date picker handlers
-  const handleJoiningDateChange = useCallback((event: DateTimePickerEvent, selectedDate?: Date) => {
-    if (Platform.OS === "android") {
-      setShowJoiningPicker(false);
-      if (event.type === "set" && selectedDate && !isNaN(selectedDate.getTime())) {
-        setJoiningDate(startOfDay(selectedDate));
-        // Reset move out date if it's before joining date
-        if (moveOutDate && startOfDay(selectedDate) > moveOutDate) {
-          setMoveOutDate(null);
-        }
-        // Reset room and bed when dates change
-        if (!isEditMode) {
-          setRoomId("");
-          setBedNumber("");
-        }
-      }
-    } else {
-      if (selectedDate && !isNaN(selectedDate.getTime())) {
-        setTempJoiningDate(selectedDate);
-      }
-    }
-  }, [moveOutDate, isEditMode]);
+  const openJoiningDatePicker = useCallback(() => {
+    const validDate =
+      joiningDate instanceof Date && !isNaN(joiningDate.getTime()) ? joiningDate : new Date();
+    setTempJoiningDate(new Date(validDate.getTime()));
+    setShowJoiningPicker(true);
+  }, [joiningDate]);
 
-  const handleMoveOutDateChange = useCallback((event: DateTimePickerEvent, selectedDate?: Date) => {
-    if (Platform.OS === "android") {
-      setShowMoveOutPicker(false);
-      if (event.type === "set" && selectedDate && !isNaN(selectedDate.getTime())) {
-        setMoveOutDate(startOfDay(selectedDate));
-        // Reset room and bed when dates change
-        if (!isEditMode) {
-          setRoomId("");
-          setBedNumber("");
+  const openMoveOutDatePicker = useCallback(() => {
+    if (!joiningDate) return;
+    const validDate =
+      moveOutDate instanceof Date && !isNaN(moveOutDate.getTime()) ? moveOutDate : joiningDate;
+    setTempMoveOutDate(new Date(validDate.getTime()));
+    setShowMoveOutPicker(true);
+  }, [joiningDate, moveOutDate]);
+
+  const handleJoiningDateChange = useCallback(
+    (event: DateTimePickerEvent, selectedDate?: Date) => {
+      if (Platform.OS === "android") {
+        setShowJoiningPicker(false);
+        if (event.type === "set" && selectedDate && !isNaN(selectedDate.getTime())) {
+          setJoiningDate(startOfDay(selectedDate));
+          // Reset move out date if it's before joining date
+          if (moveOutDate && startOfDay(selectedDate) > moveOutDate) {
+            setMoveOutDate(null);
+          }
+        }
+      } else {
+        if (selectedDate && !isNaN(selectedDate.getTime())) {
+          setTempJoiningDate(new Date(selectedDate.getTime()));
         }
       }
-    } else {
-      if (selectedDate && !isNaN(selectedDate.getTime())) {
-        setTempMoveOutDate(selectedDate);
+    },
+    [moveOutDate]
+  );
+
+  const handleMoveOutDateChange = useCallback(
+    (event: DateTimePickerEvent, selectedDate?: Date) => {
+      if (Platform.OS === "android") {
+        setShowMoveOutPicker(false);
+        if (event.type === "set" && selectedDate && !isNaN(selectedDate.getTime())) {
+          setMoveOutDate(startOfDay(selectedDate));
+        }
+      } else {
+        if (selectedDate && !isNaN(selectedDate.getTime())) {
+          setTempMoveOutDate(new Date(selectedDate.getTime()));
+        }
       }
-    }
-  }, [isEditMode]);
+    },
+    []
+  );
 
   const confirmJoiningDate = useCallback(() => {
-    setJoiningDate(startOfDay(tempJoiningDate));
+    if (tempJoiningDate instanceof Date && !isNaN(tempJoiningDate.getTime())) {
+      setJoiningDate(startOfDay(tempJoiningDate));
+      if (moveOutDate && startOfDay(tempJoiningDate) > moveOutDate) {
+        setMoveOutDate(null);
+      }
+    }
     setShowJoiningPicker(false);
-    if (moveOutDate && startOfDay(tempJoiningDate) > moveOutDate) {
-      setMoveOutDate(null);
-    }
-    if (!isEditMode) {
-      setRoomId("");
-      setBedNumber("");
-    }
-  }, [tempJoiningDate, moveOutDate, isEditMode]);
+  }, [tempJoiningDate, moveOutDate]);
 
   const confirmMoveOutDate = useCallback(() => {
-    setMoveOutDate(startOfDay(tempMoveOutDate));
-    setShowMoveOutPicker(false);
-    if (!isEditMode) {
-      setRoomId("");
-      setBedNumber("");
+    if (tempMoveOutDate instanceof Date && !isNaN(tempMoveOutDate.getTime())) {
+      setMoveOutDate(startOfDay(tempMoveOutDate));
     }
-  }, [tempMoveOutDate, isEditMode]);
+    setShowMoveOutPicker(false);
+  }, [tempMoveOutDate]);
 
   const isMutating = insertShortTerm.isPending || updateTenant.isPending;
   const isLoadingRooms = roomsQuery.isFetching;
@@ -698,130 +880,147 @@ export default function IntrimBookingScreen() {
           backgroundColor: colors.background,
         },
         header: {
+          paddingHorizontal: spacing.md,
+          paddingTop: spacing.sm,
+          paddingBottom: spacing.sm,
+          backgroundColor: colors.background,
+          borderBottomWidth: 1,
+          borderColor: hexToRgba(colors.textSecondary, 0.12),
           flexDirection: "row",
           alignItems: "center",
-          paddingHorizontal: spacing.md,
-          paddingVertical: spacing.sm,
-          backgroundColor: colors.cardBackground,
-          borderBottomWidth: 1,
-          borderBottomColor: hexToRgba(colors.borderColor, 0.3),
-          gap: spacing.sm,
+          gap: 8,
         },
         backBtn: {
-          width: 40,
-          height: 40,
-          borderRadius: 20,
-          backgroundColor: hexToRgba(colors.textMuted, 0.08),
+          width: 44,
+          height: 44,
           alignItems: "center",
           justifyContent: "center",
+          borderRadius: radius.full,
         },
         headerTitle: {
-          flex: 1,
+          color: colors.textPrimary,
           fontSize: typography.fontSizeLg,
           fontWeight: "700",
-          color: colors.textPrimary,
-        },
-        submitBtn: {
-          backgroundColor: colors.accent,
-          paddingHorizontal: spacing.lg,
-          paddingVertical: spacing.sm,
-          borderRadius: radius.md,
-        },
-        submitBtnDisabled: {
-          opacity: 0.5,
-        },
-        submitBtnText: {
-          fontSize: typography.fontSizeSm,
-          fontWeight: "700",
-          color: "#FFFFFF",
+          flexShrink: 1,
         },
         body: {
           flex: 1,
+          paddingHorizontal: spacing.md,
+          paddingTop: spacing.md,
+        },
+        sectionCard: {
+          borderWidth: 1,
+          borderColor: colors.borderColor,
+          borderRadius: radius.xl,
+          backgroundColor: colors.cardBackground,
           padding: spacing.md,
+          marginBottom: spacing.md,
+          shadowColor: "#000000",
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: Platform.OS === "ios" ? 0.1 : 0.05,
+          shadowRadius: Platform.OS === "ios" ? 10 : 6,
+          elevation: 4,
         },
         sectionTitle: {
-          fontSize: typography.fontSizeMd,
-          fontWeight: "700",
           color: colors.textPrimary,
-          marginBottom: spacing.md,
-          marginTop: spacing.sm,
+          fontWeight: "700",
+          marginBottom: 8,
+          fontSize: typography.fontSizeMd,
         },
         input: {
-          backgroundColor: colors.surface,
-          fontSize: typography.fontSizeMd,
+          backgroundColor: colors.cardSurface,
         },
-        dateField: {
-          flexDirection: "row",
-          alignItems: "center",
+        dateBtn: {
           borderWidth: 1,
-          borderColor: hexToRgba(colors.textMuted, 0.2),
-          borderRadius: radius.md,
-          paddingHorizontal: spacing.md,
-          paddingVertical: spacing.sm + 4,
-          backgroundColor: colors.surface,
-        },
-        dateFieldDisabled: {
-          opacity: 0.5,
-        },
-        dateText: {
-          flex: 1,
-          fontSize: typography.fontSizeMd,
-          color: colors.textPrimary,
-        },
-        datePlaceholder: {
-          color: colors.textMuted,
-        },
-        radioRow: {
+          borderColor: colors.borderColor,
+          borderRadius: radius.lg,
+          backgroundColor: colors.cardSurface,
+          paddingVertical: 14,
+          paddingHorizontal: 12,
+          minHeight: 55,
           flexDirection: "row",
           alignItems: "center",
+          gap: 10,
+        },
+        disabledDateBtn: {
+          opacity: 0.6,
+          backgroundColor: colors.surface,
+        },
+        genderRow: {
+          flexDirection: "row",
+          flexWrap: "wrap",
           gap: spacing.lg,
         },
-        radioItem: {
+        genderChip: {
           flexDirection: "row",
           alignItems: "center",
         },
-        radioLabel: {
-          fontSize: typography.fontSizeMd,
-          color: colors.textPrimary,
+        row: {
+          flexDirection: "row",
+          gap: spacing.md,
         },
-        noteText: {
-          fontSize: typography.fontSizeSm,
-          color: colors.textSecondary,
-          fontStyle: "italic",
-          marginTop: -spacing.sm,
-          marginBottom: spacing.md,
-        },
-        disabledField: {
-          opacity: 0.6,
-        },
-        modalOverlay: {
+        col: {
           flex: 1,
-          backgroundColor: "rgba(0,0,0,0.5)",
+        },
+        helpText: {
+          color: colors.textSecondary,
+          fontSize: 12,
+          marginTop: 4,
+          fontStyle: "italic",
+        },
+        footerRow: {
+          flexDirection: "row",
+          gap: spacing.md,
+          marginTop: spacing.lg,
+          paddingBottom: Platform.OS === "android" ? 72 : 36,
+        },
+        secondaryBtn: {
+          flex: 1,
+          borderRadius: radius.lg,
+          backgroundColor: colors.surface,
+          borderWidth: 1,
+          borderColor: colors.borderColor,
+          minHeight: 48,
+          justifyContent: "center",
+        },
+        primaryBtn: {
+          flex: 1,
+          borderRadius: radius.lg,
+          minHeight: 48,
+          justifyContent: "center",
+        },
+        datePickerModal: {
+          flex: 1,
           justifyContent: "flex-end",
+          backgroundColor: "rgba(0,0,0,0.4)",
         },
-        modalContent: {
+        datePickerContainer: {
           backgroundColor: colors.cardBackground,
-          borderTopLeftRadius: radius.xl,
-          borderTopRightRadius: radius.xl,
-          paddingBottom: insets.bottom + spacing.md,
+          borderTopLeftRadius: 20,
+          borderTopRightRadius: 20,
+          paddingBottom: insets.bottom + 10,
         },
-        modalHeader: {
+        datePickerHeader: {
           flexDirection: "row",
           justifyContent: "space-between",
           alignItems: "center",
-          padding: spacing.md,
+          paddingHorizontal: spacing.md,
+          paddingVertical: spacing.sm + 4,
           borderBottomWidth: 1,
-          borderBottomColor: hexToRgba(colors.borderColor, 0.3),
+          borderColor: hexToRgba(colors.textSecondary, 0.12),
         },
-        modalTitle: {
-          fontSize: typography.fontSizeLg,
-          fontWeight: "700",
+        datePickerTitle: {
+          fontSize: 17,
+          fontWeight: "600",
           color: colors.textPrimary,
         },
-        modalAction: {
-          fontSize: typography.fontSizeMd,
+        datePickerBtn: {
+          paddingHorizontal: spacing.sm,
+          paddingVertical: spacing.xs,
+        },
+        datePickerBtnText: {
+          fontSize: 16,
           fontWeight: "600",
-          color: colors.accent,
         },
         loadingContainer: {
           padding: spacing.lg,
@@ -831,277 +1030,440 @@ export default function IntrimBookingScreen() {
     [colors, spacing, radius, typography, insets.bottom]
   );
 
-  if (isEditMode && tenantQuery.isLoading) {
+  const headerTitle = isEditMode ? "Edit Interim Booking" : "Add Interim Booking";
+  const isLoading = isEditMode && tenantQuery.isLoading && !existingTenant;
+
+  if (isLoading) {
     return (
-      <SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}>
+      <SafeAreaView style={styles.safeArea} edges={["top", "left", "right", "bottom"]}>
         <View style={[styles.loadingContainer, { flex: 1, justifyContent: "center" }]}>
           <ActivityIndicator size="large" color={colors.accent} />
-          <Text style={{ color: colors.textSecondary, marginTop: spacing.md }}>Loading...</Text>
+          <PaperText style={{ color: colors.textSecondary, marginTop: spacing.md }}>
+            Loading...
+          </PaperText>
         </View>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Pressable style={styles.backBtn} onPress={handleBack} accessibilityRole="button" accessibilityLabel="Go back">
-          <MaterialIcons name={I18nManager.isRTL ? "arrow-forward" : "arrow-back"} size={24} color={colors.textPrimary} />
-        </Pressable>
-        <Text style={styles.headerTitle}>{isEditMode ? "Edit Interim Booking" : "Add Interim Booking"}</Text>
-        <Pressable
-          style={[styles.submitBtn, isMutating && styles.submitBtnDisabled]}
-          onPress={handleSubmit}
-          disabled={isMutating}
-          accessibilityRole="button"
-          accessibilityLabel="Save booking"
+    <SafeAreaView style={styles.safeArea} edges={["top", "left", "right", "bottom"]}>
+      <View style={{ flex: 1 }}>
+        {/* Header */}
+        <View style={styles.header}>
+          <Pressable
+            style={styles.backBtn}
+            onPress={navigateBack}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+            accessibilityHint="Navigate back to interim bookings list"
+            accessible
+            android_ripple={{
+              color: hexToRgba(colors.textSecondary, 0.2),
+              borderless: true,
+            }}
+          >
+            <MaterialIcons
+              name={I18nManager.isRTL ? "arrow-forward" : "arrow-back"}
+              size={24}
+              color={colors.textPrimary}
+            />
+          </Pressable>
+          <View style={{ flex: 1 }}>
+            <PaperText
+              style={styles.headerTitle}
+              numberOfLines={1}
+              accessible
+              accessibilityRole="header"
+            >
+              {headerTitle}
+            </PaperText>
+          </View>
+        </View>
+
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={{ flex: 1 }}
+          keyboardVerticalOffset={Platform.OS === "ios" ? insets.top + 56 : 0}
         >
-          {isMutating ? (
-            <ActivityIndicator size="small" color="#FFFFFF" />
-          ) : (
-            <Text style={styles.submitBtnText}>Save</Text>
-          )}
-        </Pressable>
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+            <ScrollView
+              style={styles.body}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+              contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}
+              showsVerticalScrollIndicator={false}
+            >
+              {/* Tenant Details Section */}
+              <View style={styles.sectionCard}>
+                <Text style={styles.sectionTitle} accessible accessibilityRole="header">
+                  Tenant Details
+                </Text>
+
+                <Labeled label="Tenant Name" required>
+                  <TextInput
+                    value={tenantName}
+                    onChangeText={onNameChange}
+                    placeholder="Enter tenant name"
+                    mode="outlined"
+                    theme={{ roundness: radius.lg }}
+                    outlineColor={hexToRgba(colors.textSecondary, 0.22)}
+                    activeOutlineColor={colors.accent}
+                    style={styles.input}
+                    textColor={colors.textPrimary}
+                    placeholderTextColor={colors.textMuted}
+                    contentStyle={{ minHeight: 48, padding: spacing.sm }}
+                    accessibilityLabel="Tenant name"
+                    accessibilityHint="Enter the tenant's full name"
+                  />
+                </Labeled>
+
+                <Labeled label="Phone Number" required>
+                  <TextInput
+                    value={phoneNumber}
+                    onChangeText={onPhoneChange}
+                    placeholder="10 digit number"
+                    mode="outlined"
+                    theme={{ roundness: radius.lg }}
+                    outlineColor={hexToRgba(colors.textSecondary, 0.22)}
+                    activeOutlineColor={colors.accent}
+                    style={styles.input}
+                    textColor={colors.textPrimary}
+                    placeholderTextColor={colors.textMuted}
+                    keyboardType={Platform.OS === "ios" ? "number-pad" : "numeric"}
+                    maxLength={10}
+                    left={
+                      <TextInput.Affix
+                        text="+91"
+                        textStyle={{ color: colors.textSecondary, fontWeight: "600" }}
+                      />
+                    }
+                    contentStyle={{ minHeight: 48, padding: spacing.sm }}
+                    accessibilityLabel="Phone number"
+                    accessibilityHint="Enter 10 digit mobile number"
+                  />
+                </Labeled>
+
+                <Labeled label="Email (optional)">
+                  <TextInput
+                    value={email}
+                    onChangeText={setEmail}
+                    placeholder="Enter email address"
+                    mode="outlined"
+                    theme={{ roundness: radius.lg }}
+                    outlineColor={hexToRgba(colors.textSecondary, 0.22)}
+                    activeOutlineColor={colors.accent}
+                    style={styles.input}
+                    textColor={colors.textPrimary}
+                    placeholderTextColor={colors.textMuted}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    contentStyle={{ minHeight: 48, padding: spacing.sm }}
+                    accessibilityLabel="Email address"
+                    accessibilityHint="Enter tenant's email address"
+                  />
+                </Labeled>
+
+                <Labeled label="Gender" required>
+                  <RadioButton.Group
+                    onValueChange={(v) => setGender(v === "Female" ? "Female" : "Male")}
+                    value={gender}
+                  >
+                    <View style={styles.genderRow}>
+                      <Pressable
+                        style={styles.genderChip}
+                        onPress={() => setGender("Male")}
+                        accessibilityRole="radio"
+                        accessibilityLabel="Male"
+                        accessibilityState={{ checked: gender === "Male" }}
+                      >
+                        <RadioButton value="Male" />
+                        <Text style={{ color: colors.textPrimary }}>Male</Text>
+                      </Pressable>
+                      <Pressable
+                        style={styles.genderChip}
+                        onPress={() => setGender("Female")}
+                        accessibilityRole="radio"
+                        accessibilityLabel="Female"
+                        accessibilityState={{ checked: gender === "Female" }}
+                      >
+                        <RadioButton value="Female" />
+                        <Text style={{ color: colors.textPrimary }}>Female</Text>
+                      </Pressable>
+                    </View>
+                  </RadioButton.Group>
+                </Labeled>
+              </View>
+
+              {/* Booking Details Section */}
+              <View style={styles.sectionCard}>
+                <Text style={styles.sectionTitle} accessible accessibilityRole="header">
+                  Booking Details
+                </Text>
+
+                <Labeled label="Date of Joining" required>
+                  <Pressable
+                    style={styles.dateBtn}
+                    onPress={openJoiningDatePicker}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Select joining date, current: ${formatDisplayDate(joiningDate)}`}
+                    accessible
+                  >
+                    <MaterialIcons name="event" size={20} color={colors.textSecondary} />
+                    <PaperText
+                      style={{
+                        color: joiningDate ? colors.textPrimary : colors.textMuted,
+                        fontSize: typography.fontSizeMd,
+                        flex: 1,
+                      }}
+                    >
+                      {formatDisplayDate(joiningDate)}
+                    </PaperText>
+                    <MaterialIcons
+                      name="keyboard-arrow-down"
+                      size={20}
+                      color={colors.textSecondary}
+                    />
+                  </Pressable>
+                </Labeled>
+
+                <Labeled label="Move Out Date" required>
+                  <Pressable
+                    style={[styles.dateBtn, !joiningDate && styles.disabledDateBtn]}
+                    onPress={openMoveOutDatePicker}
+                    disabled={!joiningDate}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Select move out date, current: ${formatDisplayDate(moveOutDate)}`}
+                    accessibilityState={{ disabled: !joiningDate }}
+                    accessible
+                  >
+                    <MaterialIcons name="event" size={20} color={colors.textSecondary} />
+                    <PaperText
+                      style={{
+                        color: moveOutDate ? colors.textPrimary : colors.textMuted,
+                        fontSize: typography.fontSizeMd,
+                        flex: 1,
+                      }}
+                    >
+                      {formatDisplayDate(moveOutDate)}
+                    </PaperText>
+                    <MaterialIcons
+                      name="keyboard-arrow-down"
+                      size={20}
+                      color={colors.textSecondary}
+                    />
+                  </Pressable>
+                </Labeled>
+
+                {stayDaysNote ? (
+                  <Text style={styles.helpText} accessible accessibilityRole="text">
+                    {stayDaysNote}
+                  </Text>
+                ) : null}
+
+                <View style={styles.row}>
+                  <View style={styles.col}>
+                    <Labeled label="Room" required>
+                      <SheetSelect
+                        value={roomId}
+                        placeholder="Select Room"
+                        options={roomOptions}
+                        onChange={(v) => {
+                          setRoomId(v);
+                          setBedNumber("");
+                        }}
+                        disabled={!datesSelected || isLoadingRooms}
+                      />
+                      {isLoadingRooms && datesSelected && (
+                        <View style={{ flexDirection: "row", alignItems: "center", marginTop: 4 }}>
+                          <ActivityIndicator size="small" color={colors.accent} />
+                          <Text style={{ marginLeft: 8, color: colors.textSecondary, fontSize: 12 }}>
+                            Loading rooms...
+                          </Text>
+                        </View>
+                      )}
+                    </Labeled>
+                  </View>
+                  <View style={styles.col}>
+                    <Labeled label="Bed" required>
+                      <SheetSelect
+                        value={bedNumber}
+                        placeholder="Select Bed"
+                        options={bedOptions}
+                        onChange={setBedNumber}
+                        disabled={!roomId}
+                      />
+                    </Labeled>
+                  </View>
+                </View>
+              </View>
+
+              {/* Financials Section */}
+              <View style={styles.sectionCard}>
+                <Text style={styles.sectionTitle} accessible accessibilityRole="header">
+                  Financials
+                </Text>
+
+                <View style={styles.row}>
+                  <View style={styles.col}>
+                    <Labeled label="Rent Amount" required>
+                      <TextInput
+                        value={rentAmount ? formatIndianNumber(rentAmount) : ""}
+                        onChangeText={onAmountChange(setRentAmount)}
+                        placeholder="e.g., 5,000"
+                        mode="outlined"
+                        theme={{ roundness: radius.lg }}
+                        outlineColor={hexToRgba(colors.textSecondary, 0.22)}
+                        activeOutlineColor={colors.accent}
+                        style={styles.input}
+                        textColor={colors.textPrimary}
+                        placeholderTextColor={colors.textMuted}
+                        keyboardType={Platform.OS === "ios" ? "number-pad" : "numeric"}
+                        left={
+                          <TextInput.Affix
+                            text="₹"
+                            textStyle={{ color: colors.textSecondary, fontWeight: "600" }}
+                          />
+                        }
+                        contentStyle={{ minHeight: 48, padding: spacing.sm }}
+                        accessibilityLabel="Rent amount"
+                      />
+                    </Labeled>
+                  </View>
+                  <View style={styles.col}>
+                    <Labeled label="Deposit Amount" required>
+                      <TextInput
+                        value={depositAmount ? formatIndianNumber(depositAmount) : ""}
+                        onChangeText={onAmountChange(setDepositAmount)}
+                        placeholder="e.g., 10,000"
+                        mode="outlined"
+                        theme={{ roundness: radius.lg }}
+                        outlineColor={hexToRgba(colors.textSecondary, 0.22)}
+                        activeOutlineColor={colors.accent}
+                        style={styles.input}
+                        textColor={colors.textPrimary}
+                        placeholderTextColor={colors.textMuted}
+                        keyboardType={Platform.OS === "ios" ? "number-pad" : "numeric"}
+                        left={
+                          <TextInput.Affix
+                            text="₹"
+                            textStyle={{ color: colors.textSecondary, fontWeight: "600" }}
+                          />
+                        }
+                        contentStyle={{ minHeight: 48, padding: spacing.sm }}
+                        accessibilityLabel="Deposit amount"
+                      />
+                    </Labeled>
+                  </View>
+                </View>
+
+                <Labeled label="Due Amount for Stay">
+                  <TextInput
+                    value={dueAmountForStay > 0 ? `₹ ${formatIndianNumber(String(dueAmountForStay))}` : ""}
+                    editable={false}
+                    mode="outlined"
+                    theme={{ roundness: radius.lg }}
+                    outlineColor={hexToRgba(colors.textSecondary, 0.22)}
+                    style={[styles.input, { backgroundColor: colors.surface }]}
+                    textColor={colors.textPrimary}
+                    placeholder="Auto-calculated"
+                    placeholderTextColor={colors.textMuted}
+                    contentStyle={{ minHeight: 48, padding: spacing.sm }}
+                    accessibilityLabel="Due amount for stay"
+                  />
+                </Labeled>
+
+                <View style={styles.row}>
+                  <View style={styles.col}>
+                    <Labeled label="Collected Adv. Rent">
+                      <TextInput
+                        value={collectedAdvRent ? formatIndianNumber(collectedAdvRent) : ""}
+                        onChangeText={onAmountChange(setCollectedAdvRent)}
+                        placeholder="e.g., 5,000"
+                        mode="outlined"
+                        theme={{ roundness: radius.lg }}
+                        outlineColor={hexToRgba(colors.textSecondary, 0.22)}
+                        activeOutlineColor={colors.accent}
+                        style={styles.input}
+                        textColor={colors.textPrimary}
+                        placeholderTextColor={colors.textMuted}
+                        keyboardType={Platform.OS === "ios" ? "number-pad" : "numeric"}
+                        left={
+                          <TextInput.Affix
+                            text="₹"
+                            textStyle={{ color: colors.textSecondary, fontWeight: "600" }}
+                          />
+                        }
+                        contentStyle={{ minHeight: 48, padding: spacing.sm }}
+                        accessibilityLabel="Collected advance rent"
+                      />
+                    </Labeled>
+                  </View>
+                  <View style={styles.col}>
+                    <Labeled label="Collected Adv. Deposit">
+                      <TextInput
+                        value={collectedAdvDeposit ? formatIndianNumber(collectedAdvDeposit) : ""}
+                        onChangeText={onAmountChange(setCollectedAdvDeposit)}
+                        placeholder="e.g., 5,000"
+                        mode="outlined"
+                        theme={{ roundness: radius.lg }}
+                        outlineColor={hexToRgba(colors.textSecondary, 0.22)}
+                        activeOutlineColor={colors.accent}
+                        style={styles.input}
+                        textColor={colors.textPrimary}
+                        placeholderTextColor={colors.textMuted}
+                        keyboardType={Platform.OS === "ios" ? "number-pad" : "numeric"}
+                        left={
+                          <TextInput.Affix
+                            text="₹"
+                            textStyle={{ color: colors.textSecondary, fontWeight: "600" }}
+                          />
+                        }
+                        contentStyle={{ minHeight: 48, padding: spacing.sm }}
+                        accessibilityLabel="Collected advance deposit"
+                      />
+                    </Labeled>
+                  </View>
+                </View>
+              </View>
+
+              <Divider
+                style={{ marginVertical: spacing.sm, backgroundColor: colors.borderColor }}
+              />
+
+              {/* Footer Buttons */}
+              <View style={styles.footerRow}>
+                <Button
+                  mode="outlined"
+                  style={styles.secondaryBtn}
+                  textColor={colors.textPrimary}
+                  onPress={navigateBack}
+                  disabled={isMutating}
+                  accessibilityLabel="Cancel and go back"
+                  accessibilityHint="Discards changes and returns to bookings list"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  mode="contained"
+                  style={styles.primaryBtn}
+                  onPress={handleSubmit}
+                  loading={isMutating}
+                  disabled={isMutating}
+                  accessibilityLabel={isEditMode ? "Save changes" : "Save booking"}
+                >
+                  {isEditMode ? "Save Changes" : "Save Booking"}
+                </Button>
+              </View>
+            </ScrollView>
+          </TouchableWithoutFeedback>
+        </KeyboardAvoidingView>
       </View>
 
-      {/* Body */}
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }} keyboardVerticalOffset={Platform.OS === "ios" ? insets.top + 60 : 0}>
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-          <ScrollView style={styles.body} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: insets.bottom + spacing.lg * 2 }} showsVerticalScrollIndicator={false}>
-            <Text style={styles.sectionTitle}>Booking Details</Text>
-
-            {/* Tenant Name */}
-            <Labeled label="Tenant Name" required>
-              <TextInput
-                mode="outlined"
-                value={tenantName}
-                onChangeText={setTenantName}
-                placeholder="Enter tenant name"
-                style={styles.input}
-                outlineColor={hexToRgba(colors.textMuted, 0.2)}
-                activeOutlineColor={colors.accent}
-                textColor={colors.textPrimary}
-                placeholderTextColor={colors.textMuted}
-              />
-            </Labeled>
-
-            {/* Phone Number */}
-            <Labeled label="Phone Number" required>
-              <TextInput
-                mode="outlined"
-                value={phoneNumber}
-                onChangeText={(t) => setPhoneNumber(t.replace(/\D/g, "").slice(0, 10))}
-                placeholder="10-digit phone number"
-                keyboardType="phone-pad"
-                style={styles.input}
-                outlineColor={hexToRgba(colors.textMuted, 0.2)}
-                activeOutlineColor={colors.accent}
-                textColor={colors.textPrimary}
-                placeholderTextColor={colors.textMuted}
-                maxLength={10}
-              />
-            </Labeled>
-
-            {/* Date of Joining */}
-            <Labeled label="Date of Joining" required>
-              <Pressable
-                style={styles.dateField}
-                onPress={() => {
-                  setTempJoiningDate(joiningDate ?? today);
-                  setShowJoiningPicker(true);
-                }}
-                accessibilityRole="button"
-                accessibilityLabel="Select joining date"
-              >
-                <Text style={[styles.dateText, !joiningDate && styles.datePlaceholder]}>
-                  {joiningDate ? formatDisplayDate(joiningDate) : "Select date"}
-                </Text>
-                <MaterialIcons name="calendar-today" size={20} color={colors.textMuted} />
-              </Pressable>
-            </Labeled>
-
-            {/* Move Out Date */}
-            <Labeled label="Move Out Date" required>
-              <Pressable
-                style={[styles.dateField, !joiningDate && styles.dateFieldDisabled]}
-                onPress={() => {
-                  if (joiningDate) {
-                    setTempMoveOutDate(moveOutDate ?? joiningDate);
-                    setShowMoveOutPicker(true);
-                  }
-                }}
-                disabled={!joiningDate}
-                accessibilityRole="button"
-                accessibilityLabel="Select move out date"
-              >
-                <Text style={[styles.dateText, !moveOutDate && styles.datePlaceholder]}>
-                  {moveOutDate ? formatDisplayDate(moveOutDate) : "Select date"}
-                </Text>
-                <MaterialIcons name="calendar-today" size={20} color={colors.textMuted} />
-              </Pressable>
-            </Labeled>
-
-            {stayDaysNote ? <Text style={styles.noteText}>{stayDaysNote}</Text> : null}
-
-            {/* Gender */}
-            <Labeled label="Gender" required>
-              <View style={styles.radioRow}>
-                <View style={styles.radioItem}>
-                  <RadioButton value="Male" status={gender === "Male" ? "checked" : "unchecked"} onPress={() => setGender("Male")} color={colors.accent} />
-                  <Text style={styles.radioLabel}>Male</Text>
-                </View>
-                <View style={styles.radioItem}>
-                  <RadioButton value="Female" status={gender === "Female" ? "checked" : "unchecked"} onPress={() => setGender("Female")} color={colors.accent} />
-                  <Text style={styles.radioLabel}>Female</Text>
-                </View>
-              </View>
-            </Labeled>
-
-            <Text style={styles.sectionTitle}>Room Details</Text>
-
-            {/* Room Select */}
-            <Labeled label="Room" required>
-              <View style={!datesSelected && styles.disabledField}>
-                <SheetSelect
-                  label="Select Room"
-                  value={roomId}
-                  options={roomOptions.map((r) => ({ id: r.id, value: r.value }))}
-                  onChange={(v: string) => {
-                    setRoomId(v);
-                    setBedNumber("");
-                  }}
-                  disabled={!datesSelected || isLoadingRooms}
-                />
-              </View>
-              {isLoadingRooms && datesSelected && (
-                <View style={{ flexDirection: "row", alignItems: "center", marginTop: 4 }}>
-                  <ActivityIndicator size="small" color={colors.accent} />
-                  <Text style={{ marginLeft: 8, color: colors.textSecondary, fontSize: 12 }}>Loading rooms...</Text>
-                </View>
-              )}
-            </Labeled>
-
-            {/* Bed Select */}
-            <Labeled label="Bed" required>
-              <View style={!roomId && styles.disabledField}>
-                <SheetSelect
-                  label="Select Bed"
-                  value={bedNumber}
-                  options={bedOptions}
-                  onChange={setBedNumber}
-                  disabled={!roomId}
-                />
-              </View>
-            </Labeled>
-
-            <Text style={styles.sectionTitle}>Payment Details</Text>
-
-            {/* Rent Amount */}
-            <Labeled label="Rent Amount" required>
-              <TextInput
-                mode="outlined"
-                value={formatIndianNumber(parseFormattedNumber(rentAmount))}
-                onChangeText={(t) => setRentAmount(t.replace(/[^0-9]/g, ""))}
-                placeholder="Enter rent amount"
-                keyboardType="numeric"
-                style={styles.input}
-                outlineColor={hexToRgba(colors.textMuted, 0.2)}
-                activeOutlineColor={colors.accent}
-                textColor={colors.textPrimary}
-                placeholderTextColor={colors.textMuted}
-                left={<TextInput.Affix text="₹" />}
-              />
-            </Labeled>
-
-            {/* Deposit Amount */}
-            <Labeled label="Deposit Amount" required>
-              <TextInput
-                mode="outlined"
-                value={formatIndianNumber(parseFormattedNumber(depositAmount))}
-                onChangeText={(t) => setDepositAmount(t.replace(/[^0-9]/g, ""))}
-                placeholder="Enter deposit amount"
-                keyboardType="numeric"
-                style={styles.input}
-                outlineColor={hexToRgba(colors.textMuted, 0.2)}
-                activeOutlineColor={colors.accent}
-                textColor={colors.textPrimary}
-                placeholderTextColor={colors.textMuted}
-                left={<TextInput.Affix text="₹" />}
-              />
-            </Labeled>
-
-            {/* Due Amount for Stay */}
-            <Labeled label="Due Amount for Stay" required>
-              <TextInput
-                mode="outlined"
-                value={formatIndianNumber(dueAmountForStay)}
-                editable={false}
-                style={[styles.input, styles.disabledField]}
-                outlineColor={hexToRgba(colors.textMuted, 0.2)}
-                textColor={colors.textPrimary}
-                left={<TextInput.Affix text="₹" />}
-              />
-            </Labeled>
-
-            {/* Collected Adv Rent */}
-            <Labeled label="Collected Adv Rent Amount">
-              <TextInput
-                mode="outlined"
-                value={collectedAdvRent ? formatIndianNumber(parseFormattedNumber(collectedAdvRent)) : ""}
-                onChangeText={(t) => setCollectedAdvRent(t.replace(/[^0-9]/g, ""))}
-                placeholder="Enter collected advance rent"
-                keyboardType="numeric"
-                style={styles.input}
-                outlineColor={hexToRgba(colors.textMuted, 0.2)}
-                activeOutlineColor={colors.accent}
-                textColor={colors.textPrimary}
-                placeholderTextColor={colors.textMuted}
-                left={<TextInput.Affix text="₹" />}
-              />
-            </Labeled>
-
-            {/* Collected Adv Deposit */}
-            <Labeled label="Collected Adv Deposit Amount">
-              <TextInput
-                mode="outlined"
-                value={collectedAdvDeposit ? formatIndianNumber(parseFormattedNumber(collectedAdvDeposit)) : ""}
-                onChangeText={(t) => setCollectedAdvDeposit(t.replace(/[^0-9]/g, ""))}
-                placeholder="Enter collected advance deposit"
-                keyboardType="numeric"
-                style={styles.input}
-                outlineColor={hexToRgba(colors.textMuted, 0.2)}
-                activeOutlineColor={colors.accent}
-                textColor={colors.textPrimary}
-                placeholderTextColor={colors.textMuted}
-                left={<TextInput.Affix text="₹" />}
-              />
-            </Labeled>
-
-            {/* Email */}
-            <Labeled label="Email">
-              <TextInput
-                mode="outlined"
-                value={email}
-                onChangeText={setEmail}
-                placeholder="Enter email address"
-                keyboardType="email-address"
-                autoCapitalize="none"
-                style={styles.input}
-                outlineColor={hexToRgba(colors.textMuted, 0.2)}
-                activeOutlineColor={colors.accent}
-                textColor={colors.textPrimary}
-                placeholderTextColor={colors.textMuted}
-              />
-            </Labeled>
-          </ScrollView>
-        </TouchableWithoutFeedback>
-      </KeyboardAvoidingView>
-
-      {/* Android Date Pickers */}
+      {/* Joining Date Picker - Platform specific */}
       {Platform.OS === "android" && showJoiningPicker && (
         <DateTimePicker
-          value={joiningDate ?? today}
+          value={joiningDate || today}
           mode="date"
           display="default"
           onChange={handleJoiningDateChange}
@@ -1109,9 +1471,11 @@ export default function IntrimBookingScreen() {
           maximumDate={maxJoiningDate}
         />
       )}
+
+      {/* Move Out Date Picker - Platform specific */}
       {Platform.OS === "android" && showMoveOutPicker && (
         <DateTimePicker
-          value={moveOutDate ?? minMoveOutDate}
+          value={moveOutDate || minMoveOutDate}
           mode="date"
           display="default"
           onChange={handleMoveOutDateChange}
@@ -1120,58 +1484,90 @@ export default function IntrimBookingScreen() {
         />
       )}
 
-      {/* iOS Date Picker Modals */}
+      {/* iOS Joining Date Picker Modal */}
       {Platform.OS === "ios" && showJoiningPicker && (
-        <Modal visible transparent animationType="slide" onRequestClose={() => setShowJoiningPicker(false)}>
-          <Pressable style={styles.modalOverlay} onPress={() => setShowJoiningPicker(false)}>
-            <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
-              <View style={styles.modalHeader}>
-                <Pressable onPress={() => setShowJoiningPicker(false)}>
-                  <Text style={[styles.modalAction, { color: colors.error }]}>Cancel</Text>
+        <Modal
+          visible={showJoiningPicker}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowJoiningPicker(false)}
+        >
+          <Pressable
+            style={styles.datePickerModal}
+            onPress={() => setShowJoiningPicker(false)}
+          >
+            <Pressable style={styles.datePickerContainer} onPress={() => {}}>
+              <View style={styles.datePickerHeader}>
+                <Pressable
+                  onPress={() => setShowJoiningPicker(false)}
+                  style={styles.datePickerBtn}
+                >
+                  <Text style={[styles.datePickerBtnText, { color: colors.error }]}>Cancel</Text>
                 </Pressable>
-                <Text style={styles.modalTitle}>Date of Joining</Text>
-                <Pressable onPress={confirmJoiningDate}>
-                  <Text style={styles.modalAction}>Done</Text>
+                <Text style={styles.datePickerTitle}>Select Joining Date</Text>
+                <Pressable onPress={confirmJoiningDate} style={styles.datePickerBtn}>
+                  <Text style={[styles.datePickerBtnText, { color: colors.accent }]}>Done</Text>
                 </Pressable>
               </View>
               <DateTimePicker
-                value={tempJoiningDate}
+                value={
+                  tempJoiningDate instanceof Date && !isNaN(tempJoiningDate.getTime())
+                    ? tempJoiningDate
+                    : new Date()
+                }
                 mode="date"
                 display="spinner"
                 onChange={handleJoiningDateChange}
-                minimumDate={minJoiningDate}
-                maximumDate={maxJoiningDate}
                 style={{ height: 200 }}
                 textColor={colors.textPrimary}
                 themeVariant="light"
+                minimumDate={minJoiningDate}
+                maximumDate={maxJoiningDate}
               />
             </Pressable>
           </Pressable>
         </Modal>
       )}
+
+      {/* iOS Move Out Date Picker Modal */}
       {Platform.OS === "ios" && showMoveOutPicker && (
-        <Modal visible transparent animationType="slide" onRequestClose={() => setShowMoveOutPicker(false)}>
-          <Pressable style={styles.modalOverlay} onPress={() => setShowMoveOutPicker(false)}>
-            <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
-              <View style={styles.modalHeader}>
-                <Pressable onPress={() => setShowMoveOutPicker(false)}>
-                  <Text style={[styles.modalAction, { color: colors.error }]}>Cancel</Text>
+        <Modal
+          visible={showMoveOutPicker}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowMoveOutPicker(false)}
+        >
+          <Pressable
+            style={styles.datePickerModal}
+            onPress={() => setShowMoveOutPicker(false)}
+          >
+            <Pressable style={styles.datePickerContainer} onPress={() => {}}>
+              <View style={styles.datePickerHeader}>
+                <Pressable
+                  onPress={() => setShowMoveOutPicker(false)}
+                  style={styles.datePickerBtn}
+                >
+                  <Text style={[styles.datePickerBtnText, { color: colors.error }]}>Cancel</Text>
                 </Pressable>
-                <Text style={styles.modalTitle}>Move Out Date</Text>
-                <Pressable onPress={confirmMoveOutDate}>
-                  <Text style={styles.modalAction}>Done</Text>
+                <Text style={styles.datePickerTitle}>Select Move Out Date</Text>
+                <Pressable onPress={confirmMoveOutDate} style={styles.datePickerBtn}>
+                  <Text style={[styles.datePickerBtnText, { color: colors.accent }]}>Done</Text>
                 </Pressable>
               </View>
               <DateTimePicker
-                value={tempMoveOutDate}
+                value={
+                  tempMoveOutDate instanceof Date && !isNaN(tempMoveOutDate.getTime())
+                    ? tempMoveOutDate
+                    : minMoveOutDate
+                }
                 mode="date"
                 display="spinner"
                 onChange={handleMoveOutDateChange}
-                minimumDate={minMoveOutDate}
-                maximumDate={maxMoveOutDate}
                 style={{ height: 200 }}
                 textColor={colors.textPrimary}
                 themeVariant="light"
+                minimumDate={minMoveOutDate}
+                maximumDate={maxMoveOutDate}
               />
             </Pressable>
           </Pressable>

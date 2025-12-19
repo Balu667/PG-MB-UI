@@ -1,4 +1,3 @@
-import { StatusBar } from "expo-status-bar";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "react-native-reanimated";
 import { ThemeProvider } from "@/src/theme/ThemeContext";
@@ -13,6 +12,7 @@ import Toast from "react-native-toast-message";
 import { Slot } from "expo-router";
 
 import { Provider as PaperProvider } from "react-native-paper"; // ✅ Added
+import StatusBar from "@/src/components/StatusBar";
 
 const queryClient = new QueryClient();
 
@@ -24,7 +24,7 @@ export default function RootLayout() {
           <ThemeProvider>
             <PaperProvider>
               <GestureHandlerRootView style={styles.container}>
-                <StatusBar style="auto" />
+                <StatusBar />
                 <Toast />
                 <Slot />
               </GestureHandlerRootView>

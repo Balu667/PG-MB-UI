@@ -20,6 +20,7 @@ export default function ProtectedLayout() {
     "/protected/dues", // hide header for Pay/Edit Due screen
     "/protected/profile", // hide header for Profile screen (has own header)
     "/protected/settings", // hide header for Settings screen (has own header)
+    "/protected/intrim", // hide header for Add/Edit Interim Booking screen
   ]);
 
   const isPropertyDetail = pathname.startsWith("/protected/property/");

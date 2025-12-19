@@ -150,12 +150,16 @@ const RoomCard: React.FC<Props> = ({ room }) => {
     }
   }, [derivedStatus, colors.textMuted]);
 
+  // Short term beds count
+  const shortTermBeds = num(room?.shortTermBeds ?? room?.shortTermBookings ?? 0);
+
   // Bed breakdown
   const bedBreakdown = [
     { key: "vacant", label: "Vacant", value: vacantBeds, color: "#10B981", icon: "bed-empty" },
     { key: "occupied", label: "Occupied", value: occupiedBeds, color: "#EF4444", icon: "bed" },
     { key: "notice", label: "Notice", value: underNotice, color: "#8B5CF6", icon: "bell-ring" },
-    { key: "booked", label: "Booked", value: advanceBookings, color: "#F59E0B", icon: "calendar-check" },
+    { key: "booked", label: "Advance", value: advanceBookings, color: "#F97316", icon: "calendar-check" },
+    { key: "shortTerm", label: "Short", value: shortTermBeds, color: "#F59E0B", icon: "clock-outline" },
   ];
 
   const styles = useMemo(

@@ -35,11 +35,11 @@ import {
 ───────────────────────────────────────────────────────────────────────────── */
 
 interface TenantDetails {
-  _id?: string;
-  name?: string;
+    _id?: string;
+    name?: string;
   email?: string | null;
   phoneNumber?: string;
-  roomNumber?: string;
+    roomNumber?: string;
   sharingType?: number;
 }
 
@@ -124,26 +124,26 @@ const withinRange = (dtISO?: string, range?: DateFilter): boolean => {
 
   if (range.from) {
     const fromStart = new Date(
-      range.from.getFullYear(),
-      range.from.getMonth(),
-      range.from.getDate(),
-      0,
-      0,
-      0,
-      0
+        range.from.getFullYear(),
+        range.from.getMonth(),
+        range.from.getDate(),
+        0,
+        0,
+        0,
+        0
     ).getTime();
     if (t < fromStart) return false;
   }
 
   if (range.to) {
     const toEnd = new Date(
-      range.to.getFullYear(),
-      range.to.getMonth(),
-      range.to.getDate(),
-      23,
-      59,
-      59,
-      999
+        range.to.getFullYear(),
+        range.to.getMonth(),
+        range.to.getDate(),
+        23,
+        59,
+        59,
+        999
     ).getTime();
     if (t > toEnd) return false;
   }
@@ -402,19 +402,19 @@ const CollectionCard: React.FC<CollectionCardProps> = React.memo(
     }, [item, onDownload]);
 
     const styles = useMemo(
-      () =>
-        StyleSheet.create({
+    () =>
+      StyleSheet.create({
           cardWrapper: {
             marginBottom: spacing.md,
-          },
-          card: {
+        },
+        card: {
             borderRadius: radius.xl + 2,
-            backgroundColor: colors.cardBackground,
-            borderWidth: 1,
-            borderColor: colors.borderColor,
+          backgroundColor: colors.cardBackground,
+          borderWidth: 1,
+          borderColor: colors.borderColor,
             shadowColor: colors.shadow ?? "#000",
-            shadowOffset: { width: 0, height: 6 },
-            shadowOpacity: 0.08,
+          shadowOffset: { width: 0, height: 6 },
+          shadowOpacity: 0.08,
             shadowRadius: 16,
             elevation: 5,
             overflow: "hidden",
@@ -427,26 +427,26 @@ const CollectionCard: React.FC<CollectionCardProps> = React.memo(
           },
           cardContent: {
             padding: spacing.md,
-          },
-          headerRow: {
+        },
+        headerRow: {
             flexDirection: "row",
             alignItems: "flex-start",
             justifyContent: "space-between",
             marginBottom: spacing.sm + 2,
           },
           leftSection: {
-            flexDirection: "row",
-            alignItems: "center",
+          flexDirection: "row",
+          alignItems: "center",
             gap: spacing.sm + 2,
             flex: 1,
-          },
-          avatar: {
+        },
+        avatar: {
             width: isTablet ? 52 : 46,
             height: isTablet ? 52 : 46,
             borderRadius: isTablet ? 26 : 23,
-            alignItems: "center",
-            justifyContent: "center",
-            backgroundColor: hexToRgba(colors.accent, 0.12),
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: hexToRgba(colors.accent, 0.12),
             borderWidth: 2,
             borderColor: hexToRgba(colors.accent, 0.2),
           },
@@ -484,32 +484,32 @@ const CollectionCard: React.FC<CollectionCardProps> = React.memo(
             marginTop: 2,
           },
           badgesRow: {
-            flexDirection: "row",
-            flexWrap: "wrap",
+          flexDirection: "row",
+          flexWrap: "wrap",
             gap: spacing.sm,
             marginBottom: spacing.sm + 2,
-          },
+        },
           dateChip: {
-            flexDirection: "row",
-            alignItems: "center",
+          flexDirection: "row",
+          alignItems: "center",
             gap: 5,
             paddingHorizontal: spacing.sm + 2,
             paddingVertical: 5,
             borderRadius: radius.full,
-            backgroundColor: colors.surface,
-            borderWidth: 1,
+          backgroundColor: colors.surface,
+          borderWidth: 1,
             borderColor: hexToRgba(colors.textSecondary, 0.12),
-          },
+        },
           dateText: {
             fontSize: 11,
             fontWeight: "600",
             color: colors.textPrimary,
           },
           divider: {
-            height: 1,
+          height: 1,
             backgroundColor: hexToRgba(colors.textSecondary, 0.08),
-            marginVertical: spacing.sm,
-          },
+          marginVertical: spacing.sm,
+        },
           detailsGrid: {
             flexDirection: "row",
             flexWrap: "wrap",
@@ -532,9 +532,9 @@ const CollectionCard: React.FC<CollectionCardProps> = React.memo(
             color: colors.textPrimary,
           },
           footerRow: {
-            flexDirection: "row",
+          flexDirection: "row",
             alignItems: "center",
-            justifyContent: "space-between",
+          justifyContent: "space-between",
             marginTop: spacing.sm + 2,
           },
           statusBadge: {
@@ -734,7 +734,7 @@ const EmptyState: React.FC<EmptyStateProps> = React.memo(
             height: 88,
             borderRadius: 44,
             backgroundColor: hexToRgba(colors.accent, 0.1),
-            alignItems: "center",
+          alignItems: "center",
             justifyContent: "center",
             marginBottom: spacing.lg,
           },
@@ -744,7 +744,7 @@ const EmptyState: React.FC<EmptyStateProps> = React.memo(
             color: colors.textPrimary,
             marginBottom: spacing.sm,
             textAlign: "center",
-          },
+        },
           subtitle: {
             fontSize: 14,
             color: colors.textSecondary,
@@ -817,11 +817,11 @@ const ListHeader: React.FC<ListHeaderProps> = React.memo(
             gap: spacing.md,
           },
           sectionHeader: {
-            flexDirection: "row",
+          flexDirection: "row",
             alignItems: "center",
             justifyContent: "space-between",
             paddingHorizontal: spacing.xs,
-            marginTop: spacing.sm,
+          marginTop: spacing.sm,
           },
           sectionTitle: {
             fontSize: isTablet ? 18 : 16,
@@ -829,8 +829,8 @@ const ListHeader: React.FC<ListHeaderProps> = React.memo(
             color: colors.textPrimary,
           },
           resultsBadge: {
-            flexDirection: "row",
-            alignItems: "center",
+          flexDirection: "row",
+          alignItems: "center",
             gap: 4,
             paddingHorizontal: spacing.sm + 2,
             paddingVertical: 4,
@@ -850,7 +850,7 @@ const ListHeader: React.FC<ListHeaderProps> = React.memo(
             borderWidth: 1,
             borderColor: hexToRgba(colors.accent, 0.08),
           },
-        }),
+      }),
       [colors, spacing, radius, typography, isTablet]
     );
 
@@ -860,8 +860,8 @@ const ListHeader: React.FC<ListHeaderProps> = React.memo(
         {Array.isArray(metrics) && metrics.length > 0 && (
           <StatsGrid
             metrics={metrics}
-            minVisible={width >= 900 ? 4 : width >= 740 ? 3 : 2}
-            cardHeight={94}
+            minVisible={3}
+            cardHeight={72}
           />
         )}
 

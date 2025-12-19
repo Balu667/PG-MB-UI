@@ -14,7 +14,6 @@ import { useTheme } from "@/src/theme/ThemeContext";
 import { hexToRgba } from "../theme";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
-import { LinearGradient } from "expo-linear-gradient";
 import { Portal, Dialog, Button } from "react-native-paper";
 import { useProperty } from "@/src/context/PropertyContext";
 
@@ -22,7 +21,6 @@ import { useProperty } from "@/src/context/PropertyContext";
    HELPERS
 ───────────────────────────────────────────────────────────────────────────── */
 
-// Format number to Indian currency format: 34567 => 34,567
 const formatIndianNumber = (num: number | undefined | null): string => {
   if (num === undefined || num === null || isNaN(num)) return "0";
   const str = Math.abs(Math.round(num)).toString();
@@ -57,10 +55,10 @@ interface PropertyMetadata {
   occupiedBeds?: number;
   advancedBookings?: number;
   underNotice?: number;
+  shortTermBeds?: number;
   expenses?: number;
   dues?: number;
   income?: number;
-  complaints?: number;
 }
 
 interface PropertyData {
@@ -88,159 +86,7 @@ interface PropertyCardProps {
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   STAT ITEM COMPONENT
-───────────────────────────────────────────────────────────────────────────── */
-
-interface StatItemProps {
-  icon: string;
-  label: string;
-  value: number;
-  color: string;
-  isCompact: boolean;
-}
-
-const StatItem = React.memo<StatItemProps>(({ icon, label, value, color, isCompact }) => {
-  const { colors, radius } = useTheme();
-
-  return (
-    <View
-      style={[
-        statStyles.container,
-        {
-          backgroundColor: hexToRgba(color, 0.08),
-          borderRadius: radius.md,
-          paddingVertical: isCompact ? 10 : 12,
-          paddingHorizontal: isCompact ? 8 : 10,
-        },
-      ]}
-      accessibilityLabel={`${label}: ${value}`}
-      accessible
-    >
-      <View style={[statStyles.iconContainer, { backgroundColor: hexToRgba(color, 0.15) }]}>
-        <MaterialCommunityIcons name={icon as never} size={isCompact ? 16 : 18} color={color} />
-      </View>
-      <Text style={[statStyles.value, { color: colors.textPrimary, fontSize: isCompact ? 16 : 18 }]}>
-        {value}
-      </Text>
-      <Text
-        style={[statStyles.label, { color: colors.textMuted, fontSize: isCompact ? 10 : 11 }]}
-        numberOfLines={1}
-      >
-        {label}
-      </Text>
-    </View>
-  );
-});
-
-StatItem.displayName = "StatItem";
-
-const statStyles = StyleSheet.create({
-  container: {
-    alignItems: "center",
-    justifyContent: "center",
-    minWidth: 65,
-    flex: 1,
-    gap: 4,
-  },
-  iconContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 4,
-  },
-  value: {
-    fontWeight: "800",
-  },
-  label: {
-    fontWeight: "600",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-  },
-});
-
-/* ─────────────────────────────────────────────────────────────────────────────
-   OCCUPANCY BADGE COMPONENT
-───────────────────────────────────────────────────────────────────────────── */
-
-interface OccupancyBadgeProps {
-  occupied: number;
-  total: number;
-  isCompact: boolean;
-}
-
-const OccupancyBadge = React.memo<OccupancyBadgeProps>(({ occupied, total, isCompact }) => {
-  const { colors, radius } = useTheme();
-  const percentage = total > 0 ? Math.round((occupied / total) * 100) : 0;
-
-  let statusColor = "#10B981";
-  let statusLabel = "Excellent";
-  
-  if (percentage >= 85) {
-    statusColor = "#10B981";
-    statusLabel = "Excellent";
-  } else if (percentage >= 60) {
-    statusColor = "#3B82F6";
-    statusLabel = "Good";
-  } else if (percentage >= 40) {
-    statusColor = "#F59E0B";
-    statusLabel = "Average";
-  } else {
-    statusColor = "#EF4444";
-    statusLabel = "Low";
-  }
-
-  return (
-    <View
-      style={[
-        occupancyStyles.container,
-        {
-          backgroundColor: hexToRgba(statusColor, 0.1),
-          borderColor: hexToRgba(statusColor, 0.3),
-          borderRadius: radius.full,
-          paddingVertical: isCompact ? 6 : 8,
-          paddingHorizontal: isCompact ? 12 : 14,
-        },
-      ]}
-    >
-      <View style={[occupancyStyles.dot, { backgroundColor: statusColor }]} />
-      <Text style={[occupancyStyles.percentage, { color: statusColor, fontSize: isCompact ? 16 : 18 }]}>
-        {percentage}%
-      </Text>
-      <Text style={[occupancyStyles.label, { color: colors.textMuted, fontSize: isCompact ? 10 : 11 }]}>
-        {statusLabel}
-      </Text>
-    </View>
-  );
-});
-
-OccupancyBadge.displayName = "OccupancyBadge";
-
-const occupancyStyles = StyleSheet.create({
-  container: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    borderWidth: 1,
-  },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  percentage: {
-    fontWeight: "800",
-  },
-  label: {
-    fontWeight: "600",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-  },
-});
-
-/* ─────────────────────────────────────────────────────────────────────────────
-   MAIN PROPERTY CARD
+   MAIN PROPERTY CARD - Clean Compact Design
 ───────────────────────────────────────────────────────────────────────────── */
 
 const PropertyCard = React.memo<PropertyCardProps>(({ data, onPress, onDelete }) => {
@@ -254,18 +100,23 @@ const PropertyCard = React.memo<PropertyCardProps>(({ data, onPress, onDelete })
   
   const scaleAnim = React.useRef(new Animated.Value(1)).current;
 
-  // Responsive sizing
-  const numColumns = screenWidth >= 1024 ? 4 : screenWidth >= 768 ? 3 : screenWidth >= 600 ? 2 : 1;
+  // Responsive sizing - wider columns for better visibility (20% larger)
+  const numColumns = screenWidth >= 1400 ? 4 : screenWidth >= 1000 ? 3 : screenWidth >= 700 ? 2 : 1;
   const cardMargin = 8;
-  const cardWidth = (screenWidth - spacing.md * 2 - cardMargin * (numColumns - 1)) / numColumns;
+  const horizontalPadding = spacing.md;
+  const cardWidth = numColumns === 1 
+    ? screenWidth - horizontalPadding * 2 
+    : (screenWidth - horizontalPadding * 2 - cardMargin * (numColumns - 1)) / numColumns;
+  
+  // Compact mode only for very small screens
   const isCompact = cardWidth < 320;
 
   // Press handlers
   const handlePressIn = useCallback(() => {
     Animated.spring(scaleAnim, {
-      toValue: 0.97,
+      toValue: 0.98,
       useNativeDriver: true,
-      friction: 8,
+      friction: 10,
     }).start();
   }, [scaleAnim]);
 
@@ -273,7 +124,7 @@ const PropertyCard = React.memo<PropertyCardProps>(({ data, onPress, onDelete })
     Animated.spring(scaleAnim, {
       toValue: 1,
       useNativeDriver: true,
-      friction: 8,
+      friction: 10,
     }).start();
   }, [scaleAnim]);
 
@@ -320,30 +171,15 @@ const PropertyCard = React.memo<PropertyCardProps>(({ data, onPress, onDelete })
     }
   }, [data._id, onDelete]);
 
-  // Type badge colors and gradients
+  // Type configuration - simple label-based
   const typeConfig = useMemo(() => {
     switch (data.tenantType) {
       case "Male":
-        return {
-          color: "#3B82F6",
-          gradient: ["#3B82F6", "#2563EB"] as const,
-          icon: "gender-male",
-          label: "Men's",
-        };
+        return { color: "#3B82F6", icon: "gender-male", label: "Men's" };
       case "Female":
-        return {
-          color: "#EC4899",
-          gradient: ["#EC4899", "#DB2777"] as const,
-          icon: "gender-female",
-          label: "Women's",
-        };
+        return { color: "#EC4899", icon: "gender-female", label: "Women's" };
       default:
-        return {
-          color: "#8B5CF6",
-          gradient: ["#8B5CF6", "#7C3AED"] as const,
-          icon: "account-group",
-          label: "Co-living",
-        };
+        return { color: "#8B5CF6", icon: "account-group", label: "Co-living" };
     }
   }, [data.tenantType]);
 
@@ -355,37 +191,14 @@ const PropertyCard = React.memo<PropertyCardProps>(({ data, onPress, onDelete })
     return { color: "#10B981", icon: "leaf", label: "Veg" };
   }, [data.mealType]);
 
-  // Stats configuration
-  const stats = useMemo(
-    () => [
-      { icon: "bed", label: "Total", value: data.metadata?.totalBeds || 0, color: "#6366F1" },
-      {
-        icon: "bed-empty",
-        label: "Vacant",
-        value: data.metadata?.vacantBeds || 0,
-        color: "#10B981",
-      },
-      {
-        icon: "account-check",
-        label: "Filled",
-        value: data.metadata?.occupiedBeds || 0,
-        color: "#F59E0B",
-      },
-      {
-        icon: "calendar-clock",
-        label: "Booked",
-        value: data.metadata?.advancedBookings || 0,
-        color: "#8B5CF6",
-      },
-      {
-        icon: "bell-ring",
-        label: "Notice",
-        value: data.metadata?.underNotice || 0,
-        color: "#EF4444",
-      },
-    ],
-    [data.metadata]
-  );
+  // Occupancy percentage
+  const occupancy = useMemo(() => {
+    const total = data.metadata?.totalBeds || 0;
+    const occupied = data.metadata?.occupiedBeds || 0;
+    return total > 0 ? Math.round((occupied / total) * 100) : 0;
+  }, [data.metadata]);
+
+  const occupancyColor = occupancy >= 80 ? "#10B981" : occupancy >= 50 ? "#3B82F6" : occupancy >= 30 ? "#F59E0B" : "#EF4444";
 
   // Styles
   const styles = useMemo(
@@ -393,198 +206,201 @@ const PropertyCard = React.memo<PropertyCardProps>(({ data, onPress, onDelete })
       StyleSheet.create({
         container: {
           width: numColumns === 1 ? "100%" : cardWidth,
-          marginBottom: cardMargin,
+          marginBottom: cardMargin * 1.5,
         },
         card: {
           backgroundColor: colors.cardBackground,
-          borderRadius: radius.xl,
+          borderRadius: radius.lg + 2,
           overflow: "hidden",
           borderWidth: 1,
           borderColor: hexToRgba(colors.borderColor, 0.5),
-          // Shadow
           ...(Platform.OS === "ios"
             ? {
-                shadowColor: "#000000",
-                shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.1,
-                shadowRadius: 12,
+                shadowColor: "#000",
+                shadowOffset: { width: 0, height: 3 },
+                shadowOpacity: 0.08,
+                shadowRadius: 10,
               }
-            : { elevation: 5 }),
+            : { elevation: 4 }),
         },
-        headerGradient: {
-          paddingHorizontal: isCompact ? 14 : 16,
-          paddingTop: isCompact ? 14 : 16,
-          paddingBottom: isCompact ? 12 : 14,
-        },
-        headerTopRow: {
+        header: {
           flexDirection: "row",
-          justifyContent: "space-between",
           alignItems: "flex-start",
-          marginBottom: 10,
+          justifyContent: "space-between",
+          padding: isCompact ? 14 : 16,
+          borderBottomWidth: 1,
+          borderBottomColor: hexToRgba(colors.borderColor, 0.3),
         },
         headerLeft: {
           flex: 1,
           marginRight: 10,
         },
-        propertyIdBadge: {
-          flexDirection: "row",
-          alignItems: "center",
-          gap: 4,
-          backgroundColor: "rgba(255,255,255,0.2)",
-          paddingHorizontal: 8,
-          paddingVertical: 4,
-          borderRadius: radius.md,
-          alignSelf: "flex-start",
-          marginBottom: 8,
-        },
-        propertyIdText: {
-          fontSize: 10,
-          fontWeight: "700",
-          color: "#FFFFFF",
-          letterSpacing: 0.5,
+        propertyId: {
+          fontSize: 11,
+          fontWeight: "600",
+          color: colors.textMuted,
+          marginBottom: 3,
+          letterSpacing: 0.4,
         },
         propertyName: {
-          fontSize: isCompact ? 17 : 19,
-          fontWeight: "800",
-          color: "#FFFFFF",
-          marginBottom: 4,
+          fontSize: isCompact ? 16 : 18,
+          fontWeight: "700",
+          color: colors.textPrimary,
+          lineHeight: isCompact ? 22 : 24,
         },
         locationRow: {
           flexDirection: "row",
           alignItems: "center",
-          gap: 4,
+          marginTop: 4,
         },
         locationText: {
-          fontSize: isCompact ? 12 : 13,
-          color: "rgba(255,255,255,0.9)",
+          fontSize: 12,
+          color: colors.textSecondary,
+          marginLeft: 4,
+          flexShrink: 1,
         },
         headerRight: {
           alignItems: "flex-end",
-          gap: 6,
         },
-        typeBadge: {
-          flexDirection: "row",
-          alignItems: "center",
-          gap: 5,
-          backgroundColor: "rgba(255,255,255,0.25)",
-          paddingHorizontal: 10,
-          paddingVertical: 6,
-          borderRadius: radius.full,
-        },
-        typeBadgeText: {
-          fontSize: 11,
-          fontWeight: "700",
-          color: "#FFFFFF",
-        },
-        menuButton: {
-          width: 32,
-          height: 32,
-          borderRadius: 16,
-          backgroundColor: "rgba(255,255,255,0.2)",
+        menuBtn: {
+          width: 34,
+          height: 34,
+          borderRadius: 17,
+          backgroundColor: hexToRgba(colors.textMuted, 0.08),
           alignItems: "center",
           justifyContent: "center",
         },
-        content: {
+        badgesRow: {
+          flexDirection: "row",
+          flexWrap: "wrap",
+          gap: 8,
+          marginTop: 8,
+        },
+        badge: {
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 4,
+          paddingHorizontal: 8,
+          paddingVertical: 4,
+          borderRadius: 8,
+        },
+        badgeText: {
+          fontSize: 10,
+          fontWeight: "700",
+          textTransform: "uppercase",
+          letterSpacing: 0.3,
+        },
+        body: {
           padding: isCompact ? 14 : 16,
         },
-        infoRow: {
+        statsRow: {
+          flexDirection: "row",
+          justifyContent: "space-between",
+          marginBottom: 14,
+        },
+        statItem: {
+          alignItems: "center",
+          flex: 1,
+          minWidth: 0,
+        },
+        statValue: {
+          fontSize: isCompact ? 18 : 20,
+          fontWeight: "800",
+          color: colors.textPrimary,
+        },
+        statLabel: {
+          fontSize: 10,
+          fontWeight: "600",
+          color: colors.textMuted,
+          textTransform: "uppercase",
+          marginTop: 2,
+          letterSpacing: 0.3,
+        },
+        progressSection: {
+          marginBottom: 14,
+        },
+        progressHeader: {
           flexDirection: "row",
           justifyContent: "space-between",
           alignItems: "center",
-          marginBottom: 12,
+          marginBottom: 6,
         },
-        mealBadge: {
-          flexDirection: "row",
-          alignItems: "center",
-          gap: 5,
-          backgroundColor: hexToRgba(mealConfig.color, 0.1),
-          paddingHorizontal: 10,
-          paddingVertical: 6,
-          borderRadius: radius.full,
+        progressLabel: {
+          fontSize: 12,
+          fontWeight: "600",
+          color: colors.textSecondary,
         },
-        mealText: {
-          fontSize: 11,
+        progressValue: {
+          fontSize: 13,
           fontWeight: "700",
-          color: mealConfig.color,
         },
-        occupancyContainer: {
-          marginBottom: 14,
+        progressBar: {
+          height: 6,
+          backgroundColor: hexToRgba(colors.textMuted, 0.1),
+          borderRadius: 3,
+          overflow: "hidden",
         },
-        statsGrid: {
-          flexDirection: "row",
-          gap: isCompact ? 6 : 8,
-          marginBottom: 14,
-        },
-        divider: {
-          height: 1,
-          backgroundColor: hexToRgba(colors.borderColor, 0.5),
-          marginBottom: 14,
+        progressFill: {
+          height: "100%",
+          borderRadius: 3,
         },
         financialRow: {
           flexDirection: "row",
-          justifyContent: "space-between",
+          flexWrap: "wrap",
           gap: 8,
         },
         financialItem: {
           flex: 1,
+          minWidth: 90,
+          flexDirection: "row",
           alignItems: "center",
-          paddingVertical: 10,
-          borderRadius: radius.md,
-        },
-        financialIcon: {
-          width: 28,
-          height: 28,
-          borderRadius: 14,
-          alignItems: "center",
-          justifyContent: "center",
-          marginBottom: 6,
+          paddingVertical: 8,
+          paddingHorizontal: 10,
+          borderRadius: 10,
+          gap: 8,
         },
         financialValue: {
-          fontSize: isCompact ? 14 : 15,
-          fontWeight: "800",
-          marginBottom: 3,
+          fontSize: 13,
+          fontWeight: "700",
         },
         financialLabel: {
           fontSize: 10,
           fontWeight: "600",
           color: colors.textMuted,
-          textTransform: "uppercase",
-          letterSpacing: 0.5,
         },
-        // Menu styles
         menuOverlay: {
           ...StyleSheet.absoluteFillObject,
-          backgroundColor: "rgba(0,0,0,0.3)",
+          backgroundColor: "rgba(0,0,0,0.25)",
           justifyContent: "flex-start",
           alignItems: I18nManager.isRTL ? "flex-start" : "flex-end",
-          padding: 12,
-          borderRadius: radius.xl,
+          padding: 8,
+          borderRadius: radius.lg,
         },
         menuContainer: {
           backgroundColor: colors.cardBackground,
-          borderRadius: radius.lg,
+          borderRadius: radius.md,
           overflow: "hidden",
-          minWidth: 140,
+          minWidth: 120,
           borderWidth: 1,
           borderColor: colors.borderColor,
           ...(Platform.OS === "ios"
             ? {
-                shadowColor: "#000000",
+                shadowColor: "#000",
                 shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.15,
-                shadowRadius: 12,
+                shadowOpacity: 0.12,
+                shadowRadius: 10,
               }
-            : { elevation: 8 }),
+            : { elevation: 6 }),
         },
         menuItem: {
           flexDirection: "row",
           alignItems: "center",
-          gap: 10,
-          paddingVertical: 12,
-          paddingHorizontal: 14,
+          gap: 8,
+          paddingVertical: 10,
+          paddingHorizontal: 12,
         },
         menuItemText: {
-          fontSize: 14,
+          fontSize: 13,
           fontWeight: "600",
         },
         menuDivider: {
@@ -592,8 +408,18 @@ const PropertyCard = React.memo<PropertyCardProps>(({ data, onPress, onDelete })
           backgroundColor: hexToRgba(colors.borderColor, 0.5),
         },
       }),
-    [colors, radius, spacing, cardWidth, numColumns, isCompact, mealConfig]
+    [colors, radius, spacing, cardWidth, numColumns, isCompact, occupancyColor]
   );
+
+  // Stats data
+  const stats = useMemo(() => [
+    { value: data.metadata?.totalBeds || 0, label: "Total" },
+    { value: data.metadata?.vacantBeds || 0, label: "Vacant" },
+    { value: data.metadata?.occupiedBeds || 0, label: "Filled" },
+    { value: data.metadata?.advancedBookings || 0, label: "Booked" },
+    { value: data.metadata?.shortTermBeds || 0, label: "Short" },
+    { value: data.metadata?.underNotice || 0, label: "Notice" },
+  ], [data.metadata]);
 
   return (
     <View style={styles.container}>
@@ -602,143 +428,143 @@ const PropertyCard = React.memo<PropertyCardProps>(({ data, onPress, onDelete })
           onPress={handlePress}
           onPressIn={handlePressIn}
           onPressOut={handlePressOut}
-          android_ripple={{ color: hexToRgba(colors.primary, 0.1) }}
+          android_ripple={{ color: hexToRgba(colors.primary, 0.08) }}
           accessibilityRole="button"
           accessibilityLabel={`${data.propertyName} property card`}
           accessibilityHint="Tap to view property details"
           accessible
         >
-          {/* Gradient Header */}
-          <LinearGradient
-            colors={typeConfig.gradient}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.headerGradient}
-          >
-            <View style={styles.headerTopRow}>
-              <View style={styles.headerLeft}>
-                {/* Property ID Badge */}
-                {data.propertyId && (
-                  <View style={styles.propertyIdBadge}>
-                    <MaterialCommunityIcons name="identifier" size={12} color="#FFFFFF" />
-                    <Text style={styles.propertyIdText}>{data.propertyId}</Text>
+          {/* Header */}
+          <View style={styles.header}>
+            <View style={styles.headerLeft}>
+              {data.propertyId && (
+                <Text style={styles.propertyId} numberOfLines={1}>{data.propertyId}</Text>
+              )}
+              <Text style={styles.propertyName} numberOfLines={2} ellipsizeMode="tail">
+                {data.propertyName}
+              </Text>
+              <View style={styles.locationRow}>
+                <MaterialIcons name="location-on" size={13} color={colors.textSecondary} />
+                <Text style={styles.locationText} numberOfLines={1} ellipsizeMode="tail">
+                  {data.area}, {data.city}
+                </Text>
+              </View>
+              
+              {/* Badges */}
+              <View style={styles.badgesRow}>
+                <View style={[styles.badge, { backgroundColor: hexToRgba(typeConfig.color, 0.1) }]}>
+                  <MaterialCommunityIcons name={typeConfig.icon as never} size={12} color={typeConfig.color} />
+                  <Text style={[styles.badgeText, { color: typeConfig.color }]}>{typeConfig.label}</Text>
+                </View>
+                {data.mealType && (
+                  <View style={[styles.badge, { backgroundColor: hexToRgba(mealConfig.color, 0.1) }]}>
+                    <MaterialCommunityIcons name={mealConfig.icon as never} size={12} color={mealConfig.color} />
+                    <Text style={[styles.badgeText, { color: mealConfig.color }]}>{mealConfig.label}</Text>
                   </View>
                 )}
-                
-                {/* Property Name */}
-                <Text style={styles.propertyName} numberOfLines={2}>
-                  {data.propertyName}
-                </Text>
-                
-                {/* Location */}
-                <View style={styles.locationRow}>
-                  <MaterialIcons name="location-on" size={14} color="rgba(255,255,255,0.9)" />
-                  <Text style={styles.locationText} numberOfLines={1}>
-                    {data.area}, {data.city}
+              </View>
+            </View>
+
+            <View style={styles.headerRight}>
+              <Pressable
+                onPress={handleMenuOpen}
+                style={styles.menuBtn}
+                hitSlop={10}
+                accessibilityRole="button"
+                accessibilityLabel="Property options"
+                accessible
+              >
+                <MaterialIcons name="more-vert" size={20} color={colors.textSecondary} />
+              </Pressable>
+            </View>
+          </View>
+
+          {/* Body */}
+          <View style={styles.body}>
+            {/* Bed Stats Row */}
+            <View style={styles.statsRow}>
+              {stats.map((stat, idx) => (
+                <View key={idx} style={styles.statItem}>
+                  <Text 
+                    style={styles.statValue} 
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.7}
+                  >
+                    {stat.value}
+                  </Text>
+                  <Text 
+                    style={styles.statLabel} 
+                    numberOfLines={1}
+                  >
+                    {stat.label}
                   </Text>
                 </View>
-              </View>
-
-              <View style={styles.headerRight}>
-                {/* Type Badge */}
-                <View style={styles.typeBadge}>
-                  <MaterialCommunityIcons
-                    name={typeConfig.icon as never}
-                    size={14}
-                    color="#FFFFFF"
-                  />
-                  <Text style={styles.typeBadgeText}>{typeConfig.label}</Text>
-                </View>
-
-                {/* Menu Button */}
-                <Pressable
-                  onPress={handleMenuOpen}
-                  style={styles.menuButton}
-                  hitSlop={10}
-                  accessibilityRole="button"
-                  accessibilityLabel="Property options menu"
-                  accessible
-                >
-                  <MaterialIcons name="more-vert" size={20} color="#FFFFFF" />
-                </Pressable>
-              </View>
-            </View>
-          </LinearGradient>
-
-          {/* Content Section */}
-          <View style={styles.content}>
-            {/* Meal Type & Occupancy Row */}
-            <View style={styles.infoRow}>
-              {/* Meal Badge */}
-              {data.mealType && (
-                <View style={styles.mealBadge}>
-                  <MaterialCommunityIcons
-                    name={mealConfig.icon as never}
-                    size={14}
-                    color={mealConfig.color}
-                  />
-                  <Text style={styles.mealText}>{mealConfig.label}</Text>
-                </View>
-              )}
-
-              {/* Occupancy Badge */}
-              <OccupancyBadge
-                occupied={data.metadata?.occupiedBeds || 0}
-                total={data.metadata?.totalBeds || 0}
-                isCompact={isCompact}
-              />
-            </View>
-
-            {/* Stats Grid */}
-            <View style={styles.statsGrid}>
-              {stats.map((stat, idx) => (
-                <StatItem
-                  key={idx}
-                  icon={stat.icon}
-                  label={stat.label}
-                  value={stat.value}
-                  color={stat.color}
-                  isCompact={isCompact}
-                />
               ))}
             </View>
 
-            {/* Divider */}
-            <View style={styles.divider} />
+            {/* Occupancy Progress */}
+            <View style={styles.progressSection}>
+              <View style={styles.progressHeader}>
+                <Text style={styles.progressLabel}>Occupancy</Text>
+                <Text style={[styles.progressValue, { color: occupancyColor }]}>{occupancy}%</Text>
+              </View>
+              <View style={styles.progressBar}>
+                <View 
+                  style={[
+                    styles.progressFill, 
+                    { 
+                      width: `${occupancy}%`, 
+                      backgroundColor: occupancyColor 
+                    }
+                  ]} 
+                />
+              </View>
+            </View>
 
             {/* Financial Row */}
             <View style={styles.financialRow}>
-              {/* Income */}
               <View style={[styles.financialItem, { backgroundColor: hexToRgba("#10B981", 0.08) }]}>
-                <View style={[styles.financialIcon, { backgroundColor: hexToRgba("#10B981", 0.15) }]}>
-                  <MaterialCommunityIcons name="arrow-down-bold" size={16} color="#10B981" />
+                <MaterialCommunityIcons name="arrow-down-bold" size={14} color="#10B981" />
+                <View style={{ flex: 1 }}>
+                  <Text 
+                    style={[styles.financialValue, { color: "#10B981" }]}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.75}
+                  >
+                    ₹{formatIndianNumber(data.metadata?.income)}
+                  </Text>
+                  <Text style={styles.financialLabel}>Income</Text>
                 </View>
-                <Text style={[styles.financialValue, { color: "#10B981" }]}>
-                  ₹{formatIndianNumber(data.metadata?.income)}
-                </Text>
-                <Text style={styles.financialLabel}>Income</Text>
               </View>
-
-              {/* Expenses */}
               <View style={[styles.financialItem, { backgroundColor: hexToRgba("#EF4444", 0.08) }]}>
-                <View style={[styles.financialIcon, { backgroundColor: hexToRgba("#EF4444", 0.15) }]}>
-                  <MaterialCommunityIcons name="arrow-up-bold" size={16} color="#EF4444" />
+                <MaterialCommunityIcons name="arrow-up-bold" size={14} color="#EF4444" />
+                <View style={{ flex: 1 }}>
+                  <Text 
+                    style={[styles.financialValue, { color: "#EF4444" }]}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.75}
+                  >
+                    ₹{formatIndianNumber(data.metadata?.expenses)}
+                  </Text>
+                  <Text style={styles.financialLabel}>Expense</Text>
                 </View>
-                <Text style={[styles.financialValue, { color: "#EF4444" }]}>
-                  ₹{formatIndianNumber(data.metadata?.expenses)}
-                </Text>
-                <Text style={styles.financialLabel}>Expenses</Text>
               </View>
-
-              {/* Dues */}
               <View style={[styles.financialItem, { backgroundColor: hexToRgba("#F59E0B", 0.08) }]}>
-                <View style={[styles.financialIcon, { backgroundColor: hexToRgba("#F59E0B", 0.15) }]}>
-                  <MaterialIcons name="warning" size={16} color="#F59E0B" />
+                <MaterialIcons name="warning" size={14} color="#F59E0B" />
+                <View style={{ flex: 1 }}>
+                  <Text 
+                    style={[styles.financialValue, { color: "#F59E0B" }]}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.75}
+                  >
+                    ₹{formatIndianNumber(data.metadata?.dues)}
+                  </Text>
+                  <Text style={styles.financialLabel}>Dues</Text>
                 </View>
-                <Text style={[styles.financialValue, { color: "#F59E0B" }]}>
-                  ₹{formatIndianNumber(data.metadata?.dues)}
-                </Text>
-                <Text style={styles.financialLabel}>Dues</Text>
               </View>
             </View>
           </View>
@@ -756,7 +582,7 @@ const PropertyCard = React.memo<PropertyCardProps>(({ data, onPress, onDelete })
                 accessibilityLabel="Edit property"
                 accessible
               >
-                <MaterialIcons name="edit" size={18} color={colors.primary} />
+                <MaterialIcons name="edit" size={16} color={colors.primary} />
                 <Text style={[styles.menuItemText, { color: colors.textPrimary }]}>Edit</Text>
               </Pressable>
               <View style={styles.menuDivider} />
@@ -768,7 +594,7 @@ const PropertyCard = React.memo<PropertyCardProps>(({ data, onPress, onDelete })
                 accessibilityLabel="Delete property"
                 accessible
               >
-                <MaterialIcons name="delete" size={18} color={colors.error} />
+                <MaterialIcons name="delete" size={16} color={colors.error} />
                 <Text style={[styles.menuItemText, { color: colors.error }]}>Delete</Text>
               </Pressable>
             </View>
@@ -781,11 +607,11 @@ const PropertyCard = React.memo<PropertyCardProps>(({ data, onPress, onDelete })
         <Dialog
           visible={confirmDelete}
           onDismiss={() => setConfirmDelete(false)}
-          style={{ backgroundColor: colors.cardBackground, borderRadius: radius.xl }}
+          style={{ backgroundColor: colors.cardBackground, borderRadius: radius.lg }}
         >
-          <Dialog.Title style={{ color: colors.textPrimary }}>Delete Property?</Dialog.Title>
+          <Dialog.Title style={{ color: colors.textPrimary, fontSize: 18 }}>Delete Property?</Dialog.Title>
           <Dialog.Content>
-            <Text style={{ color: colors.textSecondary, lineHeight: 20 }}>
+            <Text style={{ color: colors.textSecondary, lineHeight: 20, fontSize: 14 }}>
               Are you sure you want to delete "{data.propertyName}"? This action cannot be undone.
             </Text>
           </Dialog.Content>

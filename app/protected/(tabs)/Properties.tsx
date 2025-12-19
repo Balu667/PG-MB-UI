@@ -374,6 +374,7 @@ const Properties = () => {
     router.push("/protected/property/edit/new");
   }, [router]);
 
+
   // Styles
   const styles = useMemo(
     () =>
@@ -482,11 +483,11 @@ const Properties = () => {
         />
       </KeyboardAvoidingView>
 
-      {/* FAB - Add Property */}
+      {/* Add Property Button */}
       <AddButton
         onPress={handleAddProperty}
         accessibilityLabel="Add new property"
-        accessibilityHint="Opens the form to add a property"
+        accessibilityHint="Navigate to add a new property"
       />
     </SafeAreaView>
   );

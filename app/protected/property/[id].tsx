@@ -86,11 +86,37 @@ interface TenantsMeta {
   appNotDownloaded: number;
 }
 
-type BedStatus = "vacant" | "filled" | "notice" | "advance";
+type BedStatus = "vacant" | "filled" | "notice" | "advance" | "shortTerm";
+
+/** Raw room data from API for modal display */
+interface RawRoomData {
+  _id: string;
+  roomNo: string;
+  beds: number;
+  bedPrice: number;
+  securityDeposit: number;
+  facilities: string[];
+  occupiedBeds: number;
+  vacantBeds: number;
+  advancedBookings: number;
+  underNoticeBeds: number;
+  bedsPerRoom: Array<{
+    _id: string;
+    bedNumber: string;
+    tenantsPerBed: Array<{
+      _id: string;
+      tenantName: string;
+      phoneNumber: string;
+      tenantStatus: number;
+      bedNumber: string;
+    }>;
+  }>;
+}
 
 interface UILayout {
   floors: Array<{
     name: string;
+    floorId: number;
     groups: Array<{
       sharing: number;
       rooms: Array<{
@@ -100,6 +126,7 @@ interface UILayout {
     }>;
   }>;
   metrics: Metric[];
+  rawRoomsMap: Map<string, RawRoomData>;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -426,10 +453,20 @@ const toOrdinal = (n?: number): string => {
   return `${x}${suffix} Floor`;
 };
 
+/**
+ * Determine bed status from tenant codes with priority:
+ * 1 (active/filled) > 7 (short term) > 3 (advance booking) > 2 (under notice)
+ */
 const statusFromTenantCodes = (codes: number[]): BedStatus => {
-  if (codes.some((c) => c === 2)) return "notice";
-  if (codes.some((c) => c === 3)) return "advance";
-  if (codes.some((c) => c === 1)) return "filled";
+  // Filter out deleted (0), moveout (4), expired (5), cancelled (6) - only consider 1,2,3,7
+  const activeCodes = codes.filter((c) => [1, 2, 3, 7].includes(c));
+  if (activeCodes.length === 0) return "vacant";
+  
+  // Priority: 1 (filled) > 7 (shortTerm) > 3 (advance) > 2 (notice)
+  if (activeCodes.includes(1)) return "filled";
+  if (activeCodes.includes(7)) return "shortTerm";
+  if (activeCodes.includes(3)) return "advance";
+  if (activeCodes.includes(2)) return "notice";
   return "vacant";
 };
 
@@ -475,11 +512,23 @@ const parsePropertyLayout = (raw: unknown): UILayout => {
         iconBg: "#FECACA",
         iconColor: "#B91C1C",
       },
+      {
+        key: "shortTerm",
+        label: "Short Term",
+        value: num(md?.shortTermBookings),
+        icon: "bed-clock",
+        iconBg: "#FEF3C7",
+        iconColor: "#F59E0B",
+      },
     ];
+
+    // Build raw rooms map for modal
+    const rawRoomsMap = new Map<string, RawRoomData>();
 
     const floors = roomsByFloor.map((floor: unknown) => {
       const floorObj = floor as Record<string, unknown>;
-      const floorName = toOrdinal(num(floorObj?._id));
+      const floorId = num(floorObj?._id);
+      const floorName = toOrdinal(floorId);
       const rooms: unknown[] = Array.isArray(floorObj?.rooms) ? floorObj.rooms : [];
       const bySharing = new Map<number, { sharing: number; rooms: unknown[] }>();
 
@@ -487,6 +536,38 @@ const parsePropertyLayout = (raw: unknown): UILayout => {
         const room = r as Record<string, unknown>;
         const sharing = num(room?.beds);
         if (!sharing) return;
+
+        // Store raw room data for modal
+        const roomNo = String(room?.roomNo ?? "");
+        rawRoomsMap.set(roomNo, {
+          _id: String(room?._id ?? ""),
+          roomNo,
+          beds: sharing,
+          bedPrice: num(room?.bedPrice),
+          securityDeposit: num(room?.securityDeposit),
+          facilities: Array.isArray(room?.facilities) ? room.facilities as string[] : [],
+          occupiedBeds: num(room?.occupiedBeds),
+          vacantBeds: num(room?.vacantBeds),
+          advancedBookings: num(room?.advancedBookings),
+          underNoticeBeds: num(room?.underNoticeBeds),
+          bedsPerRoom: (Array.isArray(room?.bedsPerRoom) ? room.bedsPerRoom : []).map((b: unknown) => {
+            const bed = b as Record<string, unknown>;
+            return {
+              _id: String(bed?._id ?? ""),
+              bedNumber: String(bed?.bedNumber ?? ""),
+              tenantsPerBed: (Array.isArray(bed?.tenantsPerBed) ? bed.tenantsPerBed : []).map((t: unknown) => {
+                const tenant = t as Record<string, unknown>;
+                return {
+                  _id: String(tenant?._id ?? ""),
+                  tenantName: String(tenant?.tenantName ?? ""),
+                  phoneNumber: String(tenant?.phoneNumber ?? ""),
+                  tenantStatus: num(tenant?.tenantStatus),
+                  bedNumber: String(tenant?.bedNumber ?? ""),
+                };
+              }),
+            };
+          }),
+        });
 
         const statuses: BedStatus[] = Array.from({ length: sharing }, () => "vacant");
         const bpr: unknown[] = Array.isArray(room?.bedsPerRoom) ? room.bedsPerRoom : [];
@@ -502,7 +583,7 @@ const parsePropertyLayout = (raw: unknown): UILayout => {
         });
 
         const uiRoom = {
-          roomNo: String(room?.roomNo ?? ""),
+          roomNo,
           beds: statuses.map((s, i) => ({ id: BED_LETTERS[i] ?? String(i + 1), status: s })),
         };
 
@@ -520,12 +601,12 @@ const parsePropertyLayout = (raw: unknown): UILayout => {
           ),
         }));
 
-      return { name: floorName, groups };
+      return { name: floorName, floorId, groups };
     });
 
-    return { floors: floors as UILayout["floors"], metrics };
+    return { floors: floors as UILayout["floors"], metrics, rawRoomsMap };
   } catch {
-    return { floors: [], metrics: [] };
+    return { floors: [], metrics: [], rawRoomsMap: new Map() };
   }
 };
 
@@ -808,6 +889,8 @@ export default function PropertyDetails() {
           <PGLayout
             floors={layout.floors}
             metrics={layout.metrics}
+            rawRoomsMap={layout.rawRoomsMap}
+            propertyId={id as string}
             refreshing={!!layoutQuery?.isFetching}
             onRefresh={layoutQuery?.refetch}
           />
