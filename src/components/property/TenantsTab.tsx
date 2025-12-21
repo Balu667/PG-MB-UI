@@ -298,14 +298,13 @@ export default function TenantsTab({ data, meta, refreshing, onRefresh, scrollRe
         onScroll={onScroll}
         scrollEventThrottle={16}
         ListHeaderComponent={
-          <View style={{ paddingHorizontal: spacing.md, paddingTop: spacing.md }}>
+          <View >
             {/* Stats Grid - Compact */}
             {Array.isArray(metrics) && metrics.length > 0 && (
               <StatsGrid
                 metrics={metrics}
                 minVisible={3}
                 cardHeight={72}
-                style={{ marginBottom: spacing.md }}
               />
             )}
 

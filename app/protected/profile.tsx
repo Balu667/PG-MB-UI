@@ -255,8 +255,8 @@ const AppearanceModal: React.FC<AppearanceModalProps> = ({
           padding: spacing.md,
           borderRadius: radius.lg,
           marginBottom: spacing.sm,
-          backgroundColor: colors.surface,
-          borderWidth: 2,
+          backgroundColor: colors.surface2,
+          borderWidth: 1,
           borderColor: "transparent",
         },
         optionActive: {
@@ -266,7 +266,7 @@ const AppearanceModal: React.FC<AppearanceModalProps> = ({
         optionIcon: {
           width: 44,
           height: 44,
-          borderRadius: 12,
+          borderRadius: radius.full,
           alignItems: "center",
           justifyContent: "center",
           marginRight: spacing.md,
@@ -399,7 +399,6 @@ export default function ProfileScreen() {
     (state: { profileDetails?: { profileData?: Record<string, unknown> } }) =>
       state?.profileDetails?.profileData
   );
-
   // Extract user info
   const userName = String(profileData?.name ?? profileData?.userName ?? profileData?.fullName ?? "User");
   const userEmail = String(profileData?.email ?? "");
@@ -506,7 +505,7 @@ export default function ProfileScreen() {
         backButton: {
           width: 44,
           height: 44,
-          borderRadius: 14,
+          borderRadius: radius.full,
           backgroundColor: hexToRgba(colors.textSecondary, 0.08),
           alignItems: "center",
           justifyContent: "center",
@@ -526,7 +525,7 @@ export default function ProfileScreen() {
         profileCard: {
           marginHorizontal: spacing.md,
           marginTop: spacing.lg,
-          backgroundColor: colors.cardBackground,
+          backgroundColor: colors.cardBackground2,
           borderRadius: radius.xl,
           padding: spacing.lg,
           alignItems: "center",
@@ -537,13 +536,13 @@ export default function ProfileScreen() {
           elevation: 4,
         },
         avatarContainer: {
-          width: 100,
-          height: 100,
-          borderRadius: 50,
-          backgroundColor: colors.accent,
+          width: 80,
+          height: 80,
+          borderRadius: radius.full,
+          backgroundColor: colors.primary,
           alignItems: "center",
           justifyContent: "center",
-          marginBottom: spacing.md,
+          marginBottom: spacing.xs,
           shadowColor: colors.accent,
           shadowOffset: { width: 0, height: 8 },
           shadowOpacity: 0.3,
@@ -560,7 +559,7 @@ export default function ProfileScreen() {
           fontSize: 24,
           fontWeight: "700",
           color: colors.textPrimary,
-          marginBottom: 6,
+          marginBottom: spacing.sm,
         },
         roleBadge: {
           paddingHorizontal: 14,
@@ -568,6 +567,7 @@ export default function ProfileScreen() {
           borderRadius: radius.full,
           backgroundColor: hexToRgba(colors.accent, 0.12),
           marginBottom: spacing.md,
+          marginTop: spacing.xs,
         },
         roleText: {
           fontSize: 13,
@@ -588,8 +588,8 @@ export default function ProfileScreen() {
         },
         sectionCard: {
           marginHorizontal: spacing.md,
-          marginTop: spacing.lg,
-          backgroundColor: colors.cardBackground,
+          marginTop: spacing.sm + 4,
+          backgroundColor: colors.cardBackground2,
           borderRadius: radius.xl,
           overflow: "hidden",
           shadowColor: "#000000",
@@ -612,7 +612,7 @@ export default function ProfileScreen() {
         },
         separator: {
           height: 1,
-          backgroundColor: hexToRgba(colors.textSecondary, 0.08),
+          backgroundColor: hexToRgba(colors.textSecondary, 0.18),
           marginHorizontal: spacing.md,
         },
         versionText: {

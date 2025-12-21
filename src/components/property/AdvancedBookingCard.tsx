@@ -340,7 +340,7 @@ const AdvancedBookingCard: React.FC<Props> = ({
       StyleSheet.create({
         cardOuter: {
           width: cardW,
-          borderRadius: radius.lg,
+          borderRadius: radius.xl,
           backgroundColor: colors.cardBackground,
           borderWidth: 1,
           borderColor: Platform.OS === "ios"

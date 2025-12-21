@@ -405,7 +405,7 @@ const DueCard: React.FC<DueCardProps> = ({
         cardOuter: {
           width: cardWidth,
           borderRadius: radius.xl,
-          backgroundColor: colors.cardBackground,
+          backgroundColor: colors.cardBackground2,
           // iOS shadow - more prominent
           shadowColor: "#000000",
           shadowOffset: { width: 0, height: 6 },
@@ -413,10 +413,8 @@ const DueCard: React.FC<DueCardProps> = ({
           shadowRadius: Platform.OS === "ios" ? 16 : 10,
           elevation: 6,
           // Border for iOS definition
-          borderWidth: Platform.OS === "ios" ? 1 : 0,
-          borderColor: Platform.OS === "ios"
-            ? hexToRgba(colors.textMuted, 0.15)
-            : hexToRgba(colors.textMuted, 0.1),
+          borderWidth: 1,
+          borderColor: hexToRgba(colors.borderColor, 0.9),
         },
         cardWrapper: {
           overflow: "hidden",
@@ -981,9 +979,7 @@ const ListHeader: React.FC<ListHeaderProps> = ({
           paddingHorizontal: spacing.md,
           borderRadius: radius.lg + 2,
           borderWidth: 1,
-          borderColor: Platform.OS === "ios"
-            ? hexToRgba(colors.textMuted, 0.15)
-            : hexToRgba(colors.textMuted, 0.1),
+          borderColor: hexToRgba(colors.borderColor, 0.9),
           shadowColor: "#000000",
           shadowOffset: { width: 0, height: 3 },
           shadowOpacity: Platform.OS === "ios" ? 0.1 : 0.05,
@@ -1192,7 +1188,7 @@ export default function DuesTab({
         },
         listContent: {
           paddingHorizontal: cardPadding,
-          paddingTop: spacing.sm,
+          // paddingTop: spacing.sm,
           paddingBottom: insets.bottom + spacing.lg * 3,
           gap: spacing.md,
         },

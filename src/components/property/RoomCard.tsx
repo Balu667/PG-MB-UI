@@ -168,11 +168,12 @@ const RoomCard: React.FC<Props> = ({ room }) => {
         cardOuter: {
           width: cardW,
           borderRadius: radius.xl,
-          backgroundColor: colors.cardBackground,
+          backgroundColor: colors.cardBackground2,
           borderWidth: 1,
-          borderColor: Platform.OS === "ios"
-            ? hexToRgba(colors.textMuted, 0.15)
-            : hexToRgba(colors.textMuted, 0.1),
+          // borderColor: Platform.OS === "ios"
+          //   ? hexToRgba(colors.textMuted, 0.15)
+          //   : hexToRgba(colors.textMuted, 0.1),
+          borderColor: colors.borderColor,
           shadowColor: "#000000",
           shadowOffset: { width: 0, height: 6 },
           shadowOpacity: Platform.OS === "ios" ? 0.15 : 0.08,
@@ -251,13 +252,13 @@ const RoomCard: React.FC<Props> = ({ room }) => {
         infoGrid: {
           flexDirection: "row",
           flexWrap: "wrap",
-          gap: spacing.sm,
+          gap: spacing.xs,
           marginBottom: spacing.md,
         },
         infoItem: {
           flex: 1,
           minWidth: "45%",
-          backgroundColor: colors.surface,
+          backgroundColor: colors.surface2,
           borderRadius: radius.md,
           padding: spacing.sm,
           borderWidth: 1,
@@ -281,7 +282,7 @@ const RoomCard: React.FC<Props> = ({ room }) => {
         },
         // Beds section
         bedsSection: {
-          marginBottom: spacing.md,
+          marginBottom: spacing.sm,
         },
         bedsSectionHeader: {
           flexDirection: "row",
@@ -309,16 +310,16 @@ const RoomCard: React.FC<Props> = ({ room }) => {
         },
         bedsGrid: {
           flexDirection: "row",
-          gap: 6,
+          gap: 3,
         },
         bedItem: {
           flex: 1,
           alignItems: "center",
           padding: spacing.xs + 2,
-          borderRadius: radius.sm,
+          borderRadius: radius.lg,
           backgroundColor: colors.surface,
           borderWidth: 1,
-          borderColor: hexToRgba(colors.textMuted, 0.08),
+          borderColor: hexToRgba(colors.borderColor, 0.7),
         },
         bedDot: {
           width: 8,
@@ -410,7 +411,7 @@ const RoomCard: React.FC<Props> = ({ room }) => {
           flexDirection: "row",
           alignItems: "center",
           gap: 6,
-          marginTop: spacing.sm,
+          marginVertical: spacing.xs,
         },
         electricityText: {
           fontSize: 11,

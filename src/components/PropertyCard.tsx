@@ -141,10 +141,10 @@ const PropertyCard = React.memo<PropertyCardProps>(({ data, onPress, onDelete })
       marginBottom: spacing.md + 2,
     },
     card: {
-      backgroundColor: colors.cardBackground,
-      borderRadius: radius.lg,
+      backgroundColor: colors.cardBackground2,
+      borderRadius: radius.xxl,
       borderWidth: 1.5,
-      borderColor: hexToRgba(colors.borderColor, 0.5),
+      borderColor: hexToRgba(colors.borderColor, 0.7),
       overflow: "hidden",
       ...Platform.select({
         ios: {
@@ -153,11 +153,11 @@ const PropertyCard = React.memo<PropertyCardProps>(({ data, onPress, onDelete })
           shadowOpacity: 0.06,
           shadowRadius: 12,
         },
-        android: { elevation: 3 },
+        android: { elevation: 2 },
       }),
     },
     pressable: {
-      padding: spacing.md + 6,
+      padding: spacing.md - 1,
     },
     
     // Header - Enhanced
@@ -227,14 +227,14 @@ const PropertyCard = React.memo<PropertyCardProps>(({ data, onPress, onDelete })
       color: "#22C55E",
     },
     menuButton: {
-      width: 36,
-      height: 36,
+      width: 32,
+      height: 32,
       borderRadius: 10,
-      backgroundColor: hexToRgba(colors.textMuted, 0.08),
+      backgroundColor: hexToRgba(colors.textMuted, 0.11),
       alignItems: "center",
       justifyContent: "center",
-      minWidth: 44,
-      minHeight: 44,
+      minWidth: 34,
+      minHeight: 34,
     },
 
     // Divider - Enhanced
@@ -252,17 +252,17 @@ const PropertyCard = React.memo<PropertyCardProps>(({ data, onPress, onDelete })
     },
     statCell: {
       width: "33.33%",
-      paddingHorizontal: 6,
-      marginBottom: 14,
+      paddingHorizontal: 4,
+      marginBottom: 9,
     },
     statInner: {
       alignItems: "center",
-      backgroundColor: colors.surface,
-      borderRadius: 10,
-      paddingVertical: 12,
+      backgroundColor: colors.surface2,
+      borderRadius: 12,
+      paddingVertical: 16,
       paddingHorizontal: 8,
       borderWidth: 1,
-      borderColor: hexToRgba(colors.borderColor, 0.4),
+      borderColor: hexToRgba(colors.borderColor2, 0.2),
     },
     statValue: {
       fontSize: 19,
@@ -283,7 +283,7 @@ const PropertyCard = React.memo<PropertyCardProps>(({ data, onPress, onDelete })
     // Occupancy bar - Enhanced
     occupancySection: {
       marginTop: 2,
-      backgroundColor: colors.surface,
+      backgroundColor: colors.surface2,
       borderRadius: 10,
       padding: 12,
       borderWidth: 1,
@@ -320,9 +320,9 @@ const PropertyCard = React.memo<PropertyCardProps>(({ data, onPress, onDelete })
     // Footer with financials - Enhanced
     footer: {
       flexDirection: I18nManager.isRTL ? "row-reverse" : "row",
-      marginTop: spacing.md + 2,
-      paddingTop: spacing.md,
-      borderTopWidth: 1,
+      // marginTop: spacing.md,
+      paddingTop: spacing.sm,
+      // borderTopWidth: 1,
       borderTopColor: hexToRgba(colors.borderColor, 0.4),
     },
     finItem: {
@@ -406,19 +406,19 @@ const PropertyCard = React.memo<PropertyCardProps>(({ data, onPress, onDelete })
 
   // Stats data with colors
   const statsData = useMemo(() => [
-    { key: "total", label: "Total", value: totalBeds, color: colors.primary },
+    { key: "total", label: "Total", value: totalBeds, color: colors.textSecondary },
     { key: "vacant", label: "Vacant", value: meta.vacantBeds || 0, color: "#22C55E" },
     { key: "occupied", label: "Occupied", value: occupiedBeds, color: "#EF4444" },
-    { key: "booked", label: "Booked", value: meta.advancedBookings || 0, color: "#F59E0B" },
-    { key: "shortTerm", label: "Short", value: meta.shortTermBeds || 0, color: "#3B82F6" },
-    { key: "notice", label: "Notice", value: meta.underNotice || 0, color: "#8B5CF6" },
+    { key: "booked", label: "Adv Booked", value: meta.advancedBookings || 0, color: "#ed6c11" },
+    { key: "shortTerm", label: "Short", value: meta.shortTermBeds || 0, color: "#e8d500" },
+    { key: "notice", label: "Notice", value: meta.underNotice || 0, color: "#6c3fbf" },
   ], [totalBeds, meta, occupiedBeds, colors.primary]);
 
   return (
     <View style={styles.container}>
       <View style={styles.card}>
         <Pressable
-          onPress={handlePress}
+          // onPress={handlePress}
           style={styles.pressable}
           android_ripple={{ color: hexToRgba(colors.textMuted, 0.08) }}
           accessible
@@ -494,11 +494,11 @@ const PropertyCard = React.memo<PropertyCardProps>(({ data, onPress, onDelete })
               accessibilityLabel="More options menu"
               accessibilityHint="Double tap to open property options"
             >
-              <MaterialIcons name="more-horiz" size={22} color={colors.textSecondary} />
+              <MaterialIcons name="more-vert" size={22} color={colors.textSecondary} />
             </Pressable>
           </View>
 
-          <View style={styles.divider} />
+          {/* <View style={styles.divider} /> */}
 
           {/* Stats Grid - Enhanced */}
           <View 

@@ -174,12 +174,17 @@ const TenantCard: React.FC<Props> = ({ tenant, onDelete }) => {
   const styles = useMemo(
     () =>
       StyleSheet.create({
+        phoneRowInner: {
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 6,
+        },
         card: {
-          backgroundColor: colors.cardBackground,
+          backgroundColor: colors.cardBackground2,
           borderRadius: radius.xl,
           overflow: "visible",
           borderWidth: 1,
-          borderColor: hexToRgba(colors.borderColor, 0.5),
+          borderColor: hexToRgba(colors.borderColor, 0.9),
           position: "relative",
           ...(Platform.OS === "ios"
             ? {
@@ -301,6 +306,7 @@ const TenantCard: React.FC<Props> = ({ tenant, onDelete }) => {
         phoneRow: {
           flexDirection: "row",
           alignItems: "center",
+          justifyContent: "space-between",
           gap: 6,
           marginBottom: spacing.xs,
         },
@@ -352,7 +358,7 @@ const TenantCard: React.FC<Props> = ({ tenant, onDelete }) => {
           flexDirection: "row",
           alignItems: "center",
           gap: 4,
-          backgroundColor: hexToRgba(colors.textMuted, 0.08),
+          backgroundColor: hexToRgba(colors.borderColor, 0.5),
           paddingHorizontal: 8,
           paddingVertical: 5,
           borderRadius: radius.md,
@@ -418,7 +424,7 @@ const TenantCard: React.FC<Props> = ({ tenant, onDelete }) => {
     <>
       <Animated.View style={[styles.card, { transform: [{ scale: scaleAnim }] }]}>
         {/* Status Bar */}
-        <View style={[styles.statusBar, { backgroundColor: statusColor }]} />
+        <View style={[styles.statusBar, { backgroundColor: statusColor, borderTopLeftRadius: radius.xxl, borderTopRightRadius: radius.xxl }]} />
 
         <View style={styles.content}>
           {/* Top Row: Avatar + Info + Menu */}
@@ -454,6 +460,8 @@ const TenantCard: React.FC<Props> = ({ tenant, onDelete }) => {
 
               {/* Phone Row with Call Button */}
               <View style={styles.phoneRow}>
+                <View style={styles.phoneRowInner}>
+
                 <Pressable
                   style={styles.phoneBtn}
                   onPress={() => {
@@ -473,8 +481,7 @@ const TenantCard: React.FC<Props> = ({ tenant, onDelete }) => {
                 <Text style={styles.phoneText} numberOfLines={1}>
                   {phone}
                 </Text>
-              </View>
-
+                </View>
               {/* Status Chip */}
               {statusLabel && (
                 <View style={[styles.statusChip, { backgroundColor: statusColor }]}>
@@ -482,6 +489,8 @@ const TenantCard: React.FC<Props> = ({ tenant, onDelete }) => {
                   <Text style={styles.statusText}>{statusLabel}</Text>
                 </View>
               )}
+              </View>
+
             </View>
           </View>
 

@@ -109,8 +109,8 @@ const StatsGrid: React.FC<StatsGridProps> = ({
       decelerationRate="fast"
       contentContainerStyle={[
         {
-          paddingLeft: spacing.md,
-          paddingRight: spacing.md - GAP,
+          // paddingLeft: spacing.md,
+          // paddingRight: spacing.md - GAP,
           paddingVertical: spacing.md - 2,
           gap: GAP,
         },

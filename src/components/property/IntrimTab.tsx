@@ -240,14 +240,14 @@ const IntrimCard = React.memo(function IntrimCard({
         card: {
           width: cardWidth,
           borderRadius: radius.xl,
-          backgroundColor: colors.cardBackground,
+          backgroundColor: colors.cardBackground2,
           shadowColor: "#000000",
           shadowOffset: { width: 0, height: 4 },
           shadowOpacity: Platform.OS === "ios" ? 0.12 : 0.08,
           shadowRadius: Platform.OS === "ios" ? 12 : 8,
           elevation: 5,
           borderWidth: 1,
-          borderColor: hexToRgba(colors.borderColor, 0.5),
+          borderColor: hexToRgba(colors.borderColor, 0.9),
           overflow: "hidden",
         },
         statusBar: {
@@ -647,13 +647,13 @@ const ListHeader = React.memo(function ListHeader({
     () =>
       StyleSheet.create({
         container: {
-          paddingBottom: spacing.md,
+          // paddingBottom: spacing.md,
         },
         sectionHeader: {
           flexDirection: "row",
           alignItems: "center",
           justifyContent: "space-between",
-          marginTop: spacing.md,
+          // marginTop: spacing.md,
           marginBottom: spacing.sm,
         },
         sectionTitleRow: {
@@ -664,7 +664,7 @@ const ListHeader = React.memo(function ListHeader({
         sectionIcon: {
           width: 34,
           height: 34,
-          borderRadius: 10,
+          borderRadius: 150,
           backgroundColor: hexToRgba("#0EA5E9", 0.12),
           alignItems: "center",
           justifyContent: "center",
@@ -689,11 +689,9 @@ const ListHeader = React.memo(function ListHeader({
           backgroundColor: colors.cardBackground,
           paddingVertical: spacing.md,
           paddingHorizontal: spacing.md,
-          borderRadius: radius.lg + 2,
+          borderRadius: radius.xl,
           borderWidth: 1,
-          borderColor: Platform.OS === "ios"
-            ? hexToRgba(colors.textMuted, 0.15)
-            : hexToRgba(colors.textMuted, 0.1),
+          borderColor: hexToRgba(colors.borderColor, 0.9),
           shadowColor: "#000000",
           shadowOffset: { width: 0, height: 3 },
           shadowOpacity: Platform.OS === "ios" ? 0.08 : 0.04,

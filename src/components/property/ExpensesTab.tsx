@@ -325,7 +325,7 @@ const ListHeader: React.FC<ListHeaderProps> = ({
         statsRow: {
           flexDirection: "row",
           gap: spacing.sm + 2,
-          marginBottom: spacing.md,
+          marginVertical: spacing.sm,
         },
         sectionHeader: {
           flexDirection: "row",
@@ -604,9 +604,9 @@ export default function ExpensesTab({
         },
         listContent: {
           paddingHorizontal: spacing.md,
-          paddingTop: spacing.sm,
+          paddingTop: spacing.xs,
           paddingBottom: insets.bottom + spacing.lg * 3,
-          gap: spacing.md,
+          gap: spacing.sm +2,
         },
         dialogStyle: {
           backgroundColor: colors.cardBackground,

@@ -22,6 +22,7 @@ export const lightTheme = {
     circle2: "#6c3fc0",
     background2: "#f8f6fcff",
     borderColor: "#d9c8f8ff",
+    borderColor2: "#412674ff",
     tabActiveBg: "#E3F2FD",
     tabInactive: "#7A7A7A",
     accent: "#6c3fc0",
@@ -29,7 +30,9 @@ export const lightTheme = {
 
     background: "#FFFFFF",
     surface: "#F8F9FA",
+    surface2: "#F8F9FA",
     cardBackground: "#f8f6fcff",
+    cardBackground2: "#f8f6fcff",
     cardSurface: "#F8F9FA",
     textPrimary: "#212529",
     textSecondary: "#6C757D",
@@ -45,6 +48,7 @@ export const lightTheme = {
     shadow: "rgba(0,0,0,0.12)",
     shadow2: "rgba(0,0,0,0.72)",
     white: "#FFFFFF",
+    white2: "#F8F9FA",
     black: "#1c1c1cff",
     textWhite: "#FFFFFF",
     totalBeds: "#0000FF",
@@ -105,10 +109,13 @@ export const darkTheme: typeof lightTheme = {
     background2: "#261641ff",
     tabSurface: "#1a0f2eff",
     background: "#0e0d0dff",
+    borderColor2: "#8A8A8A",
+    surface2: "#171717",
 
     surface: "#1F1F1F",
 
     cardBackground: "#260c56ff",
+    cardBackground2: "#1f0a47",
     cardSurface: "#130b22ff",
 
     textPrimary: "#FFFFFF",
@@ -120,6 +127,7 @@ export const darkTheme: typeof lightTheme = {
     circle1: "#368070ff",
     circle2: "#6c3fc0",
     white: "#1c1c1cff",
+    white2: "#161616",
     black: "#FFFFFF",
 
     accent: "#834de7ff",

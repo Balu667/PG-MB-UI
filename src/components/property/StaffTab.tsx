@@ -205,7 +205,7 @@ const StaffCard: React.FC<StaffCardProps> = React.memo(
         StyleSheet.create({
           cardOuter: {
             borderRadius: radius.lg + 4,
-            backgroundColor: colors.cardBackground,
+            backgroundColor: colors.cardBackground2,
             shadowColor: "#000",
             shadowOffset: { width: 0, height: 2 },
             shadowOpacity: 0.06,
@@ -334,7 +334,7 @@ const StaffCard: React.FC<StaffCardProps> = React.memo(
             paddingHorizontal: spacing.sm + 4,
             paddingVertical: spacing.sm,
             borderRadius: radius.md + 2,
-            backgroundColor: hexToRgba(colors.accent, 0.08),
+            backgroundColor: hexToRgba(colors.accent, 0.09),
             minHeight: 36,
           },
           actionBtnPressed: {
@@ -375,7 +375,7 @@ const StaffCard: React.FC<StaffCardProps> = React.memo(
             flexDirection: "row",
             alignItems: "center",
             gap: spacing.sm,
-            backgroundColor: hexToRgba(colors.surface, 0.6),
+            // backgroundColor: hexToRgba(colors.surface2, 0.8),
             paddingHorizontal: spacing.sm,
             paddingVertical: 4,
             borderRadius: radius.lg,
@@ -722,13 +722,13 @@ const ListHeader: React.FC<HeaderProps> = React.memo(
       () =>
         StyleSheet.create({
           container: {
-            paddingBottom: spacing.md,
+            // paddingBottom: spacing.md,
           },
           sectionHeader: {
             flexDirection: "row",
             alignItems: "center",
             justifyContent: "space-between",
-            marginTop: spacing.md,
+            // marginTop: spacing.md,
             marginBottom: spacing.sm,
             paddingHorizontal: spacing.xs,
           },
@@ -752,7 +752,7 @@ const ListHeader: React.FC<HeaderProps> = React.memo(
             letterSpacing: 0.2,
           },
           searchContainer: {
-            backgroundColor: colors.cardBackground,
+            backgroundColor: colors.cardBackground2,
             paddingVertical: spacing.md,
             paddingHorizontal: spacing.md,
             borderRadius: radius.lg + 2,

@@ -376,15 +376,15 @@ export default function AdvanceBookingTab({ data, refreshing, onRefresh, scrollR
           backgroundColor: colors.background,
         },
         header: {
-          paddingHorizontal: spacing.xs,
-          paddingTop: spacing.xs,
+          // paddingHorizontal: spacing.xs,
+          // paddingTop: spacing.xs,
         },
         sectionHeader: {
           flexDirection: "row",
           alignItems: "center",
           gap: 8,
-          marginTop: spacing.xs,
-          marginBottom: spacing.xs,
+          // marginTop: spacing.xs,
+          // marginBottom: spacing.xs,
         },
         sectionIconBadge: {
           width: 28,
@@ -416,7 +416,7 @@ export default function AdvanceBookingTab({ data, refreshing, onRefresh, scrollR
         },
         listContent: {
           paddingHorizontal: spacing.md,
-          paddingTop: spacing.sm,
+          // paddingTop: spacing.sm,
           paddingBottom: insets.bottom + spacing.lg * 2,
           rowGap: spacing.md,
         },

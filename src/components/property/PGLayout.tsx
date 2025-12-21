@@ -287,14 +287,14 @@ export default function PGLayout({
 
         /** Stats section */
         statsSection: {
-          paddingTop: spacing.sm,
-          paddingBottom: spacing.xs,
+          // paddingTop: spacing.sm,
+          // paddingBottom: spacing.xs,
         },
 
         /** Legend section */
         legendSection: {
-          paddingHorizontal: spacing.md,
-          paddingVertical: spacing.sm,
+          paddingHorizontal: spacing.sm,
+          paddingBottom: spacing.sm,
           backgroundColor: colors.background,
         },
         legend: {
@@ -326,9 +326,9 @@ export default function PGLayout({
 
         /** Search section */
         searchSection: {
-          paddingHorizontal: spacing.md,
-          paddingTop: spacing.xs,
-          paddingBottom: spacing.xs,
+          paddingHorizontal: spacing.sm,
+          // paddingTop: spacing.xs,
+          // paddingBottom: spacing.xs,
           backgroundColor: colors.background,
         },
 
@@ -395,7 +395,7 @@ export default function PGLayout({
 
         /** Content area */
         contentArea: {
-          paddingHorizontal: spacing.md,
+          paddingHorizontal: spacing.sm,
           paddingBottom: insets.bottom + 100,
         },
 
@@ -451,7 +451,7 @@ export default function PGLayout({
 
         /** Room item - improved */
         roomItem: {
-          backgroundColor: colors.surface,
+          backgroundColor: colors.surface2,
           borderRadius: radius.md,
           borderWidth: 1,
           borderColor: hexToRgba(colors.textSecondary, 0.06),

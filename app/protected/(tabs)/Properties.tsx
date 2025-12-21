@@ -230,7 +230,7 @@ const ListHeader = React.memo<ListHeaderProps>(({ properties, colors, spacing, r
 
     {/* Search Bar */}
     {properties.length > 0 && (
-      <View style={{ marginTop: spacing.sm }}>
+      <View >
         <SearchBar
           placeholder="Search by property name..."
           onSearch={onSearchChange}
@@ -387,7 +387,7 @@ const Properties = () => {
           flex: 1,
         },
         listContent: {
-          paddingHorizontal: spacing.md,
+          paddingHorizontal: spacing.sm + 2,
           paddingTop: spacing.md,
           paddingBottom: spacing.lg,
         },

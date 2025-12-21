@@ -189,7 +189,7 @@ export default function RoomsTab({ data, meta, refreshing, onRefresh, scrollRef,
         columnGap: { gap: spacing.md - 2 },
         listContent: {
           paddingHorizontal: spacing.md,
-          paddingTop: spacing.md,
+          // paddingTop: spacing.md,
           paddingBottom: insets.bottom + spacing.lg * 2,
           rowGap: spacing.md - 2,
         },

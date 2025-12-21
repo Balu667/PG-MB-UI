@@ -159,7 +159,7 @@ const ExpenseCard: React.FC<Props> = ({ data, onEdit, onDelete }) => {
         cardOuter: {
           width: cardW,
           borderRadius: radius.xl,
-          backgroundColor: colors.cardBackground,
+          backgroundColor: colors.cardBackground2,
           // iOS shadow - more prominent
           shadowColor: "#000000",
           shadowOffset: { width: 0, height: 6 },
@@ -169,12 +169,14 @@ const ExpenseCard: React.FC<Props> = ({ data, onEdit, onDelete }) => {
           elevation: 6,
           // Border for extra definition on iOS
           borderWidth: Platform.OS === "ios" ? 1 : 0,
-          borderColor: hexToRgba(colors.textMuted, 0.1),
+          borderColor: hexToRgba(colors.borderColor, 0.9),
         },
         // Wrapper to prevent overflow clipping shadows on iOS
         cardWrapper: {
           overflow: "hidden",
           borderRadius: radius.xl,
+          borderWidth: 1,
+          borderColor: hexToRgba(colors.borderColor, 0.7),
         },
         // Top accent bar
         accentBar: {
@@ -227,7 +229,7 @@ const ExpenseCard: React.FC<Props> = ({ data, onEdit, onDelete }) => {
           alignItems: "flex-end",
         },
         amountText: {
-          fontSize: 18,
+          fontSize: 16,
           fontWeight: "800",
           color: colors.textPrimary,
           letterSpacing: 0.3,
@@ -243,11 +245,11 @@ const ExpenseCard: React.FC<Props> = ({ data, onEdit, onDelete }) => {
         // Description section (expandable)
         descriptionSection: {
           marginTop: spacing.sm + 2,
-          backgroundColor: hexToRgba(colors.surface, 0.7),
+          backgroundColor: hexToRgba(colors.surface2, 0.7),
           borderRadius: radius.lg,
           padding: spacing.sm + 2,
           borderWidth: 1,
-          borderColor: hexToRgba(colors.textMuted, 0.08),
+          borderColor: hexToRgba(colors.borderColor, 0.9),
         },
         descriptionLabel: {
           fontSize: 10,
